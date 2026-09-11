@@ -1,27 +1,27 @@
 import AppKit
 import SlovoCore
 
-/// Замер отклика на движение ползунков и на смену стиха — в миллисекундах.
+/// Замір відгуку на рух повзунків і на зміну вірша — у мілісекундах.
 ///
-/// Владелец: «плохая оптимизация скорости всего рабочего меню и настроек,
-/// ползунки работают с фризами». Спорить об этом словами нельзя: меряем
-/// каждое движение так, как его чувствует человек — от вызова до того, как
-/// окно дорисовалось и отложенное на цикл событий доделано. Медиана по
-/// десятку движений, чтобы первый прогрев не портил картину.
+/// Власник: «плохая оптимизация скорости всего рабочего меню и настроек,
+/// ползунки работают с фризами». Сперечатися про це словами не можна: міряємо
+/// кожен рух так, як його відчуває людина, — від виклику до того, як
+/// вікно домалювалося і відкладене на цикл подій дороблено. Медіана по
+/// десятку рухів, щоб перше прогрівання не псувало картину.
 extension Diagnostics {
 
     static func speedSection(state: AppState) -> [Check] {
         var lines: [String] = []
         var slow: [String] = []
 
-        /// Медиана времени одного «движения» вместе с дорисовкой окон.
+        /// Медіана часу одного «руху» разом із домальовуванням вікон.
         func median(_ repeats: Int, _ body: () -> Void) -> Double {
             var samples: [Double] = []
             for _ in 0..<repeats {
                 let started = DispatchTime.now().uptimeNanoseconds
                 body()
-                // Отложенное на очередь и цикл событий — часть того же
-                // движения: холст зала перерисовывается именно так.
+                // Відкладене на чергу й цикл подій — частина того самого
+                // руху: полотно залу перемальовується саме так.
                 for _ in 0..<3 { RunLoop.current.run(mode: .default, before: Date()) }
                 for window in NSApp.windows where window.isVisible { window.displayIfNeeded() }
                 samples.append(Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)
@@ -45,7 +45,7 @@ extension Diagnostics {
         Signals.shared.send(.mode)
         wait(untilTrue: { false }, seconds: 0.3)
 
-        // 1. Смена стиха — вся цепочка: слайд, предпросмотр, зал, сеть.
+        // 1. Зміна вірша — увесь ланцюжок: слайд, попередній перегляд, зал, мережа.
         var step = 1
         note("зміна вірша (передпоказ)", median(20) {
             state.stepVerse(by: step, live: false)
@@ -57,14 +57,14 @@ extension Diagnostics {
             step = -step
         }, limit: 60)
 
-        // 2. Живое применение окна «Параметры» — то, что идёт за каждым
-        // движением его ползунков с задержкой в четверть секунды.
+        // 2. Живе застосування вікна «Параметри» — те, що йде за кожним
+        // рухом його повзунків із затримкою в чверть секунди.
         note("живе застосування налаштувань", median(10) {
             state.applyProgramOptions(SettingsStore.shared.settings.options)
         }, limit: 40)
 
-        // 3. Кадр предпросмотра в окне «Параметры» — рисуется своим
-        // рисователем на каждое изменение состояния.
+        // 3. Кадр попереднього перегляду у вікні «Параметри» — малюється своїм
+        // малювальником на кожну зміну стану.
         let renderer = SlideFrameRenderer(size: CGSize(width: 560, height: 315))
         let first = state.slide
         state.stepVerse(by: 1, live: false)
@@ -78,8 +78,8 @@ extension Diagnostics {
                                   imageURL: { state.presetImageURL($0) })
         }, limit: 40)
 
-        // 4. Ползунок прозрачности в Конструкторе — настоящий ползунок
-        // настоящей панели, через тот же приёмник действий, что и мышь.
+        // 4. Повзунок прозорості в Конструкторі — справжній повзунок
+        // справжньої панелі, через той самий приймач дій, що й миша.
         let constructor = NativeSlideConstructor(state: state, onClose: {})
         let stand = bench(for: constructor, size: NSSize(width: 1240, height: 780))
         wait(untilTrue: { false }, seconds: 0.5)
@@ -96,8 +96,8 @@ extension Diagnostics {
         stand.orderOut(nil)
         state.previewPreset(nil)
 
-        // 5. Ползунок кегля списков — перечитывает все списки окна. Здесь и
-        // дальше подписчики меряются поимённо: одно число виновника не назовёт.
+        // 5. Повзунок кегля списків — перечитує всі списки вікна. Тут і
+        // далі підписники міряються поіменно: одне число винуватця не назве.
         Signals.shared.profiling = true
         var size = 13.0
         note("повзунок кегля списків", median(6) {
@@ -110,7 +110,7 @@ extension Diagnostics {
         lines.append("кегль, винуватці: " + Signals.shared.slowReport())
         Signals.shared.profiling = false
 
-        // 6. Переключение вкладки — тем же путём, что нажатие на вкладку.
+        // 6. Перемикання вкладки — тим самим шляхом, що натискання на вкладку.
         Signals.shared.profiling = true
         var toSongs = true
         note("перемикання вкладки Біблія ↔ Пісні", median(6) {
@@ -127,11 +127,11 @@ extension Diagnostics {
                           + lines.joined(separator: "; "))]
     }
 
-    /// Долгий прогон двух самых тяжёлых действий — под `sample` снаружи.
+    /// Довгий прогін двох найважчих дій — під `sample` ззовні.
     ///
-    /// Замер говорит «260 мс», но не говорит, где. Профиль процесса снимает
-    /// системная утилита `sample`, а ей нужно, чтобы действие длилось секунды:
-    /// крутим кегль списков и вкладки по восемь секунд каждое.
+    /// Замір каже «260 мс», але не каже, де. Профіль процесу знімає
+    /// системна утиліта `sample`, а їй треба, щоб дія тривала секунди:
+    /// крутимо кегль списків і вкладки по вісім секунд кожне.
     static func profileSection(state: AppState) -> [Check] {
         let wasMode = state.mode
         defer {
@@ -171,7 +171,7 @@ extension Diagnostics {
                       detail: "кегль: \(fontTicks) рухів за 8 с; вкладки: \(tabTicks) перемикань за 8 с")]
     }
 
-    /// Первый ползунок с таким пределом в дереве видов.
+    /// Перший повзунок із такою межею в дереві видів.
     private static func firstSlider(in view: NSView, maxValue: Double) -> NSSlider? {
         if let slider = view as? NSSlider, abs(slider.maxValue - maxValue) < 0.5 { return slider }
         for child in view.subviews {

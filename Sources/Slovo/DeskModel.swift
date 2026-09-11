@@ -113,6 +113,11 @@ final class DeskModel: ObservableObject {
 
     @Published var plan = ServicePlan()
     @Published var planSelection: Set<PlanItem.ID> = []
+    /// План служіння, відкладений на час проповіді. Поки він тут, `plan` —
+    /// це план проповідника: як «останній план» на диск він не пишеться, а
+    /// після проповіді план служіння повертається таким, яким був.
+    @Published private(set) var servicePlanAside: ServicePlan?
+    var isSermon: Bool { servicePlanAside != nil }
     /// Сообщение о том, что план не прочитался или прочитался не весь.
     @Published var planWarning: String?
 
@@ -419,6 +424,27 @@ final class DeskModel: ObservableObject {
         schedulePlanAutosave()
     }
 
+    /// План проповіді з планшета. Власник: «план проповедника не добавляется
+    /// в конец существующего или не заменяет его, а становится просто
+    /// приоритетным на время проповеди». Тому план служіння відкладаємо
+    /// цілим, а новий план проповіді заступає місце попереднього.
+    func beginSermon(_ items: [PlanItem], title: String) {
+        planAutosave?.cancel()
+        if servicePlanAside == nil { servicePlanAside = plan }
+        var sermon = ServicePlan(items: items)
+        sermon.title = title
+        planSelection = []
+        plan = sermon
+    }
+
+    /// Проповідь закінчено — план служіння знову на місці.
+    func endSermon() {
+        guard let aside = servicePlanAside else { return }
+        servicePlanAside = nil
+        planSelection = []
+        plan = aside
+    }
+
     /// Текущее место Писания — пункт плана. Отрывок берётся ровно тот, что
     /// выделен в списке стихов (4).
     func planItem(forSelection state: AppState) -> PlanItem? {
@@ -582,6 +608,45 @@ final class DeskModel: ObservableObject {
             // Пункт «Текст» везёт содержимое с собой — искать нечего.
             // Показ отдаём модулю «Текст»: он же откроет свою вкладку.
             TextModuleModel.shared.activate(document, state: state)
+
+        case .file(let reference):
+            openPlanFile(reference, state: state)
+        }
+    }
+
+    /// Пункт «Файл» із плану проповіді: презентація, картинка чи відео.
+    ///
+    /// Розкладаємо тим самим розбором, що й файл, кинутий у вікно, і одразу
+    /// показуємо: проповідник для того й поставив його в план. Уже відкритий
+    /// файл удруге не відкриваємо — інакше кожне натискання на пункт
+    /// дописувало б у список показу ще одну копію.
+    private func openPlanFile(_ reference: PlanItem.FileReference, state: AppState) {
+        let url = reference.url
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            NativeTrace.say("план: немає файла «\(reference.name)»")
+            return
+        }
+        switch NativeWindowDrop.route([url], playable: { state.media.filters.accepts($0) }) {
+        case .presentation, .pictures:
+            let isPresentation = ShowModel.Kind.presentation.extensions.contains(url.pathExtension.lowercased())
+            let workspace = isPresentation ? NativeShowWorkspace.presentation : NativeShowWorkspace.pictures
+            let wanted = url.standardizedFileURL
+            if workspace.model.decks.firstIndex(where: { $0.url.standardizedFileURL == wanted }) == nil {
+                workspace.open([url])
+            }
+            state.mode = isPresentation ? .presentation : .pictures
+            guard let deck = workspace.model.decks.firstIndex(where: { $0.url.standardizedFileURL == wanted }) else {
+                return
+            }
+            workspace.selectDeck(deck)
+            workspace.selectPage(workspace.model.decks[deck].range.lowerBound)
+            workspace.showCurrentPage()
+        case .media(let media):
+            state.media.open(media)
+            state.mode = .media
+            state.media.play()
+        case .nothing:
+            NativeTrace.say("план: «\(reference.name)» не показ і не плеєр")
         }
     }
 
@@ -720,6 +785,9 @@ final class DeskModel: ObservableObject {
     /// Снимок пишем с задержкой: перетаскивание пункта в списке шлёт правку на
     /// каждый шаг, а файл на диске от этого не должен переписываться десятки раз.
     private func schedulePlanAutosave() {
+        // План проповіді — гість на час проповіді: записаний як «останній
+        // план», він підмінив би план служіння при наступному запуску.
+        guard servicePlanAside == nil else { return }
         planAutosave?.cancel()
         let snapshot = plan
         let work = DispatchWorkItem {

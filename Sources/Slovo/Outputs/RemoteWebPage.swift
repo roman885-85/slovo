@@ -60,6 +60,14 @@ section { display:flex; flex-direction:column; min-height:0; padding:8px; }
 #hallCaption { font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #liveText { padding-top:6px; max-height:5.5em; overflow:hidden; white-space:pre-line; }
 #previewText { color:var(--dim); font-size:13px; max-height:2.8em; overflow:hidden; }
+#hallHead { display:flex; align-items:center; gap:8px; }
+#hallHead #hallCaption { flex:1; }
+#viewButton { padding:3px 10px; font-size:13px; }
+#viewPanel { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:6px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--head); font-size:14px; }
+#viewPanel[hidden] { display:none; }
+/* Мій перегляд: текстовий слайд у своєму оформленні поверх картинки залу. */
+#personal { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; overflow:auto; padding:16px 24px; text-align:center; white-space:pre-line; line-height:1.3; }
+#personal .ref { font-size:.6em; margin-bottom:.4em; }
 footer { display:flex; padding:4px; }
 #black.on { color:var(--danger); }
 .verse b { color:var(--accent); margin-right:6px; }
@@ -156,8 +164,14 @@ body.view-only main { grid-template-columns:1fr; }
   </section>
 
   <section id="center">
-    <div id="hallCaption">Зал</div>
-    <div id="hallBox"><canvas id="hall"></canvas><div id="hallNote"></div></div>
+    <div id="hallHead"><div id="hallCaption">Зал</div><button id="viewButton" title="Як показувати зал на цьому екрані">Вигляд</button></div>
+    <div id="viewPanel" hidden>
+      <label><input type="checkbox" id="viewText"> Текстом — зручно читати</label>
+      <select id="viewTheme"><option value="dark">Темне</option><option value="light">Світле</option><option value="sepia">Сепія</option></select>
+      <label>Розмір <input type="range" id="viewSize" min="14" max="80"></label>
+      <span class="note">Картинки й презентації завжди видно такими, як на стіні</span>
+    </div>
+    <div id="hallBox"><canvas id="hall"></canvas><div id="hallNote"></div><div id="personal"></div></div>
     <div id="liveText"></div>
     <div id="previewText"></div>
   </section>
@@ -341,6 +355,7 @@ function applyHall(fresh) {
   else if ((h.kind === "still" || h.kind === "video") && h.title) caption += " — " + h.title;
   $("hallCaption").textContent = caption;
   $("liveText").textContent = h.kind === "text" ? (slide.text || "") : "";
+  applyPersonal(fresh);
   if (h.kind === "video" || h.kind === "black") {
     hallImage = null;
     $("hallNote").textContent = h.kind === "video" ? "У залі відео: " + (h.title || "") : "Зал затемнено";
@@ -350,6 +365,46 @@ function applyHall(fresh) {
   $("hallNote").textContent = h.kind === "empty" ? "У залі нічого не показано" : "";
   if (fresh.seq !== hallSeq) { hallSeq = fresh.seq; loadHall(); } else drawHall();
 }
+
+// ---------- Мій перегляд ----------
+// Текстовий слайд — у своєму оформленні, а не картинкою залу: у залі стиль
+// стіни (обведення, фон), а тут екран у руці. Власник: «текущий просмотр
+// текста с зеленой обводкой на белом фоне, мягко говоря, не приятный».
+const viewThemes = { dark: ["#101418", "#F2F4F7", "#4C8DFF"], light: ["#FFFFFF", "#1B1F24", "#2F5FC4"], sepia: ["#F4ECD8", "#3B2F20", "#8A5A2B"] };
+let view = { text: true, theme: "dark", size: 30 };
+try { Object.assign(view, JSON.parse(localStorage.getItem("slovo-view") || "{}")); } catch (e) {}
+
+function applyPersonal(fresh) {
+  const box = $("personal"), h = fresh.hall || {}, slide = fresh.slide || {};
+  const on = !!view.text && h.kind === "text";
+  box.style.display = on ? "flex" : "none";
+  $("liveText").style.display = on ? "none" : "";
+  if (!on) return;
+  const t = viewThemes[view.theme] || viewThemes.dark;
+  box.style.background = t[0]; box.style.color = t[1]; box.style.fontSize = view.size + "px";
+  box.textContent = "";
+  if (slide.reference) {
+    const ref = document.createElement("div");
+    ref.className = "ref"; ref.style.color = t[2]; ref.textContent = slide.reference;
+    box.appendChild(ref);
+  }
+  const body = document.createElement("div");
+  body.textContent = slide.text || "";
+  box.appendChild(body);
+}
+
+function changeView() {
+  view = { text: $("viewText").checked, theme: $("viewTheme").value, size: +$("viewSize").value };
+  try { localStorage.setItem("slovo-view", JSON.stringify(view)); } catch (e) {}
+  applyPersonal(state);
+}
+$("viewText").checked = !!view.text;
+$("viewTheme").value = view.theme;
+$("viewSize").value = view.size;
+$("viewText").onchange = changeView;
+$("viewTheme").onchange = changeView;
+$("viewSize").oninput = changeView;
+$("viewButton").onclick = () => { $("viewPanel").hidden = !$("viewPanel").hidden; };
 
 function loadHall() {
   if (hallBusy) { hallPending = true; return; }

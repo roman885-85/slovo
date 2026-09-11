@@ -1,14 +1,14 @@
 import Foundation
 
-/// Чтение шаблона слайда `.sch`.
+/// Читання шаблону слайда `.sch`.
 ///
-/// Формат — XML без объявления кодировки: `VisioBibleScheme` → `Scheme` →
-/// список `Object`, у каждого свои `FXPresets` с парой `Scene` (по кадру на
-/// вариант слайда). Разбор нарочно нестрогий: неизвестные атрибуты и целые
-/// незнакомые узлы не мешают — всё, что не разобрано в поля, остаётся в
-/// `attributes`, а чего нет вовсе, подставляется значением по умолчанию.
-/// Пользователь мог сохранить свой шаблон в любой сборке оригинала, и падать
-/// из-за лишнего атрибута нам нельзя.
+/// Формат — XML без оголошення кодування: `VisioBibleScheme` → `Scheme` →
+/// список `Object`, у кожного свої `FXPresets` з парою `Scene` (по кадру на
+/// варіант слайда). Розбір навмисно нестрогий: невідомі атрибути й цілі
+/// незнайомі вузли не заважають — усе, що не розібрано в поля, лишається в
+/// `attributes`, а чого немає зовсім, підставляється значенням за умовчанням.
+/// Користувач міг зберегти свій шаблон у будь-якій збірці оригіналу, і падати
+/// через зайвий атрибут нам не можна.
 public enum SchemeParser {
 
     public enum Failure: Error, LocalizedError {
@@ -30,10 +30,10 @@ public enum SchemeParser {
         return try scheme(data: data, fallbackName: url.deletingPathExtension().lastPathComponent)
     }
 
-    /// `fallbackName` идёт в дело, если в файле нет атрибута `Name`.
+    /// `fallbackName` іде в хід, якщо у файлі немає атрибута `Name`.
     public static func scheme(data: Data, fallbackName: String = "") throws -> SlideScheme {
-        // Кодировка не объявлена: свежие файлы UTF-8, старые могли быть в
-        // CP1251 — там кириллица в именах объектов и в имени фона.
+        // Кодування не оголошено: свіжі файли UTF-8, старі могли бути в
+        // CP1251 — там кирилиця в іменах об'єктів і в імені фону.
         let declared: String.Encoding? = String(data: data, encoding: .utf8) != nil ? .utf8 : nil
         let text = CodePage.decode(data, declared: declared)
 
@@ -47,10 +47,10 @@ public enum SchemeParser {
         return scheme
     }
 
-    // MARK: - Разбор значений
+    // MARK: - Розбір значень
 
-    /// Delphi пишет дробные с запятой и иногда в научной записи
-    /// (`-3,66568565368652E-6`); на английской локали была бы точка.
+    /// Delphi пише дробові з комою й іноді в науковому записі
+    /// (`-3,66568565368652E-6`); на англійській локалі була б крапка.
     static func number(_ raw: String?) -> Double? {
         guard let raw, !raw.isEmpty else { return nil }
         return Double(raw.replacingOccurrences(of: ",", with: "."))
@@ -65,8 +65,8 @@ public enum SchemeParser {
         }
     }
 
-    /// `TColor` — `0x00BBGGRR`. Отрицательные значения в Delphi это системные
-    /// цвета вроде `clWindowText`; их брать неоткуда, отдаём nil.
+    /// `TColor` — `0x00BBGGRR`. Від'ємні значення в Delphi — це системні
+    /// кольори на зразок `clWindowText`; їх брати нізвідки, віддаємо nil.
     static func color(_ raw: String?) -> SlideStyle.RGBA? {
         guard let raw, let value = Int(raw.trimmingCharacters(in: .whitespaces)), value >= 0 else { return nil }
         return SlideStyle.RGBA(Double(value & 0xFF) / 255,
@@ -74,7 +74,7 @@ public enum SchemeParser {
                                Double((value >> 16) & 0xFF) / 255)
     }
 
-    /// Атрибуты узла с поиском без учёта регистра.
+    /// Атрибути вузла з пошуком без урахування регістру.
     struct Attributes {
         let raw: [String: String]
         private let index: [String: String]
@@ -93,7 +93,7 @@ public enum SchemeParser {
     }
 }
 
-// MARK: - Обход дерева
+// MARK: - Обхід дерева
 
 private final class Collector: NSObject, XMLParserDelegate {
 
@@ -103,8 +103,8 @@ private final class Collector: NSObject, XMLParserDelegate {
     private var presetNames: [String] = []
     private var elements: [SlideScheme.Element] = []
 
-    // Открытые узлы: `FXPreset` встречается и в списке пресетов схемы,
-    // и внутри объекта — различаем по тому, начат ли объект.
+    // Відкриті вузли: `FXPreset` трапляється і в списку пресетів схеми,
+    // і всередині об'єкта — розрізняємо за тим, чи почато об'єкт.
     private var inPresetList = false
     private var elementAttributes: SchemeParser.Attributes?
     private var elementPresets: [SlideScheme.FXPreset] = []
@@ -196,7 +196,7 @@ private final class Collector: NSObject, XMLParserDelegate {
         }
     }
 
-    // MARK: - Сборка моделей
+    // MARK: - Складання моделей
 
     private func element(from attributes: SchemeParser.Attributes,
                          presets: [SlideScheme.FXPreset]) -> SlideScheme.Element {
@@ -204,8 +204,8 @@ private final class Collector: NSObject, XMLParserDelegate {
         let mask = attributes.string("ImageMask").flatMap { $0.isEmpty ? nil : $0 }
         let rawType = attributes.string("Type").flatMap { Int($0) } ?? -1
 
-        // Второй вариант может быть не описан вовсе — тогда он повторяет первый,
-        // а не схлопывается в пустую рамку по умолчанию.
+        // Другий варіант може бути зовсім не описаний — тоді він повторює перший,
+        // а не схлопується в порожню рамку за умовчанням.
         let primary = placement(from: attributes, suffix: "")
         let dual = attributes.string("Width_2") == nil ? primary : placement(from: attributes, suffix: "_2")
 
@@ -221,7 +221,7 @@ private final class Collector: NSObject, XMLParserDelegate {
             attributes: attributes.raw)
     }
 
-    /// Второй вариант слайда записан теми же ключами с хвостом `_2`.
+    /// Другий варіант слайда записано тими самими ключами з хвостом `_2`.
     private func placement(from attributes: SchemeParser.Attributes, suffix: String) -> SlideScheme.Placement {
         func value(_ key: String) -> Double? { attributes.number(key + suffix) }
 

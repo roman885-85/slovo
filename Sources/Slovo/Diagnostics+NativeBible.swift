@@ -1,14 +1,14 @@
 import AppKit
 import SlovoCore
 
-/// Самопроверка рабочей области «Библия» в новом окне.
+/// Самоперевірка робочої області «Біблія» в новому вікні.
 ///
-/// Глазами здесь проверяется плохо: «список показывает главу» выглядит
-/// одинаково и когда строки настоящие, и когда они остались от прежней книги.
-/// Поэтому каждая проверка ниже считает по-настоящему — какие строки отдал
-/// источник, что осталось в выделении после Shift и Ctrl, сколько раз сито
-/// поводов пропустило пустую сверку и во сколько миллисекунд обходится
-/// нажатие в собранном окне.
+/// Очима тут перевіряється погано: «список показує розділ» виглядає
+/// однаково і коли рядки справжні, і коли вони лишилися від попередньої книги.
+/// Тому кожна перевірка нижче рахує по-справжньому — які рядки віддало
+/// джерело, що лишилося у виділенні після Shift і Ctrl, скільки разів сито
+/// приводів пропустило порожню звірку й у скільки мілісекунд обходиться
+/// натискання в зібраному вікні.
 extension Diagnostics {
 
     static func nativeBibleSection(state: AppState) -> [Check] {
@@ -19,7 +19,7 @@ extension Diagnostics {
         return checks
     }
 
-    // MARK: - Источники строк
+    // MARK: - Джерела рядків
 
     private static func nativeBibleRows(_ state: AppState) -> [Check] {
         var checks: [Check] = []
@@ -77,7 +77,7 @@ extension Diagnostics {
                             detail: "у розділі \(real.count) віршів, рядків \(verses.rowCount)"))
 
         if real.count >= 10 {
-            // Черта стоит под каждым десятым стихом — настройка SeparatorTenLine.
+            // Риска стоїть під кожним десятим віршем — налаштування SeparatorTenLine.
             let ruled = (0..<verses.rowCount).filter { verses.row(at: $0).rule != nil }
             let wanted = (0..<real.count).filter { real[$0].number % 10 == 0 }
             checks.append(Check(area: area, name: "Червона риска під кожним десятим віршем",
@@ -124,7 +124,7 @@ extension Diagnostics {
         return checks
     }
 
-    // MARK: - Сито поводов
+    // MARK: - Сито приводів
 
     private static func nativeBibleBridge(_ state: AppState) -> [Check] {
         var checks: [Check] = []
@@ -132,8 +132,8 @@ extension Diagnostics {
         let bridge = NativeBibleBridge.shared
         bridge.start(state: state)
 
-        // Считаем, какие поводы уходят на действие. Подписка живёт только
-        // внутри проверки, поэтому жетон держим переменной.
+        // Рахуємо, які приводи йдуть на дію. Підписка живе тільки
+        // всередині перевірки, тому жетон тримаємо змінною.
         var heard: [Signals.Kind] = []
         let token = Signals.shared.subscribe(Set(Signals.Kind.allCases)) { kind in
             heard.append(kind)
@@ -149,7 +149,7 @@ extension Diagnostics {
                                 ? "нічого не змінилося — жодного поводу не пішло"
                                 : "на рівному місці пішли поводи: \(names(heard))"))
 
-        // Смена стиха: обязан уйти только повод о выделении.
+        // Зміна вірша: має піти тільки привід про виділення.
         let numbers = state.currentChapter?.verses.map(\.number) ?? []
         if numbers.count > 2 {
             let was = state.selectedVerseNumbers
@@ -166,7 +166,7 @@ extension Diagnostics {
             bridge.sync()
         }
 
-        // F6 — «прокрутить к текущему стиху»: выбор не менялся, а повод нужен.
+        // F6 — «прокрутити до поточного вірша»: вибір не мінявся, а привід потрібен.
         heard.removeAll()
         state.scrollToCurrentVerse += 1
         bridge.sync()
@@ -175,7 +175,7 @@ extension Diagnostics {
                             detail: heard.isEmpty ? "повід не пішов — список не прокрутиться"
                                                   : "пішли поводи: \(names(heard))"))
 
-        // Смена класса книг: меняется состав книг, стихи не трогаются.
+        // Зміна класу книг: міняється склад книг, вірші не чіпаються.
         let wasClass = state.bookClass
         heard.removeAll()
         state.bookClass = wasClass == .all ? .new : .all
@@ -191,7 +191,7 @@ extension Diagnostics {
         return checks
     }
 
-    // MARK: - Собранное окно
+    // MARK: - Зібране вікно
 
     private static func nativeBibleColumns(_ state: AppState) -> [Check] {
         var checks: [Check] = []
@@ -211,7 +211,7 @@ extension Diagnostics {
         host.layoutSubtreeIfNeeded()
         host.displayIfNeeded()
 
-        // Раскладка колонок: ширины из описи и разделители между ними.
+        // Розкладка колонок: ширини з опису й роздільники між ними.
         let columns = NativeColumnsView()
         let boxes = (0..<4).map { _ in NSView() }
         columns.install([
@@ -231,8 +231,8 @@ extension Diagnostics {
                                 + "решта дісталася «Віршу»"))
         columns.removeFromSuperview()
 
-        // Скорость. Меряем весь путь до пикселей, как и замер основания:
-        // сама работа, раскладка окна и отрисовка.
+        // Швидкість. Міряємо весь шлях до пікселів, як і замір основи:
+        // сама робота, розкладка вікна й малювання.
         let numbers = state.currentChapter?.verses.map(\.number) ?? []
         if numbers.count > 3 {
             var step = 0
@@ -266,7 +266,7 @@ extension Diagnostics {
         return checks
     }
 
-    // MARK: - Мелочи
+    // MARK: - Дрібниці
 
     private static func median(repeats: Int, window: NSWindow, _ body: () -> Void) -> Double {
         var samples: [Double] = []
@@ -276,7 +276,7 @@ extension Diagnostics {
             window.contentView?.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
             let end = DispatchTime.now().uptimeNanoseconds
-            // Первые три прохода — прогрев: шрифты и слои заводятся один раз.
+            // Перші три проходи — прогрівання: шрифти й шари заводяться один раз.
             if pass >= 3 { samples.append(Double(end - start) / 1_000_000) }
         }
         guard !samples.isEmpty else { return 0 }

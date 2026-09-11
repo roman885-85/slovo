@@ -2,16 +2,16 @@ import AppKit
 import Combine
 import SlovoCore
 
-/// Рабочая область модуля «Текст» (5.2) — на AppKit.
+/// Робоча область модуля «Текст» (5.2) — на AppKit.
 ///
-/// Повторяет оригинал сверху вниз: подпись «Заголовок:» и узкое однострочное
-/// поле (23), сразу за полем две плоские кнопки (24), под ними подпись
-/// «Текст:» и большое поле ввода (25) во всю оставшуюся высоту. Четырёх
-/// колонок здесь нет не по домыслу: в `VisioBible.ini` у секции `[Text]` все
-/// ширины списков нулевые, тогда как у `[Bible]` они настоящие.
+/// Повторює оригінал згори донизу: підпис «Заголовок:» і вузьке однорядкове
+/// поле (23), одразу за полем дві пласкі кнопки (24), під ними підпис
+/// «Текст:» і велике поле введення (25) на всю решту висоти. Чотирьох
+/// колонок тут немає не з домислу: у `VisioBible.ini` у секції `[Text]` усі
+/// ширини списків нульові, тоді як у `[Bible]` вони справжні.
 ///
-/// Заголовок набирается тёмно-красным, текст — синим, как у автора: по цвету
-/// видно, в каком из двух полей курсор, даже боковым зрением.
+/// Заголовок набирається темно-червоним, текст — синім, як в автора: за
+/// кольором видно, в якому з двох полів курсор, навіть боковим зором.
 @MainActor
 final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate {
 
@@ -39,14 +39,14 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
 
     override var isFlipped: Bool { true }
 
-    // MARK: - Подключение
+    // MARK: - Підключення
 
     func attach(state: AppState) {
         guard self.state == nil else { return }
         self.state = state
         model.attach(state)
-        // Текст мог приехать из «Библии» или остаться с прошлого запуска:
-        // показываем его сразу, а не после первой правки.
+        // Текст міг приїхати з «Біблії» або лишитися з минулого запуску:
+        // показуємо його одразу, а не після першої правки.
         observers.append(model.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.pull() }
         })
@@ -61,7 +61,7 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
         pull()
     }
 
-    // MARK: - Сборка
+    // MARK: - Складання
 
     private func build() {
         wantsLayer = true
@@ -124,8 +124,8 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
         let gap: CGFloat = 8
         let width = bounds.width - gap * 2
         titleLabel.frame = NSRect(x: gap, y: gap, width: width, height: 14)
-        // Ширина поля снята с оригинала: заголовок занимает примерно
-        // четверть окна, а не всю строку.
+        // Ширину поля знято з оригіналу: заголовок займає приблизно
+        // чверть вікна, а не весь рядок.
         let titleWidth = min(320, max(160, width * 0.3))
         title.frame = NSRect(x: gap, y: titleLabel.frame.maxY + 2, width: titleWidth, height: 24)
         addButton.frame = NSRect(x: title.frame.maxX + 6, y: title.frame.minY + 2, width: 22, height: 20)
@@ -135,10 +135,10 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
                               height: max(0, bounds.height - bodyLabel.frame.maxY - 2 - gap))
     }
 
-    // MARK: - Обмен с моделью
+    // MARK: - Обмін із моделлю
 
-    /// Из модели в поля. Ставим только при расхождении: иначе курсор
-    /// прыгал бы в конец на каждом нажатии клавиши.
+    /// З моделі в поля. Ставимо тільки при розбіжності: інакше курсор
+    /// стрибав би в кінець на кожному натисканні клавіші.
     private func pull() {
         if title.stringValue != model.document.title { title.stringValue = model.document.title }
         if body.string != model.document.body { body.string = model.document.body }
@@ -146,8 +146,8 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
         clearButton.isEnabled = !model.document.isEmpty
         if focusMark != model.focusRequest {
             focusMark = model.focusRequest
-            // F6 «Установить фокус на Стихи/Текст» (N22): в этом режиме
-            // клавиша ставит курсор в поле текста.
+            // F6 «Установить фокус на Стихи/Текст» (N22): у цьому режимі
+            // клавіша ставить курсор у поле тексту.
             window?.makeFirstResponder(body)
         }
     }
@@ -175,10 +175,10 @@ final class NativeTextWorkspace: NSView, NSTextFieldDelegate, NSTextViewDelegate
         pull()
     }
 
-    // MARK: - Цвета оригинала
+    // MARK: - Кольори оригіналу
 
-    /// Значений по паре на каждый цвет: в тёмном оформлении macOS исходные
-    /// оттенки автора на тёмной подложке нечитаемы.
+    /// Значень по парі на кожен колір: у темному оформленні macOS вихідні
+    /// відтінки автора на темній підкладці нечитабельні.
     private static let titleColor = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor(srgbRed: 0.95, green: 0.55, blue: 0.48, alpha: 1)

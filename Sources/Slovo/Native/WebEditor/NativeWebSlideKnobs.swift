@@ -1,15 +1,15 @@
 import AppKit
 import SlovoCore
 
-/// Панель ручек оформления веб-слайда — на AppKit.
+/// Панель ручок оформлення веб-слайда — на AppKit.
 ///
-/// Разделы полосой кнопок, а не сегментами: у пяти русских названий длина
-/// такая, что на узкой панели последнее обрезается посередине слова, и
-/// человек не понимает, что там спрятано.
+/// Розділи смугою кнопок, а не сегментами: у п'яти російських назв довжина
+/// така, що на вузькій панелі остання обрізається посеред слова, і
+/// людина не розуміє, що там сховано.
 ///
-/// Ручки на чужой странице нарочно живые: человек тянет ползунок, и редактор
-/// в ответ предлагает завести свою копию. Мёртвый ползунок молчал бы, и
-/// человек решил бы, что редактор сломан.
+/// Ручки на чужій сторінці навмисно живі: людина тягне повзунок, і редактор
+/// у відповідь пропонує завести свою копію. Мертвий повзунок мовчав би, і
+/// людина вирішила б, що редактор зламаний.
 @MainActor
 final class NativeWebSlideKnobs: NSView {
 
@@ -77,7 +77,7 @@ final class NativeWebSlideKnobs: NSView {
         body.needsLayout = true
     }
 
-    // MARK: - Наполнение
+    // MARK: - Наповнення
 
     func refresh() {
         guard let model else { return }
@@ -86,9 +86,9 @@ final class NativeWebSlideKnobs: NSView {
         }
         if !available.contains(section) { section = available.first ?? .text }
 
-        // Страница без блока настроек тоже живая: первое же движение ручки
-        // заведёт блок и запишет в него ровно эту ручку. Требовать сперва
-        // нажать «Добавить настройки» — лишний шаг на пустом месте.
+        // Сторінка без блоку налаштувань теж жива: перший же рух ручки
+        // заведе блок і запише в нього рівно цю ручку. Вимагати спершу
+        // натиснути «Додати налаштування» — зайвий крок на порожньому місці.
         let editable: Bool
         if case .missing = model.sheet.block, model.current?.isEditable == true {
             editable = true
@@ -143,14 +143,14 @@ final class NativeWebSlideKnobs: NSView {
         refresh()
     }
 
-    /// Одна ручка: название, значение и само управление.
+    /// Одна ручка: назва, значення й саме керування.
     final class KnobRow: NSView {
         private let knob: WebSlideKnob
         private let model: WebSlideEditorModel
         private let title = NSTextField(labelWithString: "")
         private let note = NSTextField(labelWithString: "")
         private var control: NSView?
-        /// Показати в елементі нове значення, не пересобирая ряд.
+        /// Показати в елементі нове значення, не перезбираючи ряд.
         private var apply: ((String) -> Void)?
         /// Що показано зараз: щоб не смикати елемент дарма.
         private var shown = ""
@@ -171,8 +171,8 @@ final class NativeWebSlideKnobs: NSView {
             let value = model.sheet.value(knob)
             title.stringValue = OurWords.t(knob.title)
             if model.sheet.isHandWritten(knob) {
-                // Значение вписано руками — ползунок его не понимает и не
-                // трогает; показываем как есть.
+                // Значення вписано руками — повзунок його не розуміє й не
+                // чіпає; показуємо як є.
                 let written = NSTextField(labelWithString: value + "  ✋")
                 written.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
                 written.textColor = .secondaryLabelColor
@@ -183,9 +183,9 @@ final class NativeWebSlideKnobs: NSView {
             shown = value
             if let control { addSubview(control) }
 
-            // Причина вместо подсказки, а не вместе с ней: подсказка
-            // рассказывает, что ручка делает, а здесь важнее, почему именно
-            // тут не сделает ничего.
+            // Причина замість підказки, а не разом із нею: підказка
+            // розповідає, що ручка робить, а тут важливіше, чому саме
+            // тут не зробить нічого.
             if let idle = model.sheet.idleReason(knob) {
                 note.stringValue = OurWords.t("Здесь не действует: ") + idle
                 note.textColor = .systemOrange
@@ -283,7 +283,7 @@ final class NativeWebSlideKnobs: NSView {
                 // «при смене цвета и выбора в меню цвета в rgb sliders, если
                 // ползунки цветов находятся не в положении ноль, то они
                 // показывают не правильное свое значение цвета внутри
-                // ползунка». Палітра malює свої повзунки в тому просторі
+                // ползунка». Палітра малює свої повзунки в тому просторі
                 // кольору, який у ній вибрано, а сторінка живе в sRGB —
                 // числа ті самі, колір інший. Тут показано те, що вийде.
                 let field = NativeColourField(colour: WebSlideKnobColour.parse(value))

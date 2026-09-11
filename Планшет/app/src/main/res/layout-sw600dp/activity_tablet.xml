@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Планшет «Слова», запущений на телефоні. Програму зроблено для планшета
-  (див. layout-sw600dp), тут вона лише вміщається: ті самі елементи з тими
-  самими іменами, але три колонки не стоять поруч, а перемикаються —
-  «Вміст», «Зал», «План». Вкладки програми прокручуються, великі кнопки —
-  у два ряди.
+  Екран планшета, альбомний, три колонки:
+  ліворуч — вкладки програми і вміст вибраної (Біблія, пісні, показ, плеєр,
+  картинки, екран, текст); посередині — сам зал: що зараз на стіні, під ним
+  текст залу й передпоказ; праворуч — План та Історія. Знизу — ті самі
+  великі кнопки, що й на телефоні, плюс «Порожній».
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
@@ -25,7 +25,7 @@
             android:textSize="20sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
         <TextView
             android:id="@+id/status"
-            android:textSize="14sp"
+            android:textSize="15sp"
             android:singleLine="true"
             android:ellipsize="end"
             android:layout_width="0dp"
@@ -33,43 +33,28 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
-    <HorizontalScrollView
+    <!-- Вкладки програми — на всю ширину, кожна своєю часткою: усі сім
+         видно завжди. Сховане за прокруткою власник назвав недопустимим:
+         «если не знать что они там есть … часть функционала теряется». -->
+    <LinearLayout
+        android:id="@+id/modeTabs"
+        android:orientation="horizontal"
         android:background="#16202C"
-        android:scrollbars="none"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <LinearLayout
-            android:id="@+id/modeTabs"
-            android:orientation="horizontal"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </HorizontalScrollView>
+        android:layout_height="wrap_content" />
 
-    <!-- Перемикач колонок: на телефоні вони не вміщаються поруч. -->
     <LinearLayout
         android:orientation="horizontal"
-        android:background="#131B24"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <Button android:id="@+id/phoneContent" style="@style/TabButton" android:text="@string/phone_content"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
-        <Button android:id="@+id/phoneHall" style="@style/TabButton" android:text="@string/t_hall"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
-        <Button android:id="@+id/phoneSide" style="@style/TabButton" android:text="@string/t_plan"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- Вміст вкладки. -->
+        <!-- Ліворуч: вкладки й вміст. -->
         <LinearLayout
-            android:id="@+id/contentColumn"
             android:orientation="vertical"
             android:padding="6dp"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
+            android:layout_weight="4"
             android:layout_height="match_parent">
             <FrameLayout
                 android:id="@+id/panel"
@@ -77,6 +62,8 @@
                 android:layout_height="0dp"
                 android:layout_weight="1">
 
+                <!-- Біблія: пошук за словами зверху, під ним переклад → книга →
+                     розділ → вірші (той самий обозрівач, що в телефоні). -->
                 <LinearLayout
                     android:id="@+id/biblePanel"
                     android:orientation="vertical"
@@ -156,7 +143,7 @@
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content" />
                             <Button android:id="@+id/bibleTranslation" style="@style/SmallButton"
-                                android:singleLine="true" android:ellipsize="end" android:maxWidth="140dp"
+                                android:singleLine="true" android:ellipsize="end" android:maxWidth="200dp"
                                 android:layout_width="wrap_content" android:layout_height="wrap_content" />
                         </LinearLayout>
                         <TextView
@@ -177,7 +164,7 @@
                             android:id="@+id/bibleGrid"
                             android:visibility="gone"
                             android:numColumns="auto_fit"
-                            android:columnWidth="52dp"
+                            android:columnWidth="60dp"
                             android:stretchMode="columnWidth"
                             android:horizontalSpacing="6dp"
                             android:verticalSpacing="6dp"
@@ -199,6 +186,8 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- Решта вкладок складається в коді: у кожної свій набір
+                     кнопок, а список один. -->
                 <LinearLayout
                     android:id="@+id/otherPanel"
                     android:orientation="vertical"
@@ -229,7 +218,7 @@
                         android:id="@+id/panelGrid"
                         android:visibility="gone"
                         android:numColumns="auto_fit"
-                        android:columnWidth="110dp"
+                        android:columnWidth="150dp"
                         android:stretchMode="columnWidth"
                         android:horizontalSpacing="6dp"
                         android:verticalSpacing="6dp"
@@ -245,14 +234,13 @@
             </FrameLayout>
         </LinearLayout>
 
-        <!-- Зал. -->
+        <!-- Посередині: зал. -->
         <LinearLayout
-            android:id="@+id/hallColumn"
             android:orientation="vertical"
             android:padding="6dp"
-            android:visibility="gone"
             android:background="#0B0E12"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
+            android:layout_weight="5"
             android:layout_height="match_parent">
             <TextView
                 android:id="@+id/hallCaption"
@@ -291,7 +279,7 @@
             <TextView
                 android:id="@+id/liveText"
                 android:textSize="15sp"
-                android:maxLines="4"
+                android:maxLines="3"
                 android:ellipsize="end"
                 android:paddingTop="6dp"
                 android:layout_width="match_parent"
@@ -306,13 +294,12 @@
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
-        <!-- План та Історія. -->
+        <!-- Праворуч: План та Історія. -->
         <LinearLayout
-            android:id="@+id/sideColumn"
             android:orientation="vertical"
             android:padding="6dp"
-            android:visibility="gone"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
+            android:layout_weight="3"
             android:layout_height="match_parent">
             <LinearLayout
                 android:orientation="horizontal"
@@ -353,42 +340,25 @@
                     android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
             </LinearLayout>
         </LinearLayout>
-    </FrameLayout>
+    </LinearLayout>
 
-    <!-- Підпис у два рядки («Чорний екран») не зсуває кнопку вниз: ряд не рівняє
-         по базовій лінії, а всі кнопки ряду — однакової висоти. -->
     <LinearLayout
         android:orientation="horizontal"
-        android:baselineAligned="false"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
         <Button android:id="@+id/prev" style="@style/BigButton" android:text="@string/prev"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         <Button android:id="@+id/next" style="@style/BigButton" android:text="@string/next"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         <Button android:id="@+id/show" style="@style/BigButton" android:text="@string/show"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
-    </LinearLayout>
-    <LinearLayout
-        android:orientation="horizontal"
-        android:baselineAligned="false"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         <Button android:id="@+id/hide" style="@style/BigButton" android:text="@string/hide"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         <Button android:id="@+id/black" style="@style/BigButton" android:text="@string/black"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         <Button android:id="@+id/blank" style="@style/BigButton" android:text="@string/t_blank"
-            android:minHeight="52dp" android:textSize="17sp"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
     </LinearLayout>
 </LinearLayout>

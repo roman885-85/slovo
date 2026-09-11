@@ -1,16 +1,16 @@
 import Foundation
 import SlovoCore
 
-/// Проверка модуля «Текст» (раздел 5.2 руководства): очистка, приём стиха из
-/// «Библии», разбивка длинного текста на слайды и пункт плана с текстом.
+/// Перевірка модуля «Текст» (розділ 5.2 посібника): очищення, прийом вірша з
+/// «Біблії», розбиття довгого тексту на слайди й пункт плану з текстом.
 ///
-/// Почему не XCTest: полного Xcode на машине нет, только Command Line Tools,
-/// и модуля `XCTest` в них не поставляется — `swift test` там не собирается
-/// вовсе. Поэтому проверки живут в консольной цели, как и остальная
-/// самопроверка разбора модулей.
+/// Чому не XCTest: повного Xcode на машині немає, тільки Command Line Tools,
+/// і модуля `XCTest` у них не постачається — `swift test` там не збирається
+/// зовсім. Тому перевірки живуть у консольній цілі, як і решта
+/// самоперевірки розбору модулів.
 ///
-/// Настройки берём настоящие — из `VisioBible.ini` пользователя. Ничего не
-/// пишем: план сохраняется во временную папку и оттуда же удаляется.
+/// Налаштування беремо справжні — з `VisioBible.ini` користувача. Нічого не
+/// пишемо: план зберігається в тимчасову теку й звідти ж видаляється.
 func runTextModuleCheck() -> Int32 {
     var failures = 0
 
@@ -24,7 +24,7 @@ func runTextModuleCheck() -> Int32 {
         }
     }
 
-    // MARK: Кнопки работы с текстом (24)
+    // MARK: Кнопки роботи з текстом (24)
 
     print("кнопки работы с текстом (24):")
     var document = PlainTextDocument(title: "Объявление", body: "После служения — общение.")
@@ -35,7 +35,7 @@ func runTextModuleCheck() -> Int32 {
     check("пробелы и переводы строк за содержимое не считаются",
           PlainTextDocument(title: "  ", body: "\n\n \n").isEmpty)
 
-    // MARK: Приём текста из «Библии» (MICopyToText)
+    // MARK: Прийом тексту з «Біблії» (MICopyToText)
 
     print("приём стиха из модуля «Библия» (MICopyToText):")
     var received = PlainTextDocument(title: "Старое", body: "Старый текст")
@@ -51,7 +51,7 @@ func runTextModuleCheck() -> Int32 {
           appended.title == "Ин 3:16" && appended.body == "Первый\nВторой",
           "получилось «\(appended.title)» / «\(appended.body.replacingOccurrences(of: "\n", with: "⏎"))»")
 
-    // MARK: Слайд собирается как библейский
+    // MARK: Слайд збирається як біблійний
 
     print("слайд (заголовок на месте адреса, текст на месте цитаты):")
     let short = PlainTextDocument.Pagination(charactersPerLine: 40, linesPerPage: 4,
@@ -66,7 +66,7 @@ func runTextModuleCheck() -> Int32 {
     check("номер страницы за краем прижимается к краю",
           PlainTextDocument(title: "Т", body: "текст").slide(atPage: 99, short).mainText == "текст")
 
-    // MARK: Разбивка длинного текста на слайды
+    // MARK: Розбиття довгого тексту на слайди
 
     print("разбивка длинного текста на слайды:")
     let long = (1...20).map { "строка номер \($0)" }.joined(separator: "\n")
@@ -124,7 +124,7 @@ func runTextModuleCheck() -> Int32 {
           PlainTextDocument(title: "О", body: "а\n\nб").slides(numbered).map(\.reference)
             == ["О · 1/2", "О · 2/2"])
 
-    // MARK: Настройки оригинала — секция [Text]
+    // MARK: Налаштування оригіналу — секція [Text]
 
     print("настройки оригинала, секция [Text]:")
     if let url = IniSettings.locateConfig(),
@@ -146,7 +146,7 @@ func runTextModuleCheck() -> Int32 {
         print("    ёмкость слайда: \(text.charactersPerLine) знаков в строке × "
               + "\(text.linesPerPage) строк = \(text.charactersPerLine * text.linesPerPage) знаков")
 
-        // Живой пример: настоящее объявление на служении.
+        // Живий приклад: справжнє оголошення на служінні.
         let sample = PlainTextDocument(
             title: "Объявление",
             body: "Дорогие братья и сёстры! Сегодня после богослужения состоится "
@@ -169,7 +169,7 @@ func runTextModuleCheck() -> Int32 {
         print("  — Slovo.ini не знайдено, перевірку пропущено")
     }
 
-    // MARK: Пункт плана «Текст» (SBAddTextToPlan)
+    // MARK: Пункт плану «Текст» (SBAddTextToPlan)
 
     print("пункт плана «Текст» (SBAddTextToPlan):")
     let announcement = PlainTextDocument(title: "Объявление", body: "Первая строка\nВторая строка")
@@ -204,7 +204,7 @@ func runTextModuleCheck() -> Int32 {
     }
 
     do {
-        // План, набранный руками без поля `type`, тоже должен читаться.
+        // План, набраний руками без поля `type`, теж має читатися.
         let json = Data(#"{"heading":"Объявление","body":"Текст"}"#.utf8)
         let manual = try JSONDecoder().decode(PlanItem.self, from: json)
         check("пункт без поля type опознаётся по heading/body",

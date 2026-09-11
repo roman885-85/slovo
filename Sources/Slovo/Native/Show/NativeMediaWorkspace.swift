@@ -1,16 +1,16 @@
 import AppKit
 import SlovoCore
 
-/// Рабочая область «Медиа»: слева список файлов, справа сам плеер.
+/// Робоча область «Медіа»: ліворуч список файлів, праворуч сам плеєр.
 ///
-/// Списка тут не было вовсе: плеер держал один файл, и каждый следующий
-/// стирал предыдущий. На служении файлов несколько — заставка, ролик к
-/// проповеди, гимн, — и ходить за каждым в окно выбора посреди служения
-/// нельзя.
+/// Списку тут не було зовсім: плеєр тримав один файл, і кожен наступний
+/// стирав попередній. На служінні файлів кілька — заставка, ролик до
+/// проповіді, гімн, — і ходити по кожен у вікно вибору посеред служіння
+/// не можна.
 ///
-/// Устроено так же, как показ картинок: тот же `NativeList`, те же кнопки
-/// «добавить», «убрать», «очистить». Разница только в том, что справа стоит
-/// панель плеера, а не предпросмотр страницы.
+/// Влаштовано так само, як показ картинок: той самий `NativeList`, ті самі
+/// кнопки «додати», «прибрати», «очистити». Різниця тільки в тому, що
+/// праворуч стоїть панель плеєра, а не попередній перегляд сторінки.
 @MainActor
 final class NativeMediaWorkspace: NSView, NativeListSource {
 
@@ -25,7 +25,7 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
                                   metrics: NativeListMetrics(leadWidth: 30, detailWidth: 0),
                                   heights: .uniform(26))
     private let toolbar = NSStackView()
-    /// Фонограмма — под списком файлов: своя, отдельная от плеера.
+    /// Фонограма — під списком файлів: своя, окрема від плеєра.
     private var backingBar: NativeBackingTrackBar?
 
     private init() {
@@ -43,8 +43,8 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         list.source = self
         list.onSelect = { [weak self] _, active, _ in
             guard let self else { return }
-            // Одиночный щелчок только выделяет: файл на служении открывают
-            // намеренно, а не мимоходом задев список.
+            // Одиночне клацання тільки виділяє: файл на служінні відкривають
+            // навмисно, а не мимохідь зачепивши список.
             self.selected = active
         }
         list.onActivate = { [weak self] position in
@@ -57,8 +57,8 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
             self?.applyCaptions()
             self?.backingBar?.applyCaptions()
         })
-        // Список плеера меняется и мимо нас: файл открывают перетаскиванием
-        // в окно и клавишей Ctrl+M.
+        // Список плеєра міняється й повз нас: файл відкривають перетягуванням
+        // у вікно й клавішею Ctrl+M.
         observers.append(state.media.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.reload() }
         })
@@ -79,7 +79,7 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         reload()
     }
 
-    // MARK: - Сборка
+    // MARK: - Складання
 
     private func build() {
         wantsLayer = true
@@ -127,7 +127,7 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
                              height: max(0, bounds.height - gap * 2))
     }
 
-    // MARK: - Действия
+    // MARK: - Дії
 
     @objc private func addFiles() {
         guard let state else { return }
@@ -139,10 +139,10 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
                                    default: "Открытие медиафайлов")
         panel.prompt = state.text("BBOk", default: "Ок")
 
-        // Тот же выбор наборов, что и у кнопки «Открыть медиафайл» (16.1):
-        // одно и то же действие в двух местах не должно предлагать разное.
-        // Без него диалог показывал и картинки — они попадали в список
-        // плеера, дорожки видео у них нет, и на проекторе выходило пусто.
+        // Той самий вибір наборів, що й у кнопки «Відкрити медіафайл» (16.1):
+        // одна й та сама дія у двох місцях не має пропонувати різне.
+        // Без нього діалог показував і картинки — вони потрапляли до списку
+        // плеєра, доріжки відео в них немає, і на проєкторі виходило порожньо.
         let captions = MediaFileFilters.FilterGroup.allCases.map {
             state.text($0.captionKey, form: "MediaPlayerForm", default: $0.fallbackCaption)
         }

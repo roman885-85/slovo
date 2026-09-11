@@ -1,19 +1,19 @@
 import Foundation
 import Network
 
-/// Крошечный HTTP-сервер для одной страницы — обёртки встроенного
-/// проигрывателя YouTube.
+/// Крихітний HTTP-сервер для однієї сторінки — обгортки вбудованого
+/// програвача YouTube.
 ///
-/// Зачем он вообще нужен. Страницу-обёртку YouTube принимает только с
-/// настоящего адреса: с заголовком Referer и совпадающим `origin`. Страница
-/// из строки (`loadHTMLString`) и прямая загрузка их же страницы встраивания
-/// отвечают «ошибка конфигурации видеопроигрывателя» (коды 152/153; их
-/// требование с 2025 года) — проверено опытом 2026-09-03 на этой машине,
-/// заголовок Referer в запросе не помогает. Та же страница со своего
-/// 127.0.0.1 играет.
+/// Навіщо він узагалі потрібен. Сторінку-обгортку YouTube приймає тільки зі
+/// справжньої адреси: із заголовком Referer і однаковим `origin`. Сторінка
+/// з рядка (`loadHTMLString`) і пряме завантаження їхньої ж сторінки вбудовування
+/// відповідають «ошибка конфигурации видеопроигрывателя» (коди 152/153; їхня
+/// вимога з 2025 року) — перевірено досвідом 2026-09-03 на цій машині,
+/// заголовок Referer у запиті не допомагає. Та сама сторінка зі свого
+/// 127.0.0.1 грає.
 ///
-/// Слушает только петлю и случайный свободный порт: снаружи его не видно, а
-/// с портами веб-вывода (82, 8100) он не спорит.
+/// Слухає тільки петлю й випадковий вільний порт: ззовні його не видно, а
+/// з портами веб-виводу (82, 8100) він не сперечається.
 @MainActor
 final class YouTubeHostServer {
 
@@ -24,7 +24,7 @@ final class YouTubeHostServer {
     private var waiting: [(Int?) -> Void] = []
     private let queue = DispatchQueue(label: "slovo.youtube.host")
 
-    /// Порт, когда сервер готов; уже готов — сразу. `nil` — не поднялся.
+    /// Порт, коли сервер готовий; уже готовий — одразу. `nil` — не піднявся.
     func ready(_ body: @escaping (Int?) -> Void) {
         if let port { body(port); return }
         waiting.append(body)
@@ -73,10 +73,10 @@ final class YouTubeHostServer {
         for body in callbacks { body(port) }
     }
 
-    // MARK: - Ответ
+    // MARK: - Відповідь
 
-    /// Один запрос — один ответ — закрыть. Строка запроса всегда в первом
-    /// куске, разбирать заголовки целиком незачем.
+    /// Один запит — одна відповідь — закрити. Рядок запиту завжди в першому
+    /// шматку, розбирати заголовки цілком нема чого.
     nonisolated private static func serve(_ connection: NWConnection, on queue: DispatchQueue) {
         connection.start(queue: queue)
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, _, _ in
@@ -109,17 +109,17 @@ final class YouTubeHostServer {
         return Data(head.utf8) + body
     }
 
-    // MARK: - Поток, склеенный на лету
+    // MARK: - Потік, склеєний на льоту
 
-    /// Папки с HLS, которые отдаём: `/hls/<ключ>/index.m3u8` и куски рядом.
+    /// Теки з HLS, які віддаємо: `/hls/<ключ>/index.m3u8` і шматки поруч.
     ///
-    /// AVFoundation играет HLS только по http — плейлист с диска (`file://`)
-    /// он не берёт. Поэтому папку, куда ffmpeg пишет склеенный на лету поток,
-    /// отдаёт тот же локальный сервер.
+    /// AVFoundation грає HLS тільки по http — плейлист із диска (`file://`)
+    /// він не бере. Тому теку, куди ffmpeg пише склеєний на льоту потік,
+    /// віддає той самий локальний сервер.
     nonisolated(unsafe) private static var roots: [String: URL] = [:]
     nonisolated(unsafe) private static let rootsLock = NSLock()
 
-    /// Зарегистрировать папку; вернуть ключ для адреса.
+    /// Зареєструвати теку; повернути ключ для адреси.
     nonisolated static func publish(folder: URL) -> String {
         let key = UUID().uuidString.lowercased()
         rootsLock.lock(); roots[key] = folder; rootsLock.unlock()
@@ -130,7 +130,7 @@ final class YouTubeHostServer {
         rootsLock.lock(); roots.removeValue(forKey: key); rootsLock.unlock()
     }
 
-    /// Адрес плейлиста для ключа — когда сервер готов.
+    /// Адреса плейлиста для ключа — коли сервер готовий.
     func playlistURL(for key: String) -> URL? {
         guard let port else { return nil }
         return URL(string: "http://127.0.0.1:\(port)/hls/\(key)/index.m3u8")
@@ -155,18 +155,18 @@ final class YouTubeHostServer {
         return packet(status: "200 OK", body: data, type: type)
     }
 
-    /// Номер ролика — 11 знаков из букв, цифр, «-» и «_»; ничего иного в
-    /// страницу не подставляется.
+    /// Номер ролика — 11 знаків із літер, цифр, «-» і «_»; нічого іншого в
+    /// сторінку не підставляється.
     nonisolated private static func isVideoID(_ id: String) -> Bool {
         id.count == 11 && id.unicodeScalars.allSatisfy {
             $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_")
         }
     }
 
-    // MARK: - Страница
+    // MARK: - Сторінка
 
-    /// Обёртка: один iframe YouTube на весь экран, управление и состояние —
-    /// через их IFrame Player API, сообщения — в программу через WebKit.
+    /// Обгортка: один iframe YouTube на весь екран, керування й стан —
+    /// через їхній IFrame Player API, повідомлення — у програму через WebKit.
     nonisolated static func page(videoID: String, autoplay: Bool) -> String {
         """
         <!doctype html><html><head><meta charset="utf-8"><title>Слово · YouTube</title>

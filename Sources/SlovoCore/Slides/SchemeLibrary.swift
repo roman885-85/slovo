@@ -1,17 +1,17 @@
 import Foundation
 
-/// Папка `Templates` оригинала: список шаблонов, их фоны и миниатюры.
+/// Тека `Templates` оригіналу: список шаблонів, їхні фони й мініатюри.
 ///
-/// Устроена она так: рядом с файлом `<Имя>.sch` лежит одноимённая папка со
-/// всеми картинками этого шаблона — фон, линии, панели — и подпапка `thumbs`
-/// с готовыми превью `scene1.jpg` (один перевод) и `scene2.jpg` (два).
-/// Именно на этот расклад рассчитан и сам `VisioBible.ini`, где путь к фону
-/// записан как `Templates\SpringFade\spring_fon 2.jpg`.
+/// Влаштована вона так: поруч із файлом `<Ім'я>.sch` лежить однойменна тека з
+/// усіма картинками цього шаблону — фон, лінії, панелі — і підтека `thumbs`
+/// з готовими прев'ю `scene1.jpg` (один переклад) і `scene2.jpg` (два).
+/// Саме на такий розклад розрахований і сам `VisioBible.ini`, де шлях до фону
+/// записано як `Templates\SpringFade\spring_fon 2.jpg`.
 public struct SchemeLibrary: Sendable {
 
-    /// Высота слайда, под которую в оригинале подбирали обводку и тень.
-    /// Настоящее значение лежит в `[OutScreen] height`; 600 — то же
-    /// умолчание, что и в `SlideStyle.init(config:section:dataRoot:)`.
+    /// Висота слайда, під яку в оригіналі підбирали обведення й тінь.
+    /// Справжнє значення лежить у `[OutScreen] height`; 600 — те саме
+    /// умовчання, що й у `SlideStyle.init(config:section:dataRoot:)`.
     public static let defaultDesignHeight: Double = 600
 
     public struct Template: Sendable, Hashable, Identifiable {
@@ -22,7 +22,7 @@ public struct SchemeLibrary: Sendable {
         public let backgroundURL: URL?
         public let singleThumbnailURL: URL?
         public let dualThumbnailURL: URL?
-        /// Содержимое папки шаблона — чтобы искать картинки без обращения к диску.
+        /// Уміст теки шаблону — щоб шукати картинки без звертання до диска.
         let files: [String]
 
         public var id: String { name }
@@ -31,7 +31,7 @@ public struct SchemeLibrary: Sendable {
             variant == .single ? singleThumbnailURL : dualThumbnailURL
         }
 
-        /// Путь к картинке шаблона (`Image` / `ImageMask` любого элемента).
+        /// Шлях до картинки шаблону (`Image` / `ImageMask` будь-якого елемента).
         public func imageURL(named name: String?) -> URL? {
             guard let name, !name.isEmpty else { return nil }
             return SchemeLibrary.resolve(name, in: folderURL, files: files)
@@ -40,8 +40,8 @@ public struct SchemeLibrary: Sendable {
 
     public let root: URL
     public let templates: [Template]
-    /// Что не удалось прочитать: имя файла -> причина. Один битый шаблон не
-    /// должен уносить с собой всю папку.
+    /// Що не вдалося прочитати: ім'я файла -> причина. Один битий шаблон не
+    /// має забирати із собою всю теку.
     public let failures: [String: String]
     public var designHeight: Double
 
@@ -85,26 +85,26 @@ public struct SchemeLibrary: Sendable {
         self.failures = failures
     }
 
-    /// `dataRoot` — папка приложения VisioBible, та же, что у `Modules`.
+    /// `dataRoot` — тека застосунку VisioBible, та сама, що в `Modules`.
     public init(dataRoot: URL, designHeight: Double = SchemeLibrary.defaultDesignHeight) {
         self.init(templatesRoot: dataRoot.appendingPathComponent("Templates", isDirectory: true),
                   designHeight: designHeight)
     }
 
-    /// Высоту слайда, под которую считались пиксели обводки, берём из ini.
+    /// Висоту слайда, під яку рахувалися пікселі обведення, беремо з ini.
     public init(dataRoot: URL, config: IniSettings?) {
         let height = config.flatMap { $0.int("height", in: "OutScreen") }.map(Double.init)
         self.init(dataRoot: dataRoot, designHeight: max(height ?? SchemeLibrary.defaultDesignHeight, 1))
     }
 
-    // MARK: - Поиск
+    // MARK: - Пошук
 
     public var names: [String] { templates.map(\.name) }
 
     public var isEmpty: Bool { templates.isEmpty }
 
-    /// Имя шаблона приходит из ini (`DefaultScheme=SpringFade`), поэтому
-    /// сравниваем без учёта регистра — Windows его не различает.
+    /// Ім'я шаблону приходить з ini (`DefaultScheme=SpringFade`), тому
+    /// порівнюємо без урахування регістру — Windows його не розрізняє.
     public func template(named name: String) -> Template? {
         templates.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
             ?? templates.first { $0.scheme.name.caseInsensitiveCompare(name) == .orderedSame }
@@ -112,7 +112,7 @@ public struct SchemeLibrary: Sendable {
 
     public subscript(name: String) -> Template? { template(named: name) }
 
-    // MARK: - Перевод в стиль слайда
+    // MARK: - Переведення в стиль слайда
 
     public func slideStyle(for template: Template,
                            base: SlideStyle = SlideStyle(),
@@ -132,14 +132,14 @@ public struct SchemeLibrary: Sendable {
         return slideStyle(for: template, base: base, variant: variant, designHeight: designHeight)
     }
 
-    // MARK: - Файлы
+    // MARK: - Файли
 
-    /// Ищет файл по имени из шаблона.
+    /// Шукає файл за ім'ям із шаблону.
     ///
-    /// Имена в `.sch` писались на Windows: регистр там не важен, разделитель
-    /// обратный слэш, а кириллица могла лечь в другой нормализации Unicode,
-    /// чем на диске у нас. Прямое обращение обычно срабатывает, но если нет —
-    /// сверяемся со списком папки уже вручную.
+    /// Імена в `.sch` писалися на Windows: регістр там не важливий, роздільник —
+    /// зворотна скісна риска, а кирилиця могла лягти в іншій нормалізації Unicode,
+    /// ніж на диску в нас. Пряме звертання зазвичай спрацьовує, але якщо ні —
+    /// звіряємося зі списком теки вже вручну.
     static func resolve(_ name: String, in folder: URL, files: [String]) -> URL? {
         guard !name.isEmpty else { return nil }
         let cleaned = name.replacingOccurrences(of: "\\", with: "/")

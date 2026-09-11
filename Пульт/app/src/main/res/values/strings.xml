@@ -4,6 +4,10 @@
     <!-- Куди веде вікно з'єднання, коли комп'ютер знайдено. Планшет
          підміняє цей рядок своїм. -->
     <string name="work_activity" translatable="false">ua.church.slovo.remote.RemoteActivity</string>
+    <!-- Екран плану проповіді є лише в планшета; у пульта рядок порожній,
+         і вікно з'єднання кнопки до нього не показує. -->
+    <string name="sermon_activity" translatable="false"></string>
+    <string name="sermon_open">План проповіді…</string>
     <string name="app_name">Пульт Слова</string>
     <string name="connect_title">Підключення до «Слова»</string>
 

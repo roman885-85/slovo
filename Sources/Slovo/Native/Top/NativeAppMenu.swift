@@ -1,17 +1,17 @@
 import AppKit
 import SlovoCore
 
-/// Строка меню macOS — своими руками, средствами AppKit.
+/// Рядок меню macOS — власноруч, засобами AppKit.
 ///
-/// Прежде её собирал SwiftUI (`Commands`): собирать напрямую было нельзя,
-/// потому что сцена переписывала `NSApp.mainMenu` при каждом обновлении.
-/// Сцены больше нет — и меню теперь просто меню: пункты берутся из той же
-/// описи `SlovoMenu`, что и полоса внутри окна, а сочетания клавиш из окна
-/// «Параметры» (6.1.6) попадают в него сами.
+/// Раніше його збирав SwiftUI (`Commands`): збирати напряму було не можна,
+/// бо сцена переписувала `NSApp.mainMenu` при кожному оновленні.
+/// Сцени більше немає — і меню тепер просто меню: пункти беруться з того самого
+/// опису `SlovoMenu`, що й смуга всередині вікна, а сполучення клавіш із вікна
+/// «Параметри» (6.1.6) потрапляють у нього самі.
 ///
-/// Пункты пересобираются в тот миг, когда человек открыл раздел
-/// (`menuNeedsUpdate`): галочки и подписи тогда не могут отстать от
-/// состояния, а работы на нажатие клавиши нет вовсе — меню закрыто.
+/// Пункти перезбираються тієї миті, коли людина відкрила розділ
+/// (`menuNeedsUpdate`): галочки й підписи тоді не можуть відстати від
+/// стану, а роботи на натискання клавіші немає зовсім — меню закрите.
 @MainActor
 final class NativeAppMenu: NSObject, NSMenuDelegate {
 
@@ -23,12 +23,12 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
         super.init()
     }
 
-    /// Собрать и поставить строку меню.
+    /// Зібрати й поставити рядок меню.
     func install() {
         let main = NSMenu()
 
-        // Раздел с именем программы: у macOS он первый и обязателен, иначе
-        // «Скрыть» и «Выйти» человеку взять негде.
+        // Розділ з іменем програми: у macOS він перший і обов'язковий, інакше
+        // «Приховати» й «Вийти» людині взяти ніде.
         let app = NSMenuItem()
         let appMenu = NSMenu()
         let aboutItem = appMenu.addItem(withTitle: state.text("N5", default: "О программе..."),
@@ -57,7 +57,7 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
         app.submenu = appMenu
         main.addItem(app)
 
-        // Дальше — разделы описи, в том же порядке, что и в окне.
+        // Далі — розділи опису, у тому самому порядку, що й у вікні.
         for group in NativeMenuGroup.allCases {
             let item = NSMenuItem()
             let menu = NSMenu(title: caption(of: group))
@@ -67,14 +67,14 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
             item.title = menu.title
             item.submenu = menu
             main.addItem(item)
-            // Наполняем сразу, а не только при открытии: пункты меню ищет и
-            // сама система — в «Справке» по строке меню, — а самопроверка
-            // сверяет по ним опись. Пустое до первого открытия меню и для
-            // того, и для другого выглядит как «пунктов нет вовсе».
+            // Наповнюємо одразу, а не тільки при відкритті: пункти меню шукає і
+            // сама система — у «Довідці» по рядку меню, — а самоперевірка
+            // звіряє за ними опис. Порожнє до першого відкриття меню і для
+            // того, і для іншого виглядає як «пунктів немає зовсім».
             menuNeedsUpdate(menu)
         }
 
-        // «Окно» — системный раздел: свернуть, развернуть, список окон.
+        // «Вікно» — системний розділ: згорнути, розгорнути, список вікон.
         let windows = NSMenuItem()
         let windowsMenu = NSMenu(title: OurWords.t("Окно"))
         let minimize = windowsMenu.addItem(withTitle: OurWords.t("Свернуть"),
@@ -115,7 +115,7 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
         state.text(group.captionKey, default: group.captionFallback)
     }
 
-    // MARK: - Наполнение
+    // MARK: - Наповнення
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let group = groups[ObjectIdentifier(menu)] else { return }
@@ -144,8 +144,8 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
     @objc private func about() { state.menuActions.about() }
 }
 
-/// Действие пункта, завёрнутое в объект: `representedObject` хранит только
-/// ссылочные величины, а замыкание — величина значения.
+/// Дія пункту, загорнута в об'єкт: `representedObject` зберігає тільки
+/// посилальні величини, а замикання — величина значення.
 final class MenuActionBox: NSObject {
     let action: () -> Void
     init(_ action: @escaping () -> Void) { self.action = action }

@@ -145,9 +145,9 @@ enum SlovoMenu {
             return InterfaceMenuItems.language(state: state).map { item in
                 let (isOn, title) = unmark(item.title)
                 return NativeMenuEntry(title: title, isOn: isOn, action: {
-                    let before = state.language?.code
+                    let before = state.languageCode
                     item.action()
-                    if state.language?.code != before { Signals.shared.send(.language) }
+                    if state.languageCode != before { Signals.shared.send(.language) }
                 })
             }
 

@@ -66,6 +66,34 @@ final class Settings {
         return Math.max(MIN_POINTER_OPACITY, Math.min(MAX_POINTER_OPACITY, value));
     }
 
+    /// Мій перегляд: текст слайда в оформленні, зручному для читання з
+    /// планшета, замість картинки залу. Власник: «текущий просмотр текста с
+    /// зеленой обводкой на белом фоне, мягко говоря, не приятный» — картинка
+    /// залу несе стиль стіни, а не екрана в руці. Тому текстом — одразу.
+    boolean previewText() { return store.getBoolean("previewText", true); }
+    String previewTheme() { return store.getString("previewTheme", "dark"); }
+    float previewSize() {
+        float size = store.getFloat("previewSize", 30f);
+        return Math.max(14f, Math.min(80f, size));
+    }
+
+    void setPreview(boolean text, String theme, float size) {
+        store.edit()
+            .putBoolean("previewText", text)
+            .putString("previewTheme", theme)
+            .putFloat("previewSize", size)
+            .apply();
+    }
+
+    /// Фон, текст і адреса місця Писання для оформлення перегляду (ARGB).
+    static int[] themeColours(String theme) {
+        switch (theme) {
+            case "light": return new int[] { 0xFFFFFFFF, 0xFF1B1F24, 0xFF2F5FC4 };
+            case "sepia": return new int[] { 0xFFF4ECD8, 0xFF3B2F20, 0xFF8A5A2B };
+            default: return new int[] { 0xFF101418, 0xFFF2F4F7, 0xFF4C8DFF };
+        }
+    }
+
     /// Колір у записі програми — «#RRGGBB».
     String pointerColourHex() { return String.format("#%06X", pointerColour() & 0xFFFFFF); }
 
@@ -102,6 +130,9 @@ final class Settings {
             .remove("pointerColour")
             .remove("pointerSize")
             .remove("pointerOpacity")
+            .remove("previewText")
+            .remove("previewTheme")
+            .remove("previewSize")
             .apply();
     }
 }

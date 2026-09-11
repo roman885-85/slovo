@@ -1,16 +1,16 @@
 import AppKit
 import SlovoCore
 
-/// Владелец: «в настройках слайда при выборе цветов ползунками путаница —
+/// Власник: «в настройках слайда при выборе цветов ползунками путаница —
 /// ползунки меняют свой цвет не соответствующий их надписи».
 ///
-/// В Конструкторе у объекта три цвета (текст, контур, тень) и два ползунка
-/// прозрачности (объекта и тени). Проверяем то, что видит человек: цвет,
-/// пришедший из палитры в одно поле, ложится ровно в свою связку и не
-/// трогает соседние; ползунок меняет своё число; после перечитывания
-/// значений (так панель обновляется на каждую правку) поля показывают то,
-/// что лежит в модели. Второй заход — после пересборки панелей (смена
-/// объекта туда и обратно): новые поля не должны стрелять чужими связками.
+/// У Конструкторі в об'єкта три кольори (текст, контур, тінь) і два повзунки
+/// прозорості (об'єкта й тіні). Перевіряємо те, що бачить людина: колір,
+/// що прийшов із палітри в одне поле, лягає рівно у свою зв'язку й не
+/// чіпає сусідні; повзунок міняє своє число; після перечитування
+/// значень (так панель оновлюється на кожну правку) поля показують те,
+/// що лежить у моделі. Другий захід — після перезбирання панелей (зміна
+/// об'єкта туди й назад): нові поля не мають стріляти чужими зв'язками.
 extension Diagnostics {
 
     static func constructorColoursSection(state: AppState) -> [Check] {
@@ -123,7 +123,7 @@ extension Diagnostics {
         var faults: [String] = []
         var lines: [String] = []
 
-        // Различимые исходные цвета — по ним узнаём, какое поле за что отвечает.
+        // Розрізненні вихідні кольори — за ними впізнаємо, яке поле за що відповідає.
         let red = SlideStyle.RGBA(1, 0, 0), green = SlideStyle.RGBA(0, 1, 0), blue = SlideStyle.RGBA(0, 0, 1)
         textTie.set(red); outlineTie.set(green); shadowTie.set(blue)
         constructor.refreshValuesForCheck()
@@ -136,7 +136,7 @@ extension Diagnostics {
         }
         lines.append("полів кольору \(all.count), зв'язки впізнано")
 
-        // Палитра красит каждое поле по очереди — соседи не должны меняться.
+        // Палітра фарбує кожне поле по черзі — сусіди не мають мінятися.
         let magenta = SlideStyle.RGBA(1, 0, 1), cyan = SlideStyle.RGBA(0, 1, 1), yellow = SlideStyle.RGBA(1, 1, 0)
         pick(textWell, magenta)
         if !near(textTie.get(), magenta) { faults.append("колір із поля «Текст» не дійшов до тексту") }
@@ -148,13 +148,13 @@ extension Diagnostics {
         if !near(shadowTie.get(), yellow) { faults.append("колір із поля тіні не дійшов до тіні") }
         if !near(textTie.get(), magenta) || !near(outlineTie.get(), cyan) { faults.append("колір тіні змінив текст або контур") }
 
-        // Перечитывание значений: каждое поле показывает своё.
+        // Перечитування значень: кожне поле показує своє.
         constructor.refreshValuesForCheck()
         if !near(textWell.colour, magenta) || !near(outlineWell.colour, cyan) || !near(shadowWell.colour, yellow) {
             faults.append("після перечитування поля показують чужі кольори")
         }
 
-        // Ползунки прозрачности: объекта и тени.
+        // Повзунки прозорості: об'єкта й тіні.
         opacityTie.set(1); shadowOpacityTie.set(0.5)
         constructor.refreshValuesForCheck()
         let bars = sliders(in: constructor)
@@ -173,7 +173,7 @@ extension Diagnostics {
             faults.append("не знайшлися повзунки прозорості зі значеннями 255 і 128 (знайдено \(bars.count))")
         }
 
-        // Пересборка панелей: другой объект и обратно — поля новые, связки прежние.
+        // Перезбирання панелей: інший об'єкт і назад — поля нові, зв'язки колишні.
         if let current = model.selectedObject, let other = model.preset.objects.first(where: { $0.id != current.id }) {
             model.selection = other.id
             constructor.layoutSubtreeIfNeeded()

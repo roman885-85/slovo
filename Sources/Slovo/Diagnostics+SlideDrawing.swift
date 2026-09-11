@@ -3,12 +3,12 @@ import ImageIO
 import UniformTypeIdentifiers
 import SlovoCore
 
-/// Сверка двух отрисовок слайда: прежней, на SwiftUI, и новой, на CoreGraphics.
+/// Звірка двох малювань слайда: колишнього, на SwiftUI, і нового, на CoreGraphics.
 ///
-/// Переписывать отрисовку зала «на глазок» нельзя: слайд обязан выглядеть
-/// точно так же, как вчера, иначе на служении это заметят первыми. Поэтому
-/// один и тот же слайд рисуется обоими путями, картинки сравниваются числами
-/// и обе кладутся файлами рядом с отчётом — чтобы человек мог посмотреть.
+/// Переписувати малювання залу «на око» не можна: слайд мусить виглядати
+/// точнісінько так, як учора, інакше на служінні це помітять першими. Тому
+/// той самий слайд малюється обома шляхами, картинки порівнюються числами
+/// й обидві кладуться файлами поруч зі звітом — щоб людина могла подивитися.
 extension Diagnostics {
 
     static func slideDrawingSection(state: AppState) -> [Check] {
@@ -21,8 +21,8 @@ extension Diagnostics {
                           reference: "Ів. 3:16")
         let style = state.outputs[.screen].effectiveStyle
 
-        // Кадр трансляции и кадр зала обязаны быть одним и тем же: с этого
-        // дня их рисует один код, и проверка сторожит, чтобы он не разошёлся.
+        // Кадр трансляції й кадр залу мусять бути одним і тим самим: від цього
+        // дня їх малює один код, і перевірка стежить, щоб він не розійшовся.
         let renderer = SlideFrameRenderer(size: size)
         guard let network = renderer.snapshot(slide: slide, style: style)?.image else {
             return [Check(area: "Малювання", name: "Кадр трансляції малюється",
@@ -43,8 +43,8 @@ extension Diagnostics {
                           status: .failed, detail: "кадри не прочиталися")]
         }
 
-        // Прямое сравнение точка в точку: разница может быть только в
-        // подложке (у трансляции она бывает прозрачной), но не в буквах.
+        // Пряме порівняння точка в точку: різниця може бути тільки в
+        // підкладці (у трансляції вона буває прозорою), але не в літерах.
         var different = 0
         var checked = 0
         for y in stride(from: 0, to: left.height, by: 2) {
@@ -62,9 +62,9 @@ extension Diagnostics {
                             status: share < 0.005 ? .ok : (share < 0.03 ? .warning : .failed),
                             detail: String(format: "точок розійшлося %.2f %%", share * 100)))
 
-        // Доля «чернил»: сколько точек отличается от подложки. У двух
-        // отрисовок одного слайда она обязана сойтись — это и есть «текста
-        // столько же и он там же».
+        // Частка «чорнила»: скільки точок відрізняється від підкладки. У двох
+        // малювань одного слайда вона мусить зійтися — це і є «тексту
+        // стільки само, і він там само».
         let inkOld = ink(left)
         let inkNew = ink(right)
         let spread = abs(inkOld - inkNew) / max(inkOld, 0.0001)
@@ -74,8 +74,8 @@ extension Diagnostics {
                                            + "(розбіжність %.0f %%)", inkOld * 100, inkNew * 100,
                                            spread * 100)))
 
-        // Где именно стоит текст: сравниваем по строкам, а не по точкам —
-        // сглаживание у двух движков разное, а места строк совпадать обязаны.
+        // Де саме стоїть текст: порівнюємо за рядками, а не за точками —
+        // згладжування у двох рушіїв різне, а місця рядків мусять збігатися.
         let rowsOld = rows(left)
         let rowsNew = rows(right)
         let shifted = zip(rowsOld, rowsNew).filter { abs($0 - $1) > 0.08 }.count
@@ -86,7 +86,7 @@ extension Diagnostics {
         return checks
     }
 
-    /// Доля закрашенных точек: всё, что заметно отличается от угла кадра.
+    /// Частка зафарбованих точок: усе, що помітно відрізняється від кута кадру.
     private static func ink(_ frame: (bytes: [UInt8], width: Int, height: Int)) -> Double {
         let base = (Int(frame.bytes[0]), Int(frame.bytes[1]), Int(frame.bytes[2]))
         var count = 0
@@ -102,7 +102,7 @@ extension Diagnostics {
         return Double(count) / Double((frame.width / 2) * (frame.height / 2))
     }
 
-    /// Сколько «чернил» в каждой строке холста — отпечаток раскладки.
+    /// Скільки «чорнила» в кожному рядку полотна — відбиток розкладки.
     private static func rows(_ frame: (bytes: [UInt8], width: Int, height: Int)) -> [Double] {
         let base = (Int(frame.bytes[0]), Int(frame.bytes[1]), Int(frame.bytes[2]))
         var result: [Double] = []

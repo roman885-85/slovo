@@ -640,6 +640,8 @@ final class RemoteControlServer {
         }
         // Планшет: плеєр, картинки, екран, текст, Історія, пошук, зал.
         if request.method == "GET", tabletGET(request, state: state, on: connection) { return }
+        // Бібліотека для плану проповіді: переклади й пісенники на планшет.
+        if request.method == "GET", libraryGET(request, state: state, on: connection) { return }
         guard request.method == "POST", request.path.hasPrefix("/api/") else {
             respond(connection, 404, ["error": OurWords.t("нет такого пути")])
             return
@@ -731,6 +733,18 @@ final class RemoteControlServer {
             case .success(let result): for (key, value) in result { answer[key] = value }
             case .failure(let error): respond(connection, 400, ["error": error.localizedDescription]); return
             }
+        case "sermon-plan":
+            whenLibraryReady(state) { [weak self] in
+                guard let self else { return }
+                self.respond(connection, 200, self.acceptSermonPlan(body, state: state))
+                self.noteChange()
+            }
+            return
+        case "sermon-end":
+            DeskModel.shared.endSermon()
+        case "module-import":
+            importModule(request, state: state, on: connection)
+            return
         case "goto":
             if state.mode != .bible { state.mode = .bible }
             // Показ — коли глави справді прочитано. Раніше адреса з телефона
@@ -911,6 +925,8 @@ final class RemoteControlServer {
         let name = rawName.replacingOccurrences(of: ":", with: "-").trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return .failure(UploadRefused(reason: OurWords.t("нет имени файла (name=)"))) }
         guard !request.body.isEmpty else { return .failure(UploadRefused(reason: "пустой файл")) }
+        // Файл плану проповіді — лише зберегти: відкриє його пункт «Файл».
+        if request.query["store"] == "1" { return storeUpload(name: name, body: request.body, state: state) }
         let ext = (name as NSString).pathExtension.lowercased()
         let kind: ShowModel.Kind
         if ShowModel.Kind.presentation.extensions.contains(ext) { kind = .presentation }
@@ -1027,6 +1043,9 @@ final class RemoteControlServer {
             ["title": item.title, "subtitle": item.subtitle ?? "", "kind": item.kind.rawValue,
              "current": desk.planSelection.contains(item.id)]
         }
+        // План проповіді заступив план служіння — планшет показує, чий
+        // план перед ним, і дає повернути план служіння.
+        json["sermon"] = ["on": desk.isSermon, "title": desk.isSermon ? desk.plan.title : ""]
         // Сторінці в режимі «лише перегляд» — щоб сховала кнопки керування.
         if web { json["viewOnly"] = webViewOnly }
         return json

@@ -2,21 +2,21 @@ import AppKit
 import WebKit
 import SlovoCore
 
-/// Живой предпросмотр страницы — на AppKit.
+/// Живий попередній перегляд сторінки — на AppKit.
 ///
-/// Два правила, ради которых он написан отдельно.
+/// Два правила, заради яких його написано окремо.
 ///
-/// Первое: перезагрузка только при изменении разметки. Значение переменной
-/// доезжает до страницы скриптом `setProperty` — инлайновый стиль на
-/// `documentElement` бьёт любое правило `:root`, поэтому картинка меняется
-/// сразу и целиком. Перезагружать страницу на каждый шаг ползунка нельзя:
-/// она успевает моргнуть белым, заново проиграть появление слайда и сбить
-/// человеку глаз.
+/// Перше: перезавантаження тільки при зміні розмітки. Значення змінної
+/// доїжджає до сторінки скриптом `setProperty` — інлайновий стиль на
+/// `documentElement` б'є будь-яке правило `:root`, тому картинка міняється
+/// одразу й цілком. Перезавантажувати сторінку на кожен крок повзунка не можна:
+/// вона встигає блимнути білим, заново програти появу слайда й збити
+/// людині око.
 ///
-/// Второе: мышь над предпросмотром принадлежит редактору, а не странице.
-/// Веб-вид событий не берёт вовсе, и всё, что делает мышь, — перетаскивает
-/// блок текста. Иначе случайный щелчок по ссылке внутри страницы увёл бы
-/// предпросмотр неизвестно куда.
+/// Друге: миша над попереднім переглядом належить редакторові, а не сторінці.
+/// Веб-вид подій не бере зовсім, і все, що робить миша, — перетягує
+/// блок тексту. Інакше випадкове клацання по посиланню всередині сторінки
+/// завело б попередній перегляд невідомо куди.
 @MainActor
 final class NativeWebSlideStage: NSView, WKNavigationDelegate {
 
@@ -28,10 +28,10 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
     private var isLoading = false
     private var dragTo: CGPoint?
     private var lastPlaced: String?
-    /// Своя картинка под страницей: с ней видно, что перекрывает титр.
+    /// Своя картинка під сторінкою: з нею видно, що перекриває титр.
     private let backdrop = CALayer()
 
-    /// Подложить свой файл (или убрать, если `nil`).
+    /// Підкласти свій файл (або прибрати, якщо `nil`).
     func setBackdrop(_ url: URL?) {
         guard let url, let image = NSImage(contentsOf: url),
               let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -60,7 +60,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
 
     override var isFlipped: Bool { true }
 
-    /// Веб-вид не должен перехватывать мышь: она принадлежит редактору.
+    /// Веб-вид не має перехоплювати мишу: вона належить редакторові.
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(convert(point, from: superview)) ? self : nil
     }
@@ -68,14 +68,14 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
     override func layout() {
         super.layout()
         web.frame = stageFrame
-        // Картинка ровно под кадром страницы, а не под всей панелью.
+        // Картинка рівно під кадром сторінки, а не під усією панеллю.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         backdrop.frame = stageFrame
         CATransaction.commit()
     }
 
-    /// Кадр 16:9 внутри панели — те же пропорции, что у экрана в зале.
+    /// Кадр 16:9 усередині панелі — ті самі пропорції, що в екрана в залі.
     private var stageFrame: NSRect {
         let side = WebSlidePlacement.frame(in: bounds.size)
         return NSRect(x: (bounds.width - side.width) / 2,
@@ -83,13 +83,13 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
                       width: side.width, height: side.height)
     }
 
-    // MARK: - Обновление
+    // MARK: - Оновлення
 
     func refresh() {
         if key != model.previewReloadKey {
             key = model.previewReloadKey
-            // После перезагрузки страница возьмёт значения из собственного
-            // блока — они уже те же самые, дописывать нечего.
+            // Після перезавантаження сторінка візьме значення з власного
+            // блоку — вони вже ті самі, дописувати нічого.
             applied = model.previewValues
             isLoading = true
             load()
@@ -113,7 +113,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
         }
     }
 
-    /// Дописать странице только изменившиеся значения.
+    /// Дописати сторінці тільки значення, що змінилися.
     private func push() {
         guard !isLoading else { return }
         var script = ""
@@ -123,7 +123,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
         guard !script.isEmpty else { return }
         applied = model.previewValues
         // Після кожної правки просимо сторінку перерахувати кегль. Без цього
-        // підібраний розмір лишався від попереднього показу: ползунок
+        // підібраний розмір лишався від попереднього показу: повзунок
         // «Розмір тексту» рухався, а сторінка стояла — і навіть зняття
         // галочки «підбирати розмір» нічого не міняло.
         script += "if (window.slovoRefit) window.slovoRefit();"
@@ -140,7 +140,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
         push()
     }
 
-    // MARK: - Перетаскивание блока
+    // MARK: - Перетягування блоку
 
     override func mouseDown(with event: NSEvent) {
         guard model.sheet.placement.canDrag else { return }
@@ -153,7 +153,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
         let point = fraction(of: event)
         dragTo = point
         let title = model.placementTitle(at: point)
-        // Пока точка привязки та же — файл трогать незачем.
+        // Поки точка прив'язки та сама — файл чіпати нема чого.
         if title != lastPlaced {
             lastPlaced = title
             model.place(at: point)
@@ -175,7 +175,7 @@ final class NativeWebSlideStage: NSView, WKNavigationDelegate {
                        y: (point.y - stage.minY) / stage.height)
     }
 
-    /// Девять точек привязки — видно, куда встанет блок.
+    /// Дев'ять точок прив'язки — видно, куди стане блок.
     override func draw(_ dirtyRect: NSRect) {
         NSColor.black.setFill()
         bounds.fill()

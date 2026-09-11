@@ -166,6 +166,19 @@ for candidate in "$DEST/libndi.dylib" "/Library/NDI SDK for Apple/lib/macOS/libn
 done
 if [ -n "$NDI_SRC" ]; then
   cp "$NDI_SRC" "$APP/Contents/Frameworks/libndi.dylib"
+  # Файл ліцензій NDI їде разом із бібліотекою — так вимагає сама NDI: «This
+  # file should be included with all distribution of the binary files».
+  NDI_LICENSES=""
+  for candidate in "$(dirname "$NDI_SRC")/../Resources/Processing.NDI.Lib.Licenses.txt" \
+                   "$(dirname "$NDI_SRC")/Processing.NDI.Lib.Licenses.txt" \
+                   /Applications/NDI*.app/Contents/Resources/Processing.NDI.Lib.Licenses.txt; do
+    [ -f "$candidate" ] && { NDI_LICENSES="$candidate"; break; }
+  done
+  if [ -n "$NDI_LICENSES" ]; then
+    cp "$NDI_LICENSES" "$APP/Contents/Resources/NDI-Licenses.txt"
+  else
+    echo "ВНИМАНИЕ: не найден Processing.NDI.Lib.Licenses.txt — без него NDI распространять нельзя"
+  fi
   NDI_MINOS="$(otool -arch x86_64 -l "$NDI_SRC" | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/{f=1} f&&/minos|version /{print $2; exit}')"
   echo "libndi внутри пакета: да ($(du -h "$NDI_SRC" | cut -f1) из $NDI_SRC; требует macOS $NDI_MINOS)"
 else

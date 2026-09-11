@@ -72,4 +72,76 @@
     <string name="show_empty">Презентацію не відкрито. «Файл з планшета» відкриє PDF або PowerPoint із планшета, а на комп\'ютері — вкладка «Презентація»</string>
     <string name="t_decks">Презентації</string>
     <string name="t_pages">Слайди</string>
+
+    <!-- План проповіді: складається заздалегідь, без зв'язку з програмою. -->
+    <string name="sermon_activity" translatable="false">ua.church.slovo.remote.SermonActivity</string>
+    <string name="menu_sermon">План проповіді…</string>
+    <string name="s_title">План проповіді</string>
+    <string name="s_plan_name_hint">Назва плану, напр. «Неділя, 14 вересня»</string>
+    <string name="s_plans">Плани</string>
+    <string name="s_library">Бібліотека</string>
+    <string name="s_upload">Завантажити в «Слово»</string>
+    <string name="s_tab_file">Файл</string>
+    <string name="s_plan_empty">План порожній. Додайте ліворуч вірші, пісні, файли чи текст</string>
+    <string name="s_add_verses">Додати вибрані вірші</string>
+    <string name="s_add_chapter">Увесь розділ</string>
+    <string name="s_pick_verses">Дотик позначає вірш, ще один — знімає</string>
+    <string name="s_no_bibles">У бібліотеці планшета ще немає перекладів. «Бібліотека» → зі «Слова», з GitHub або з файла</string>
+    <string name="s_no_songbooks">У бібліотеці планшета ще немає пісенників. «Бібліотека» → зі «Слова» або з файла (.vbm)</string>
+    <string name="s_add_song">Додати пісню</string>
+    <string name="s_file_hint">Презентація (PDF, PowerPoint), картинка чи відео. Файл копіюється на планшет і на служінні їде в «Слово» разом із планом</string>
+    <string name="s_pick_file">Вибрати файл…</string>
+    <string name="s_text_add">Додати в план</string>
+    <string name="s_new_plan">＋ Новий план</string>
+    <string name="s_delete_plan">Видалити цей план</string>
+    <string name="s_delete_plan_confirm">Видалити план «%1$s»?</string>
+    <string name="s_plan_items">%1$s · пунктів: %2$d</string>
+    <string name="s_untitled">План без назви</string>
+    <string name="s_library_title">Бібліотека планшета</string>
+    <string name="s_library_empty">Бібліотека порожня — додайте переклад чи пісенник</string>
+    <string name="s_from_slovo">Зі «Слова»</string>
+    <string name="s_from_github">З GitHub</string>
+    <string name="s_from_file">З файла</string>
+    <string name="s_delete_module">Прибрати «%1$s» з планшета?</string>
+    <string name="s_delete">Прибрати</string>
+    <string name="s_source_slovo">зі «Слова»</string>
+    <string name="s_source_github">з GitHub</string>
+    <string name="s_source_file">з файла</string>
+    <string name="s_kind_bible">Біблія</string>
+    <string name="s_kind_songs">Пісенник</string>
+    <string name="s_need_connection">Спершу підключіться до «Слова»: меню планшета → «Підключення…»</string>
+    <string name="s_loading">Завантажую «%1$s»…</string>
+    <string name="s_loaded">Додано: %1$s</string>
+    <string name="s_failed">Не вдалося: %1$s</string>
+    <string name="s_github_loading">Читаю список модулів на GitHub…</string>
+    <string name="s_slovo_loading">Питаю «Слово», що в нього є…</string>
+    <string name="s_choose">Що взяти на планшет</string>
+    <string name="s_take">Взяти</string>
+    <string name="s_nothing_new">Нового для планшета немає — усе вже в бібліотеці</string>
+    <string name="s_uploading">Надсилаю план у «Слово»…</string>
+    <string name="s_importing">Ставлю в «Слово» «%1$s»…</string>
+    <string name="s_sending_file">Надсилаю файл «%1$s»…</string>
+    <string name="s_uploaded">План у «Слові»: пунктів %1$d. Керуйте показом із планшета</string>
+    <string name="s_upload_empty">План порожній — надсилати нічого</string>
+    <string name="s_unsupported_file">Це не модуль: потрібен .zip («Цитата з Біблії»), .SQLite3 (MyBible) або .vbm (пісенник)</string>
+    <string name="s_file_missing">Файл «%1$s» пропав з планшета — пункт пропущено</string>
+    <string name="s_sermon_on">План проповіді: %1$s</string>
+    <string name="s_sermon_end">Повернути план служіння</string>
+
+    <!-- Планшет запущено на телефоні. -->
+    <string name="phone_title">Планшет Слова на телефоні</string>
+    <string name="phone_message">Програму зроблено для планшета: на телефоні їй тісно, і частина можливостей незручна. Для повноцінної роботи запускайте її на планшеті. Зараз вона відкриється в розкладці для телефона.</string>
+    <string name="phone_ok">Зрозуміло</string>
+    <string name="phone_content">Вміст</string>
+
+    <!-- Мій перегляд: як показувати зал на планшеті. -->
+    <string name="menu_view">Мій перегляд…</string>
+    <string name="view_title">Мій перегляд</string>
+    <string name="view_hall">Як у залі — картинкою</string>
+    <string name="view_text">Текстом — зручно читати</string>
+    <string name="view_dark">Темне</string>
+    <string name="view_light">Світле</string>
+    <string name="view_sepia">Сепія</string>
+    <string name="view_size">Розмір тексту: %1$d</string>
+    <string name="view_note">Картинки й презентації завжди видно такими, як на стіні</string>
 </resources>

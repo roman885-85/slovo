@@ -3,13 +3,13 @@ import SlovoCore
 
 /// «Предпросмотр» (6.3.6) — холст конструктора, на AppKit.
 ///
-/// Сам слайд рисует общий `SlideDrawing` — тот же, что показывает зал: холст
-/// обязан показывать ровно то, что увидят люди, и второй отрисовки для этого
-/// заводить нельзя.
+/// Сам слайд малює спільний `SlideDrawing` — той самий, що показує зал: полотно
+/// мусить показувати рівно те, що побачать люди, і другого малювання для цього
+/// заводити не можна.
 ///
-/// Выделенный объект обведён рамкой, а размер и положение меняются мышью за
-/// активные зоны: по центру каждой стороны и в середине объекта. Ровно эти
-/// пять зон названы в руководстве, поэтому углов здесь нет.
+/// Виділений об'єкт обведено рамкою, а розмір і положення міняються мишею за
+/// активні зони: посередині кожної сторони й у середині об'єкта. Саме ці
+/// п'ять зон названо в посібнику, тому кутів тут немає.
 @MainActor
 final class NativeConstructorCanvas: NSView {
 
@@ -33,7 +33,7 @@ final class NativeConstructorCanvas: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// Кадр слайда в своих пропорциях, вписанный в панель.
+    /// Кадр слайда у своїх пропорціях, уписаний у панель.
     private var stage: NSRect {
         let ratio = model.preset.aspectRatio
         guard ratio > 0 else { return bounds }
@@ -45,12 +45,12 @@ final class NativeConstructorCanvas: NSView {
                       width: size.width, height: size.height)
     }
 
-    // MARK: - Отрисовка
+    // MARK: - Малювання
 
-    /// Последний нарисованный кадр и отпечаток того, что в нём. Кадр
-    /// готовит очередь в фоне: пока идёт протяжка ползунка, холст показывает
-    /// прежний кадр и подменяет его, как только подоспеет новый. Раньше кадр
-    /// рисовался прямо в `draw(_:)`, и каждое движение ползунка держало окно.
+    /// Останній намальований кадр і відбиток того, що в ньому. Кадр
+    /// готує черга у фоні: поки триває протягування повзунка, полотно показує
+    /// попередній кадр і підміняє його, щойно наспіє новий. Раніше кадр
+    /// малювався просто в `draw(_:)`, і кожен рух повзунка тримав вікно.
     private var rendered: (identity: Int, image: CGImage)?
     private var requestedIdentity = 0
     private var renderGeneration = 0
@@ -62,7 +62,7 @@ final class NativeConstructorCanvas: NSView {
         guard stage.width > 8, stage.height > 8,
               let context = NSGraphicsContext.current?.cgContext else { return }
 
-        // Слайд рисуем в тот же кадр, что уходит в зал.
+        // Слайд малюємо в той самий кадр, що йде в зал.
         let slide = Slide(mainText: sample.mainText,
                           secondaryTexts: [sample.secondaryText],
                           reference: sample.reference)
@@ -112,9 +112,9 @@ final class NativeConstructorCanvas: NSView {
         outline.lineWidth = 1
         outline.stroke()
 
-        // Маркеры разносим по раздутой рамке: у объектов шириной «по
-        // содержимому» настоящая рамка выходит уже трёх маркеров подряд, и
-        // они сходились в одну точку — тянуть было нечем.
+        // Маркери розносимо по роздутій рамці: в об'єктів завширшки «за
+        // вмістом» справжня рамка виходить вужчою за три маркери поспіль, і
+        // вони сходилися в одну точку — тягти не було за що.
         let zones = ConstructorHandles.zones(around: rect)
         for point in [CGPoint(x: zones.midX, y: zones.midY),
                       CGPoint(x: zones.minX, y: zones.midY),
@@ -130,7 +130,7 @@ final class NativeConstructorCanvas: NSView {
         }
     }
 
-    /// Рамка объекта на холсте — уже с раскрытой «нулевой» стороной.
+    /// Рамка об'єкта на полотні — уже з розкритою «нульовою» стороною.
     private func frame(of object: SlideObject) -> CGRect {
         let values = object.values(in: model.scene)
         let size = stage.size
@@ -139,7 +139,7 @@ final class NativeConstructorCanvas: NSView {
         return values.frame.resolved(auto: auto, in: size).rect(in: size)
     }
 
-    // MARK: - Мышь
+    // MARK: - Миша
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -153,7 +153,7 @@ final class NativeConstructorCanvas: NSView {
                 return
             }
         }
-        // Щелчок по объекту выбирает его — как в оригинале.
+        // Клацання по об'єкту вибирає його — як в оригіналі.
         let inStage = CGPoint(x: point.x - stage.minX, y: point.y - stage.minY)
         if let hit = model.preset.objects.reversed().first(where: {
             $0.values(in: model.scene).isVisible && frame(of: $0).contains(inStage)
@@ -167,7 +167,7 @@ final class NativeConstructorCanvas: NSView {
         guard let dragging, let startRect, let startPoint else { return }
         let point = convert(event.locationInWindow, from: nil)
         let dx = point.x - startPoint.x, dy = point.y - startPoint.y
-        // Минимум в 10 точек: схлопнутую в нить рамку уже не за что взять.
+        // Мінімум 10 точок: сплющену в нитку рамку вже нема за що взяти.
         let minimum: CGFloat = 10
         var rect = startRect
         switch dragging {
@@ -219,8 +219,8 @@ final class NativeConstructorCanvas: NSView {
         let stage = self.stage
         guard stage.width > 0, stage.height > 0 else { return }
         var values = object.values(in: model.scene)
-        // Потянули мышью — размер стал заданным: «по содержимому» здесь уже
-        // не выразить, и оригинал в этом месте поступает так же.
+        // Потягли мишею — розмір став заданим: «за вмістом» тут уже
+        // не виразити, і оригінал у цьому місці чинить так само.
         values.frame = ObjectFrame(rect: rect.offsetBy(dx: -stage.minX, dy: -stage.minY),
                                    in: stage.size,
                                    anchorX: values.frame.anchorX,

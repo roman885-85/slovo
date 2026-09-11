@@ -40,9 +40,16 @@ enum InterfaceMenuItems {
                                default: "Выберите язык интерфейса программы") + "…",
              action: { InterfaceWindows.showLanguagePicker(state: state) })
         ]
-        for language in state.languageCatalog?.languages ?? [] {
-            items.append((title: mark(state.language?.code == language.code, language.displayName),
+        let files = state.languageCatalog?.languages ?? []
+        for language in files {
+            items.append((title: mark(state.languageCode == language.code, language.displayName),
                           action: { state.setLanguage(code: language.code) }))
+        }
+        // Убудовані мови — і тоді, коли файлів перекладу VisioBible немає зовсім.
+        let known = Set(files.map { $0.code.lowercased() })
+        for builtIn in AppState.builtInLanguages where !known.contains(builtIn.code) {
+            items.append((title: mark(state.languageCode == builtIn.code, builtIn.name),
+                          action: { state.setLanguage(code: builtIn.code) }))
         }
         return items
     }

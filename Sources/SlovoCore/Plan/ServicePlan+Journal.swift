@@ -127,6 +127,16 @@ extension PlanItem {
                                                        partIndex: item.int("Part").flatMap { $0 >= 0 ? $0 : nil })))
 
         case .text:
+            // Пункт-файл лежить у журналі «Текст» зі своїм полем `File`:
+            // окремого журналу для файлів в оригіналу немає, і VisioBible
+            // побачить такий пункт звичайним текстом із назвою файла.
+            let file = item.string("File")
+            if !file.isEmpty {
+                let url = URL(fileURLWithPath: file)
+                self.init(title: caption.isEmpty ? url.lastPathComponent : caption,
+                          content: .file(FileReference(path: file)))
+                return
+            }
             let heading = item.string("Heading", default: reference)
             let body = item.string("Body", default: quote)
             guard !heading.isEmpty || !body.isEmpty || !caption.isEmpty else { return nil }
@@ -179,6 +189,18 @@ extension PlanItem {
             ])
             entry["Heading"] = document.title
             entry["Body"] = document.body
+            entry["Order"] = "\(order)"
+            return (.text, entry)
+
+        case .file(let reference):
+            var entry = JournalFile.Item([
+                ("Caption", title),
+                ("Reference", title),
+                ("Quote", ""),
+            ])
+            entry["Heading"] = title
+            entry["Body"] = ""
+            entry["File"] = reference.path
             entry["Order"] = "\(order)"
             return (.text, entry)
         }

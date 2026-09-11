@@ -1,25 +1,25 @@
 import AppKit
 
-/// Системная таблица для окон настроек и редакторов.
+/// Системна таблиця для вікон налаштувань і редакторів.
 ///
-/// Владелец: «списки модулей выглядят инородно и коряво — текст кривой,
-/// пункты для выделения мелкие». Самодельный `NativeList` хорош в главном
-/// окне (там он быстрый и рисует по-своему), а в окне настроек нужен
-/// обычный вид macOS: настоящие галочки, однострочный текст с многоточием,
-/// колонка подписи, стандартное выделение. Здесь всё это делает NSTableView,
-/// а снаружи — тот же договор, что у `NativeList`: `source`, `onSelect`,
-/// `reload()`, `setSelection(...)`, — окна меняют только тип.
+/// Власник: «списки модулей выглядят инородно и коряво — текст кривой,
+/// пункты для выделения мелкие». Саморобний `NativeList` добрий у головному
+/// вікні (там він швидкий і малює по-своєму), а у вікні налаштувань потрібен
+/// звичайний вигляд macOS: справжні галочки, однорядковий текст із трикрапкою,
+/// колонка підпису, стандартне виділення. Тут усе це робить NSTableView,
+/// а зовні — той самий договір, що в `NativeList`: `source`, `onSelect`,
+/// `reload()`, `setSelection(...)`, — вікна міняють тільки тип.
 @MainActor
 final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, NativeListChecking {
-    /// Источник подключают после создания — перечитываем сразу, иначе
-    /// таблица так и стоит пустой: самопроверка это и поймала.
+    /// Джерело підключають після створення — перечитуємо одразу, інакше
+    /// таблиця так і стоїть порожня: самоперевірка це й спіймала.
     weak var source: NativeListSource? {
         didSet { table.reloadData() }
     }
     var onSelect: ((IndexSet, Int, NativeList.Cause) -> Void)?
     var onActivate: ((Int) -> Void)?
     var onContextMenu: ((Int) -> NSMenu?)?
-    /// Щелчок по галочке (или по значку в первой колонке).
+    /// Клацання по галочці (або по значку в першій колонці).
     var onLeadClick: ((Int) -> Void)?
 
     private let scroll = NSScrollView()
@@ -92,12 +92,12 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
 
     override func layout() {
         super.layout()
-        // Колонка текста забирает всё, что осталось от значка и подписи.
+        // Колонка тексту забирає все, що лишилося від значка й підпису.
         let width = table.bounds.width - 28 - (detailWidth > 0 ? detailWidth : 0) - 6 * 3
         table.tableColumns[1].width = max(80, width)
     }
 
-    // MARK: - Договор NativeList
+    // MARK: - Договір NativeList
 
     func reload() { table.reloadData() }
     func reloadRow(_ index: Int) { reloadRows(IndexSet(integer: index)) }
@@ -125,7 +125,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
     }
 
     var rowsInTable: Int { table.numberOfRows }
-    /// Сколько строк у источника — как `itemCount` у прежнего списка.
+    /// Скільки рядків у джерела — як `itemCount` у колишнього списку.
     var itemCount: Int { source?.rowCount ?? 0 }
     var hasSource: Bool { source != nil }
     var sourceRowCount: Int { source?.rowCount ?? 0 }
@@ -177,8 +177,8 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
         return cell
     }
 
-    /// Первая колонка: галочка, цветной квадрат или значок — по тому, что
-    /// источник положил в `lead`.
+    /// Перша колонка: галочка, кольоровий квадрат або значок — за тим, що
+    /// джерело поклало в `lead`.
     private func leadView(for data: NativeRow, row: Int) -> NSView {
         let lead = data.lead
         if let checked = Self.checkboxState(lead) {
@@ -245,7 +245,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
         return cell
     }
 
-    /// Какие значки источники кладут в `lead` вместо галочки.
+    /// Які значки джерела кладуть у `lead` замість галочки.
     private static func checkboxState(_ lead: String) -> Bool? {
         switch lead {
         case "☑", "✓", "●": return true
@@ -254,7 +254,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
         }
     }
 
-    /// Значки-символы из прежнего списка — системными картинками.
+    /// Значки-символи з колишнього списку — системними картинками.
     private static func systemSymbol(for lead: String) -> String? {
         switch lead {
         case "🔒": return "lock.fill"
@@ -270,8 +270,8 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
 
     @objc private func checkboxClicked(_ sender: NSButton) {
         let row = sender.tag
-        // Галочку рисует источник по своим данным: щелчок сообщаем, а вид
-        // вернём тем, что перечитаем строку.
+        // Галочку малює джерело за своїми даними: клацання повідомляємо, а вигляд
+        // повернемо тим, що перечитаємо рядок.
         onLeadClick?(row)
         if row < table.numberOfRows { reloadRow(row) }
     }
@@ -288,7 +288,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
         onSelect?(selected, selected.first ?? -1, .click)
     }
 
-    /// Таблица с контекстным меню по строке под курсором.
+    /// Таблиця з контекстним меню за рядком під курсором.
     private final class MenuTableView: NSTableView {
         var menuProvider: ((Int) -> NSMenu?)?
         override func menu(for event: NSEvent) -> NSMenu? {
@@ -300,7 +300,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
         }
     }
 
-    /// Цветной квадрат палитры частей песни.
+    /// Кольоровий квадрат палітри частин пісні.
     private final class SwatchView: NSView {
         var colour: NSColor = .clear { didSet { needsDisplay = true } }
         override func draw(_ dirtyRect: NSRect) {
@@ -315,7 +315,7 @@ final class NativeTable: NSView, NSTableViewDataSource, NSTableViewDelegate, Nat
     }
 }
 
-/// Что самопроверка спрашивает у любого списка окна настроек.
+/// Що самоперевірка питає в будь-якого списку вікна налаштувань.
 @MainActor
 protocol NativeListChecking: AnyObject {
     var describedForCheck: String { get }

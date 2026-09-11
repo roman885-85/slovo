@@ -20,13 +20,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-/// Поиск «Слова» в локальной сети — двумя путями сразу.
+/// Пошук «Слова» в локальній мережі — двома шляхами одразу.
 ///
-/// Bonjour (`_slovo._tcp`) — правильный путь, но его блокируют некоторые
-/// роутеры и «изоляция клиентов» в гостевых сетях. UDP-рассылка на порт 8104
-/// — грубый, но живучий: телефон кричит «SLOVO?», программа отвечает своим
-/// именем и портом. Кто ответил первым — тот и в списке; повторы по адресу
-/// и порту отсеиваются.
+/// Bonjour (`_slovo._tcp`) — правильний шлях, але його блокують деякі
+/// роутери й «ізоляція клієнтів» у гостьових мережах. UDP-розсилка на порт 8104
+/// — грубий, але живучий: телефон кричить «SLOVO?», програма відповідає своїм
+/// ім'ям і портом. Хто відповів першим — той і в списку; повтори за адресою
+/// й портом відсіюються.
 final class Discovery {
 
     interface Listener {
@@ -69,8 +69,8 @@ final class Discovery {
         if (multicast != null && multicast.isHeld()) multicast.release();
     }
 
-    /// Без этого замка Android отбрасывает многоадресные пакеты ради
-    /// экономии батареи — и ни Bonjour, ни ответ на рассылку не доходят.
+    /// Без цього замка Android відкидає багатоадресні пакети заради
+    /// економії батареї — і ні Bonjour, ні відповідь на розсилку не доходять.
     private void acquireMulticast() {
         WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if (wifi == null) return;
@@ -101,9 +101,9 @@ final class Discovery {
 
             @Override public void onServiceFound(NsdServiceInfo info) {
                 if (!SERVICE_TYPE.startsWith(info.getServiceType())) return;
-                // Разрешение имён в адрес идёт по одному: второй запрос,
-                // пока идёт первый, Android отвергает — поэтому свой
-                // слушатель на каждый вызов.
+                // Перетворення імен на адресу йде по одному: другий запит,
+                // поки йде перший, Android відкидає — тому свій
+                // слухач на кожен виклик.
                 try {
                     nsd.resolveService(info, new NsdManager.ResolveListener() {
                         @Override public void onResolveFailed(NsdServiceInfo service, int code) { }
@@ -123,7 +123,7 @@ final class Discovery {
         }
     }
 
-    // MARK: Рассылка
+    // MARK: Розсилка
 
     private void startBeacon() {
         Thread thread = new Thread(() -> {
@@ -133,8 +133,8 @@ final class Discovery {
                 socket.setBroadcast(true);
                 socket.setSoTimeout(600);
                 byte[] question = BEACON_QUESTION.getBytes(StandardCharsets.UTF_8);
-                // Три захода по секунде с небольшим: один пакет по Wi-Fi
-                // теряется запросто, три подряд — почти никогда.
+                // Три заходи по секунді з невеликим: один пакет по Wi-Fi
+                // губиться легко, три поспіль — майже ніколи.
                 for (int round = 0; round < 3 && !stopped; round++) {
                     for (InetAddress target : broadcastTargets()) {
                         try {
@@ -169,8 +169,8 @@ final class Discovery {
         thread.start();
     }
 
-    /// Куда кричать: общая рассылка и рассылка каждой сети телефона —
-    /// на некоторых прошивках 255.255.255.255 уходит не в тот интерфейс.
+    /// Куди кричати: загальна розсилка й розсилка кожної мережі телефона —
+    /// на деяких прошивках 255.255.255.255 іде не в той інтерфейс.
     private static Set<InetAddress> broadcastTargets() {
         Set<InetAddress> targets = new HashSet<>();
         try { targets.add(InetAddress.getByName("255.255.255.255")); } catch (Exception ignored) { }

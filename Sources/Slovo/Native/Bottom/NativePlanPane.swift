@@ -42,6 +42,10 @@ final class NativePlanPane: NSView, NativeListSource {
     /// Відбиток складу плану: за ним видно, чи міняти рядки взагалі.
     private var planStamp = 0
 
+    /// Під час проповіді: чий це план і як повернути план служіння.
+    private let sermonLabel = NSTextField(labelWithString: "")
+    private let sermonButton = NSButton(title: "", target: nil, action: nil)
+
     private var tokens: [Signals.Token] = []
     private var bells: [AnyCancellable] = []
 
@@ -81,7 +85,21 @@ final class NativePlanPane: NSView, NativeListSource {
             self?.desk.movePlan(fromOffsets: IndexSet(integer: from), toOffset: to)
         }
 
-        tokens.append(Signals.shared.subscribe(.plan) { [weak self] in self?.reloadPlan() })
+        sermonLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        sermonLabel.textColor = .controlAccentColor
+        sermonLabel.lineBreakMode = .byTruncatingTail
+        sermonButton.bezelStyle = .recessed
+        sermonButton.controlSize = .small
+        sermonButton.font = .systemFont(ofSize: 11)
+        sermonButton.target = self
+        sermonButton.action = #selector(endSermon)
+        bar.addSubview(sermonLabel)
+        bar.addSubview(sermonButton)
+
+        tokens.append(Signals.shared.subscribe(.plan) { [weak self] in
+            self?.reloadPlan()
+            self?.updateSermonStrip()
+        })
         // Той самий повзунок кегля, що й для решти списків вікна: План стояв
         // на своєму разом з Історією.
         tokens.append(Signals.shared.subscribe(.listFontSize) { [weak self] in
@@ -99,24 +117,51 @@ final class NativePlanPane: NSView, NativeListSource {
 
         applyCaptions()
         reloadPlan()
+        updateSermonStrip()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
+
+    /// Смужка проповіді видна лише тоді, коли план служіння відкладено.
+    private func updateSermonStrip() {
+        let title = desk.plan.title.trimmingCharacters(in: .whitespaces)
+        sermonLabel.stringValue = title.isEmpty
+            ? OurWords.t("План проповеди")
+            : OurWords.t("План проповеди: %s", title)
+        sermonButton.title = OurWords.t("Вернуть план служения")
+        sermonLabel.isHidden = !desk.isSermon
+        sermonButton.isHidden = !desk.isSermon
+        needsLayout = true
+    }
+
+    @objc private func endSermon() {
+        desk.endSermon()
+    }
 
     override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
         box.frame = bounds
-        let barHeight: CGFloat = 24
+        // Під час проповіді — другий ряд: панель Плана вузька, і поруч зі
+        // значками кнопка повернення не вміщається.
+        let strip: CGFloat = sermonButton.isHidden ? 0 : 24
+        let barHeight: CGFloat = 24 + strip
         bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: barHeight)
         separator.frame = NSRect(x: 0, y: barHeight, width: bounds.width, height: 1)
         list.frame = NSRect(x: 0, y: barHeight + 1,
                             width: bounds.width, height: max(0, bounds.height - barHeight - 1))
+        // `bar` рахує знизу вгору: значки — у верхньому ряду, смужка — під ними.
         var x: CGFloat = 4
         for button in buttons {
-            button.frame = NSRect(x: x, y: 3, width: 20, height: 18)
+            button.frame = NSRect(x: x, y: strip + 3, width: 20, height: 18)
             x += 22
+        }
+        if !sermonButton.isHidden {
+            sermonButton.sizeToFit()
+            let width = min(sermonButton.frame.width, max(0, bounds.width - 8))
+            sermonButton.frame = NSRect(x: bounds.width - width - 4, y: 2, width: width, height: 20)
+            sermonLabel.frame = NSRect(x: 6, y: 4, width: max(0, bounds.width - width - 16), height: 16)
         }
     }
 

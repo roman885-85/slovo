@@ -10,8 +10,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ua.church.slovo.remote"
-    android:versionCode="3"
-    android:versionName="1.2">
+    android:versionCode="4"
+    android:versionName="1.3">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -44,5 +44,13 @@
             android:exported="false"
             android:label="@string/connect_title"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- План проповіді: складається без зв'язку з програмою. -->
+        <activity
+            android:name="ua.church.slovo.remote.SermonActivity"
+            android:exported="false"
+            android:label="@string/s_title"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
     </application>
 </manifest>

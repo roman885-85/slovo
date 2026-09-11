@@ -2,9 +2,9 @@ import AppKit
 import Network
 import SlovoCore
 
-/// Пульт на телефоне — проверка канала без телефона: тем же HTTP, что и
-/// приложение, с этой же машины. Состояние, команда, долгий опрос, PIN,
-/// ответ на рассылку и поиск песен — по шагу на каждое.
+/// Пульт на телефоні — перевірка каналу без телефона: тим самим HTTP, що й
+/// застосунок, з цієї ж машини. Стан, команда, довгий опит, PIN,
+/// відповідь на розсилку й пошук пісень — по кроку на кожне.
 extension Diagnostics {
 
     static func remoteSection(state: AppState) -> [Check] {
@@ -31,8 +31,8 @@ extension Diagnostics {
         var lines: [String] = ["порт \(server.port)"]
         var faults: [String] = []
 
-        /// Запрос с этой же машины; ответ приходит, пока крутится цикл событий.
-        /// Ответ как есть — код, заголовок типа и байты.
+        /// Запит із цієї ж машини; відповідь приходить, поки крутиться цикл подій.
+        /// Відповідь як є — код, заголовок типу й байти.
         func fetch(_ method: String, _ path: String, body: [String: Any]? = nil, raw: Data? = nil,
                    pin: String? = nil, timeout: Double = 8) -> (code: Int, type: String, data: Data)? {
             guard let url = URL(string: base + path) else { return nil }
@@ -64,7 +64,7 @@ extension Diagnostics {
             return (got.code, json)
         }
 
-        // 1. Состояние.
+        // 1. Стан.
         state.mode = .bible
         state.isLive = false
         NativeBibleBridge.shared.sync()
@@ -77,7 +77,7 @@ extension Diagnostics {
         lines.append("стан: seq \(seq0), режим \(first.json["mode"] ?? "?"), передпоказ «\(preview0.prefix(20))»")
         if first.json["mode"] as? String != "bible" { faults.append("режим у стані не bible") }
 
-        // 2. Команда «дальше»: стих сменился, номер состояния вырос.
+        // 2. Команда «далі»: вірш змінився, номер стану виріс.
         guard let stepped = call("POST", "/api/next"), stepped.code == 200 else {
             faults.append("POST /api/next не відповів 200")
             return [Check(area: area, name: "Канал пульта відповідає", status: .failed, detail: faults.joined(separator: "; "))]
@@ -90,7 +90,7 @@ extension Diagnostics {
         if seq1 <= seq0 { faults.append("номер стану не виріс після команди") }
         if live1.isEmpty { faults.append("після «далі» у залі порожньо") }
 
-        // 3. Долгий опрос: ответ приходит с первым изменением, а не по сроку.
+        // 3. Довгий опит: відповідь приходить із першою зміною, а не за строком.
         var polled: (code: Int, json: [String: Any])?
         var pollDone = false
         let started = Date()
@@ -111,7 +111,7 @@ extension Diagnostics {
         else if waited > 5 { faults.append("довге опитування відповіло лише за терміном") }
         if seq2 <= seq1 { faults.append("довге опитування повернуло старий номер") }
 
-        // 4. PIN: без него — отказ, с ним — ответ.
+        // 4. PIN: без нього — відмова, з ним — відповідь.
         server.apply(enabled: true, port: wasPort, pin: "2468", state: state)
         let denied = call("GET", "/api/state")
         let allowed = call("GET", "/api/state", pin: "2468")
@@ -120,7 +120,7 @@ extension Diagnostics {
         if allowed?.code != 200 { faults.append("з правильним PIN сервер не відповів") }
         server.apply(enabled: true, port: wasPort, pin: "", state: state)
 
-        // 5. Рассылка «SLOVO?» — ответ с портом.
+        // 5. Розсилка «SLOVO?» — відповідь із портом.
         var beaconReply: [String: Any]?
         let connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: RemoteControlServer.beaconPort)!,
                                       using: .udp)
@@ -136,13 +136,13 @@ extension Diagnostics {
         lines.append("розсилка: відповідь \(beaconReply == nil ? "не прийшов" : "прийшов"), порт \(beaconPort), ім'я «\(beaconReply?["name"] ?? "")»")
         if beaconPort != server.port { faults.append("на розсилку не прийшов правильний порт") }
 
-        // 6. Поиск песен.
+        // 6. Пошук пісень.
         let songs = call("POST", "/api/songs", body: ["text": "Бог"])
         let foundSongs = (songs?.json["songs"] as? [[String: Any]])?.count ?? 0
         lines.append("пошук пісень «Бог»: \(foundSongs)")
         if NativeSongsWorkspace.shared.model.book != nil, foundSongs == 0 { faults.append("пошук пісень нічого не знайшов") }
 
-        // 7. Презентация с телефона: файл → показ; картинка страницы; листание; указка.
+        // 7. Презентація з телефона: файл → показ; картинка сторінки; гортання; указка.
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("slovo-пульт-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let deckName = "проба-пульт.pdf"
@@ -160,7 +160,7 @@ extension Diagnostics {
         if makePDF(at: pdf, pages: 2), let bytes = try? Data(contentsOf: pdf) {
             let encoded = deckName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deckName
             let uploaded = call("POST", "/api/upload?name=\(encoded)", timeout: 20)
-            // `call` шлёт JSON; файл — сырыми байтами.
+            // `call` шле JSON; файл — сирими байтами.
             let sent = fetch("POST", "/api/upload?name=\(encoded)", raw: bytes, timeout: 20)
             let sentJSON = sent.flatMap { try? JSONSerialization.jsonObject(with: $0.data) as? [String: Any] } ?? [:]
             _ = uploaded
@@ -192,10 +192,10 @@ extension Diagnostics {
             if index != 1 { faults.append("команда «page» не перегорнула на другу сторінку") }
             if !onWall { faults.append("після «page» сторінка не вийшла в зал") }
 
-            // Перелистывание назад меняет состояние, не меняя длины JSON
-            // («Сторінка 2» → «Сторінка 1»): номер состояния обязан вырасти —
-            // иначе телефон не узнает о смене страницы (так и было: отпечаток
-            // считался hashValue-ом Data, а тот смотрит на длину и 80 байт).
+            // Гортання назад міняє стан, не міняючи довжини JSON
+            // («Сторінка 2» → «Сторінка 1»): номер стану мусить вирости —
+            // інакше телефон не дізнається про зміну сторінки (так і було: відбиток
+            // рахувався hashValue-ом Data, а той дивиться на довжину й 80 байт).
             let seqBeforeBack = (flipped?.json["seq"] as? NSNumber)?.intValue ?? -1
             _ = call("POST", "/api/page", body: ["index": 0])
             wait(untilTrue: { false }, seconds: 0.4)

@@ -19,6 +19,7 @@ public struct PlanItem: Sendable, Hashable, Identifiable {
         case scripture
         case song
         case text
+        case file
 
         public var id: String { rawValue }
 
@@ -27,8 +28,23 @@ public struct PlanItem: Sendable, Hashable, Identifiable {
             case .scripture: return OurWords.t("Отрывок")
             case .song:      return OurWords.t("Песня")
             case .text:      return OurWords.t("Текст")
+            case .file:      return OurWords.t("Файл")
             }
         }
+    }
+
+    /// Файл, який пункт відкриває: презентація, картинки чи відео. Такі
+    /// пункти приносить план проповіді з планшета: файли лягають у теку
+    /// пульта, а пункт тримає шлях до свого.
+    public struct FileReference: Sendable, Hashable {
+        public var path: String
+
+        public init(path: String) {
+            self.path = path
+        }
+
+        public var url: URL { URL(fileURLWithPath: path) }
+        public var name: String { url.lastPathComponent }
     }
 
     /// Посилання на біблійний уривок.
@@ -74,6 +90,8 @@ public struct PlanItem: Sendable, Hashable, Identifiable {
         case song(SongPartReference)
         /// Довільний текст модуля «Текст» — кнопка `SBAddTextToPlan` (24).
         case text(PlainTextDocument)
+        /// Презентація, картинки чи відео з плану проповіді.
+        case file(FileReference)
     }
 
     public var id: UUID
@@ -101,6 +119,7 @@ public struct PlanItem: Sendable, Hashable, Identifiable {
         case .scripture: return .scripture
         case .song:      return .song
         case .text:      return .text
+        case .file:      return .file
         }
     }
 
@@ -117,6 +136,18 @@ public struct PlanItem: Sendable, Hashable, Identifiable {
     public var plainText: PlainTextDocument? {
         if case .text(let value) = content { return value }
         return nil
+    }
+
+    public var file: FileReference? {
+        if case .file(let value) = content { return value }
+        return nil
+    }
+
+    /// Пункт-файл. Підпис — те, що дав проповідник, а без нього ім'я файла.
+    public static func file(_ url: URL, title: String? = nil) -> PlanItem {
+        let caption = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return PlanItem(title: caption.isEmpty ? url.lastPathComponent : caption,
+                        content: .file(FileReference(path: url.path)))
     }
 
     // MARK: - Збирання пунктів
@@ -272,6 +303,7 @@ extension PlanItem: Codable {
         case module, book, chapter, verses      // уривок
         case songBook, song, part               // частина пісні
         case heading, body                      // довільний текст
+        case path                               // файл
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -297,6 +329,8 @@ extension PlanItem: Codable {
             // загубили, — а за ним визначається тип пункту без поля `type`.
             try container.encode(document.title, forKey: .heading)
             try container.encode(document.body, forKey: .body)
+        case .file(let reference):
+            try container.encode(reference.path, forKey: .path)
         }
     }
 
@@ -315,10 +349,14 @@ extension PlanItem: Codable {
             content = .song(try Self.decodeSong(container))
         case "text", "plaintext", "plain-text":
             content = .text(Self.decodeText(container))
+        case "file":
+            content = .file(try Self.decodeFile(container))
         case "":
             // Тип не написано — визначаємо за набором полів: так читається план,
             // набраний вручну за зразком сусіднього пункту.
-            if looksLikeText {
+            if container.contains(.path) {
+                content = .file(try Self.decodeFile(container))
+            } else if looksLikeText {
                 content = .text(Self.decodeText(container))
             } else {
                 content = looksLikeSong
@@ -368,6 +406,13 @@ extension PlanItem: Codable {
                           body: string(container, .body) ?? "")
     }
 
+    private static func decodeFile(_ container: KeyedDecodingContainer<CodingKeys>) throws -> FileReference {
+        guard let path = string(container, .path), !path.isEmpty else {
+            throw PlanError.unsupportedItem(OurWords.t("у файла нет пути"))
+        }
+        return FileReference(path: path)
+    }
+
     private static func fallbackTitle(for content: Content) -> String {
         switch content {
         case .scripture(let reference):
@@ -383,6 +428,8 @@ extension PlanItem: Codable {
         case .text(let document):
             let summary = document.summary(limit: 80)
             return summary.isEmpty ? Kind.text.title : summary
+        case .file(let reference):
+            return reference.name
         }
     }
 

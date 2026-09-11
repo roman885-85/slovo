@@ -5,6 +5,14 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.text.SpannableStringBuilder;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.util.TypedValue;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
+import android.widget.SeekBar;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -153,6 +161,14 @@ public final class TabletActivity extends Activity {
     private GridView panelGrid;
     private EditText bibleSearch;
     private Button black, tabPlan, tabHistory;
+    /// Планшет, запущений на телефоні: колонки перемикаються, а не стоять поруч.
+    private boolean phone;
+    private View[] phoneColumns;
+    private Button[] phoneTabs;
+    /// «Повернути план служіння» — видна, лише поки План проповіді головний.
+    private Button sermonEnd;
+    /// Мій перегляд: текст слайда поверх місця картинки залу.
+    private TextView personalView;
     private final Map<Mode, Button> modeButtons = new HashMap<>();
     private BibleBrowser bible;
 
@@ -231,6 +247,8 @@ public final class TabletActivity extends Activity {
             return;
         }
         setContentView(R.layout.activity_tablet);
+        // Та сама межа, за якою Android бере розкладку `layout-sw600dp`.
+        phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
         status = findViewById(R.id.status);
         hallCaption = findViewById(R.id.hallCaption);
         hallNote = findViewById(R.id.hallNote);
@@ -282,7 +300,11 @@ public final class TabletActivity extends Activity {
             Button button = new Button(this, null, 0, R.style.TabButton);
             button.setText(each.title);
             button.setOnClickListener(v -> chooseMode(each, true));
-            modeTabs.addView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            // На телефоні сім вкладок поруч не вміщаються — там вони прокручуються
+            // і кожна займає стільки, скільки її напис.
+            modeTabs.addView(button, phone
+                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             modeButtons.put(each, button);
         }
 
@@ -338,9 +360,78 @@ public final class TabletActivity extends Activity {
         });
         hallImage.setOnTouchListener(this::hallTouch);
         hallImage.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateImageRect());
+        personalView = new TextView(this);
+        personalView.setGravity(Gravity.CENTER);
+        int pad = Math.round(20 * getResources().getDisplayMetrics().density);
+        personalView.setPadding(pad, pad, pad, pad);
+        personalView.setVisibility(View.GONE);
+        ((ViewGroup) hallImage.getParent()).addView(personalView,
+            new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         chooseSide(false);
         chooseMode(Mode.BIBLE, false);
+        setupSermonBar();
+        if (phone) {
+            setupPhone(saved == null);
+            if (getIntent().getBooleanExtra("sermon", false)) showColumn(2);
+        }
+    }
+
+    /// Щойно надіслали план проповіді — одразу до нього.
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent.getBooleanExtra("sermon", false)) {
+            chooseSide(false);
+            showColumn(2);
+        }
+    }
+
+    /// Кнопка над списком Плана: програма тримає план проповідника головним,
+    /// а план служіння — відкладеним, доки його не повернуть.
+    private void setupSermonBar() {
+        sermonEnd = smallButton(getString(R.string.s_sermon_end), v -> send("sermon-end"));
+        sermonEnd.setTextColor(ACCENT);
+        sermonEnd.setVisibility(View.GONE);
+        ViewGroup side = (ViewGroup) sideNote.getParent();
+        side.addView(sermonEnd, side.indexOfChild(sideNote));
+    }
+
+    /// Власник: «если программа для планшета запущена на телефоне, выдать
+    /// сообщение, что программа не адаптирована для телефона и для
+    /// полноценного пользования ее нужно запускать именно с планшета (но
+    /// запустить и выполнить адаптацию под дисплей телефона)».
+    private void setupPhone(boolean warn) {
+        // Лише вертикально: лежачи телефон має ~400 dp заввишки, і шапка,
+        // вкладки та кнопки забирають усе — список віршів зникав зовсім.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+        phoneColumns = new View[] {
+            findViewById(R.id.contentColumn), findViewById(R.id.hallColumn), findViewById(R.id.sideColumn),
+        };
+        phoneTabs = new Button[] {
+            findViewById(R.id.phoneContent), findViewById(R.id.phoneHall), findViewById(R.id.phoneSide),
+        };
+        for (int i = 0; i < phoneTabs.length; i++) {
+            int index = i;
+            if (phoneTabs[i] != null) phoneTabs[i].setOnClickListener(v -> showColumn(index));
+        }
+        showColumn(0);
+        if (warn) {
+            new AlertDialog.Builder(this)
+                .setTitle(R.string.phone_title)
+                .setMessage(R.string.phone_message)
+                .setPositiveButton(R.string.phone_ok, null)
+                .show();
+        }
+    }
+
+    private void showColumn(int index) {
+        if (phoneColumns == null) return;
+        for (int i = 0; i < phoneColumns.length; i++) {
+            if (phoneColumns[i] != null) phoneColumns[i].setVisibility(i == index ? View.VISIBLE : View.GONE);
+            if (phoneTabs[i] != null) phoneTabs[i].setTextColor(i == index ? ACCENT : Color.WHITE);
+        }
     }
 
     @Override
@@ -419,8 +510,16 @@ public final class TabletActivity extends Activity {
         popup.getMenu().add(0, 1, 0, R.string.menu_connection);
         popup.getMenu().add(0, 2, 1, R.string.menu_keep_awake).setCheckable(true).setChecked(settings.keepAwake());
         popup.getMenu().add(0, 3, 2, R.string.menu_zoom_off);
+        popup.getMenu().add(0, 4, 3, R.string.menu_sermon);
+        popup.getMenu().add(0, 5, 4, R.string.menu_view);
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
+                case 4:
+                    startActivity(new Intent(this, SermonActivity.class));
+                    return true;
+                case 5:
+                    showViewDialog();
+                    return true;
                 case 1:
                     startActivity(new Intent(this, ConnectActivity.class));
                     finish();
@@ -582,6 +681,13 @@ public final class TabletActivity extends Activity {
         } else {
             fillPlan();
         }
+        // План проповіді заступив план служіння: видно, чий план, і є чим
+        // повернути план служіння.
+        sermonEnd.setVisibility(fresh.sermon ? View.VISIBLE : View.GONE);
+        tabPlan.setText(fresh.sermon ? R.string.s_title : R.string.t_plan);
+        if (phoneTabs != null && phoneTabs[2] != null) {
+            phoneTabs[2].setText(fresh.sermon ? R.string.s_title : R.string.t_plan);
+        }
 
         switch (mode) {
             case SONGS:
@@ -619,6 +725,7 @@ public final class TabletActivity extends Activity {
         else if (!fresh.hallTitle.isEmpty() && ("still".equals(kind) || "video".equals(kind))) caption += " — " + fresh.hallTitle;
         hallCaption.setText(caption);
         liveText.setText("text".equals(kind) ? fresh.liveText : "");
+        applyPersonal();
 
         if ("video".equals(kind)) {
             showHallNote(getString(R.string.t_hall_video, fresh.hallTitle));
@@ -635,6 +742,100 @@ public final class TabletActivity extends Activity {
         } else {
             showHall();
         }
+    }
+
+    /// Мій перегляд: текстовий слайд — у своєму оформленні, а не картинкою
+    /// залу. Картинки й презентації лишаються такими, як на стіні.
+    private void applyPersonal() {
+        if (personalView == null || state == null) return;
+        boolean text = settings.previewText() && "text".equals(state.hallKind);
+        personalView.setVisibility(text ? View.VISIBLE : View.GONE);
+        hallImage.setVisibility(text ? View.INVISIBLE : View.VISIBLE);
+        pointerView.setVisibility(text ? View.INVISIBLE : View.VISIBLE);
+        liveText.setVisibility(text ? View.GONE : View.VISIBLE);
+        if (!text) return;
+        int[] colours = Settings.themeColours(settings.previewTheme());
+        personalView.setBackgroundColor(colours[0]);
+        personalView.setTextColor(colours[1]);
+        personalView.setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.previewSize());
+        SpannableStringBuilder shown = new SpannableStringBuilder();
+        if (!state.liveReference.isEmpty()) {
+            shown.append(state.liveReference);
+            shown.setSpan(new RelativeSizeSpan(0.6f), 0, shown.length(), 0);
+            shown.setSpan(new ForegroundColorSpan(colours[2]), 0, shown.length(), 0);
+            shown.append("\n");
+        }
+        shown.append(state.liveText);
+        personalView.setText(shown);
+    }
+
+    /// «Мій перегляд…»: картинкою чи текстом, оформлення й розмір. Діє одразу.
+    private void showViewDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(20 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+
+        RadioGroup mode = new RadioGroup(this);
+        RadioButton asHall = new RadioButton(this);
+        asHall.setId(View.generateViewId());
+        asHall.setText(R.string.view_hall);
+        RadioButton asText = new RadioButton(this);
+        asText.setId(View.generateViewId());
+        asText.setText(R.string.view_text);
+        mode.addView(asHall);
+        mode.addView(asText);
+        mode.check(settings.previewText() ? asText.getId() : asHall.getId());
+        box.addView(mode);
+
+        RadioGroup theme = new RadioGroup(this);
+        theme.setOrientation(RadioGroup.HORIZONTAL);
+        String[] keys = { "dark", "light", "sepia" };
+        int[] titles = { R.string.view_dark, R.string.view_light, R.string.view_sepia };
+        int[] ids = new int[keys.length];
+        for (int i = 0; i < keys.length; i++) {
+            RadioButton button = new RadioButton(this);
+            ids[i] = View.generateViewId();
+            button.setId(ids[i]);
+            button.setText(titles[i]);
+            theme.addView(button);
+            if (keys[i].equals(settings.previewTheme())) theme.check(ids[i]);
+        }
+        box.addView(theme);
+
+        TextView sizeLabel = new TextView(this);
+        sizeLabel.setText(getString(R.string.view_size, Math.round(settings.previewSize())));
+        box.addView(sizeLabel);
+        SeekBar size = new SeekBar(this);
+        size.setMax(80 - 14);
+        size.setProgress(Math.round(settings.previewSize()) - 14);
+        box.addView(size);
+        TextView note = new TextView(this);
+        note.setText(R.string.view_note);
+        note.setTextColor(0xFF9AA4B2);
+        box.addView(note);
+
+        Runnable save = () -> {
+            String chosen = "dark";
+            for (int i = 0; i < keys.length; i++) if (theme.getCheckedRadioButtonId() == ids[i]) chosen = keys[i];
+            settings.setPreview(mode.getCheckedRadioButtonId() == asText.getId(), chosen, 14 + size.getProgress());
+            sizeLabel.setText(getString(R.string.view_size, 14 + size.getProgress()));
+            applyPersonal();
+            if (!settings.previewText()) showHall();
+        };
+        mode.setOnCheckedChangeListener((group, id) -> save.run());
+        theme.setOnCheckedChangeListener((group, id) -> save.run());
+        size.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean user) { if (user) save.run(); }
+            @Override public void onStartTrackingTouch(SeekBar bar) { }
+            @Override public void onStopTrackingTouch(SeekBar bar) { }
+        });
+
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.view_title)
+            .setView(box)
+            .setPositiveButton(R.string.done, null)
+            .show();
     }
 
     private void showHallNote(String text) {

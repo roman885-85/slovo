@@ -34,6 +34,8 @@ extension Diagnostics {
             text.document = wasDocument
             text.savesToSettings = true
             media.volume = wasVolume
+            // Перевірка плану проповіді могла лишити план служіння відкладеним.
+            if desk.isSermon { desk.endSermon() }
             desk.plan = wasPlan
             state.mode = wasMode
             state.openScripture(bookPosition: min(wasBook, max(0, state.books.count - 1)),
@@ -526,6 +528,105 @@ extension Diagnostics {
                                 status: ok ? .ok : .failed,
                                 detail: "App Nap вимкнено: \(wake.noNapHeld ? "так" : "ні"); не засинати: \(wake.keepsAwake ? "так" : "ні"); "
                                     + "у pmset: \(seen ? "є PreventUserIdleSystemSleep від цього процесу" : "немає")"))
+        }
+
+        func encoded(_ value: String) -> String {
+            value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value
+        }
+        /// Тіло запиту — сирими байтами, як планшет шле файл.
+        func send(_ path: String, _ bytes: Data) -> (code: Int, json: [String: Any]) {
+            guard let url = URL(string: base + path) else { return (0, [:]) }
+            var request = URLRequest(url: url, timeoutInterval: 20)
+            request.httpMethod = "POST"
+            request.httpBody = bytes
+            var result: (Int, Data) = (0, Data())
+            var finished = false
+            URLSession.shared.dataTask(with: request) { data, response, _ in
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                DispatchQueue.main.async { result = (code, data ?? Data()); finished = true }
+            }.resume()
+            wait(untilTrue: { finished }, seconds: 22)
+            return (result.0, (try? JSONSerialization.jsonObject(with: result.1)) as? [String: Any] ?? [:])
+        }
+
+        // 17. Бібліотека для плану проповіді: планшет забирає переклади рядками й
+        // пісенники файлами, щоб складати план без зв'язку з програмою.
+        do {
+            let library = json("GET", "/api/library")
+            let bibles = rows(library.json["bibles"])
+            let songbooks = rows(library.json["songbooks"])
+            var faults: [String] = []
+            if library.code != 200 || bibles.count != state.allModules.count {
+                faults.append("перекладів \(bibles.count) із \(state.allModules.count) (\(library.code))")
+            }
+            if songbooks.count != (state.songLibrary?.books.count ?? 0) {
+                faults.append("пісенників \(songbooks.count) із \(state.songLibrary?.books.count ?? 0)")
+            }
+            var detail = "перекладів \(bibles.count), пісенників \(songbooks.count)"
+            if let primary = state.primaryModule {
+                let export = call("GET", "/api/library/bible?id=" + encoded(primary.identifier))
+                let text = String(decoding: export.data, as: UTF8.self)
+                let books = text.components(separatedBy: "\nB\t").count - 1
+                let verses = text.components(separatedBy: "\nV\t").count - 1
+                if export.code != 200 || !text.hasPrefix("SLOVO-BIBLE") || books != primary.books.count || verses == 0 {
+                    faults.append("переклад «\(primary.identifier)»: \(export.code), книг \(books) із \(primary.books.count), віршів \(verses)")
+                }
+                detail += "; «\(primary.identifier)» рядками: книг \(books), віршів \(verses)"
+            }
+            if let file = songbooks.first(where: { ($0["format"] as? String) == "vbm" })?["file"] as? String {
+                let book = call("GET", "/api/library/songbook?file=" + encoded(file))
+                if book.code != 200 || book.data.prefix(16) != Data("VisioBibleModule".utf8) {
+                    faults.append("пісенник «\(file)»: \(book.code), \(book.data.count) байт")
+                }
+                detail += "; пісенник «\(file)» файлом: \(book.data.count) байт"
+            }
+            checks.append(Check(area: area, name: "Бібліотека для плану проповіді",
+                                status: faults.isEmpty ? .ok : .failed,
+                                detail: faults.isEmpty ? detail : faults.joined(separator: "; ")))
+        }
+
+        // 18. План проповіді. Власник: «план проповедника не добавляется в конец
+        // существующего или не заменяет его, а становится просто приоритетным на
+        // время проповеди». Файл плану — лише зберегти; план — головний; після
+        // `sermon-end` — той самий план служіння.
+        do {
+            let name = "slovo-проба-план.png"
+            let stored = RemoteControlServer.uploadsFolder.appendingPathComponent(name)
+            defer { try? FileManager.default.removeItem(at: stored) }
+            let pixel = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 4, bitsPerSample: 8,
+                                         samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)?
+                .representation(using: .png, properties: [:]) ?? Data()
+            let upload = send("/api/upload?store=1&name=" + encoded(name), pixel)
+            let saved = FileManager.default.fileExists(atPath: stored.path)
+            let before = desk.plan.items.map(\.id)
+            let canon = state.primaryModule?.books.first?.canonicalNumber ?? 10
+            let answer = json("POST", "/api/sermon-plan", [
+                "title": "Проба плану проповіді",
+                "items": [
+                    ["type": "scripture", "title": "уривок", "module": state.primaryModuleID, "canon": canon,
+                     "chapter": 1, "verses": [1], "text": "з планшета"],
+                    ["type": "text", "title": "оголошення", "heading": "Оголошення", "body": "Проба"],
+                    ["type": "file", "title": "слайд", "file": (upload.json["file"] as? String) ?? name],
+                    ["type": "song", "title": "пісня", "songBook": "немає-такого.vbm", "song": 0,
+                     "parts": [["kind": "Куплет", "text": "рядок"]]],
+                ] as [[String: Any]],
+            ])
+            let kinds = desk.plan.items.map(\.kind.rawValue)
+            let flag = json("GET", "/api/state").json["sermon"] as? [String: Any]
+            let wasSermon = desk.isSermon
+            let ended = json("POST", "/api/sermon-end", [:])
+            let after = desk.plan.items.map(\.id)
+            let fine = upload.code == 200 && saved && answer.code == 200
+                && kinds == ["scripture", "text", "file", "text"]
+                && (flag?["on"] as? Bool) == true && wasSermon
+                && ended.code == 200 && !desk.isSermon && after == before
+            checks.append(Check(area: area, name: "План проповіді: головний на час проповіді",
+                                status: fine ? .ok : .failed,
+                                detail: "файл → \(upload.code) (\(saved ? "лежить у теці пульта" : "не збережено")); "
+                                    + "план → \(answer.code), пункти: \(kinds.joined(separator: ", ")); "
+                                    + "у стані проповідь: \((flag?["on"] as? Bool) == true ? "так" : "ні"); "
+                                    + "після повернення план служіння \(after == before ? "той самий (\(after.count))" : "інший")"))
         }
 
         // 12. Вимкнули пульт у браузері — порт закритий зовсім, ім'я знято.

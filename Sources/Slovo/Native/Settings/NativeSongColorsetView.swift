@@ -1,19 +1,19 @@
 import AppKit
 import SlovoCore
 
-/// 6.4 «Цветовая легенда частей песен» — форма `SongColorsetForm`, на AppKit.
+/// 6.4 «Кольорова легенда частин пісень» — форма `SongColorsetForm`, на AppKit.
 ///
-/// Настраивает цвета и ключевые слова, по которым список «Текст» (28) в
-/// модуле «Песни» красит куплеты, припевы и прочие части. Слова — не
-/// украшение: по ним часть и опознаётся в файле песенника, где она может
-/// быть подписана «Припев», «Refren» или «פזמון».
+/// Налаштовує кольори й ключові слова, за якими список «Текст» (28) у
+/// модулі «Пісні» фарбує куплети, приспіви й інші частини. Слова — не
+/// прикраса: за ними частину й розпізнають у файлі пісенника, де вона може
+/// бути підписана «Припев», «Refren» або «פזמון».
 @MainActor
 final class NativeSongColorsetView: NSView, NativeListSource {
 
     private let state: AppState
     private let store: SettingsStore
-    /// Какую кнопку нажали: `true` — «Ок», `false` — «Отменить». Записывает и
-    /// откатывает окно, а не вид: снимок настроек принадлежит окну.
+    /// Яку кнопку натиснули: `true` — «Ок», `false` — «Скасувати». Записує й
+    /// відкочує вікно, а не вид: знімок налаштувань належить вікну.
     private let onFinish: (Bool) -> Void
 
     private let chunks = NativeTable(detailWidth: 160)
@@ -49,7 +49,7 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         state.vbHint(key, form: "SongColorsetForm", fallback)
     }
 
-    // MARK: - Сборка
+    // MARK: - Складання
 
     private func build() {
         wantsLayer = true
@@ -58,8 +58,8 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         chunks.source = self
         chunks.onSelect = { [weak self] _, active, _ in
             guard let self else { return }
-            // Номер выбранного названия принадлежит прежней части: у новой он
-            // указал бы на чужое слово.
+            // Номер вибраної назви належить колишній частині: у новій він
+            // вказав би на чуже слово.
             if active != self.selectedChunk { self.selectedName = nil }
             self.selectedChunk = active
             self.refresh()
@@ -118,7 +118,7 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         cancel.frame = NSRect(x: ok.frame.minX - 100, y: ok.frame.minY, width: 90, height: 24)
     }
 
-    // MARK: - Состояние
+    // MARK: - Стан
 
     private var chunk: SongChunkSetting? {
         let list = store.settings.songChunks
@@ -131,8 +131,8 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         if let value = chunk?.color, !colour.isEditing {
             colour.colour = SlideStyle.RGBA(value.red, value.green, value.blue, 1)
         }
-        // Последнее название удалять нельзя: часть останется без единого
-        // слова, по которому её можно узнать в песеннике.
+        // Останню назву видаляти не можна: частина лишиться без жодного
+        // слова, за яким її можна впізнати в пісеннику.
         buttons[1].isEnabled = selectedName != nil
         buttons[2].isEnabled = selectedName != nil && (chunk?.names.count ?? 0) > 1
         names.reload()
@@ -147,9 +147,9 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         example.needsDisplay = true
     }
 
-    /// Альтернативные названия — со второго: первое показано выше в поле
-    /// «Название». Руководство 6.4 разделяет их, и кнопки правки и удаления
-    /// не должны трогать основное имя части.
+    /// Альтернативні назви — з другої: перша показана вище в полі
+    /// «Назва». Посібник 6.4 розділяє їх, і кнопки правки й видалення
+    /// не мають чіпати основне ім'я частини.
     fileprivate var alternatives: [String] { Array((chunk?.names ?? []).dropFirst()) }
 
     private func addName() {
@@ -179,7 +179,7 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         chunks.reload()
     }
 
-    /// Ввод названия — TextMessages0…2 формы автора.
+    /// Уведення назви — TextMessages0…2 форми автора.
     private func ask(title: String, value: String) -> String? {
         let alert = NSAlert()
         alert.messageText = title
@@ -209,7 +209,7 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         return row
     }
 
-    /// Источник для списка альтернативных названий.
+    /// Джерело для списку альтернативних назв.
     private final class NamesSource: NativeListSource {
         unowned let owner: NativeSongColorsetView
         init(owner: NativeSongColorsetView) { self.owner = owner }
@@ -221,8 +221,8 @@ final class NativeSongColorsetView: NSView, NativeListSource {
         }
     }
 
-    /// Пример: цветные надписи частей. Двойной щелчок открывает системную
-    /// палитру — так же, как в оригинале.
+    /// Приклад: кольорові написи частин. Подвійне клацання відкриває системну
+    /// палітру — так само, як в оригіналі.
     fileprivate final class Example: NSView {
         weak var owner: NativeSongColorsetView?
 

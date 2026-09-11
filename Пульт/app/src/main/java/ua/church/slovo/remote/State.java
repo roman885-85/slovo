@@ -84,6 +84,11 @@ final class State {
     boolean zoomOn;
     double zoom = 1, zoomX = 0.5, zoomY = 0.5;
 
+    /// План проповіді: програма тримає його головним, а план служіння —
+    /// відкладеним до кнопки «Повернути план служіння».
+    boolean sermon;
+    String sermonTitle = "";
+
     static State from(JSONObject json) {
         State state = new State();
         if (json == null) return state;
@@ -126,6 +131,11 @@ final class State {
                 state.plan.add(new Row(item.optString("title", ""), item.optString("subtitle", ""),
                                        item.optBoolean("current", false)));
             }
+        }
+        JSONObject sermon = json.optJSONObject("sermon");
+        if (sermon != null) {
+            state.sermon = sermon.optBoolean("on", false);
+            state.sermonTitle = sermon.optString("title", "");
         }
         JSONObject bible = json.optJSONObject("bible");
         if (bible != null) {

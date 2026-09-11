@@ -19,7 +19,8 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
     private let table = NSTableView()
     private let scroll = NSScrollView()
     private var buttons: [NSButton] = []
-    private var languages: [LanguageFile] = []
+    /// Мови списку: файли перекладу й убудовані мови «Слова».
+    private var languages: [(code: String, name: String)] = []
 
     init(state: AppState, originals: URL, onClose: @escaping () -> Void) {
         self.state = state
@@ -38,7 +39,12 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         // Все переводы: и оригинальные, и свои, сохранённые в окне 7.1.
-        languages = InterfaceLanguageStore.languages(originals: originals)
+        languages = InterfaceLanguageStore.languages(originals: originals).map { ($0.code, $0.displayName) }
+        // Убудовані мови є завжди — і там, де файлів перекладу VisioBible немає.
+        let known = Set(languages.map { $0.code.lowercased() })
+        for builtIn in AppState.builtInLanguages where !known.contains(builtIn.code) {
+            languages.append((builtIn.code, builtIn.name))
+        }
 
         caption.stringValue = state.text("Label1", form: form,
                                          default: "Выберите язык интерфейса программы")
@@ -73,7 +79,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         for button in buttons { addSubview(button) }
 
         if let index = languages.firstIndex(where: {
-            $0.code.caseInsensitiveCompare(state.language?.code ?? "") == .orderedSame
+            $0.code.caseInsensitiveCompare(state.languageCode) == .orderedSame
         }) {
             table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         }
@@ -107,7 +113,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         flag.image = InterfaceLanguageStore.flag(code: language.code, originals: originals)
         flag.imageScaling = .scaleProportionallyUpOrDown
         box.addSubview(flag)
-        let name = NSTextField(labelWithString: language.displayName)
+        let name = NSTextField(labelWithString: language.name)
         name.font = .systemFont(ofSize: 13)
         name.frame = NSRect(x: 26, y: 2, width: 220, height: 18)
         box.addSubview(name)
@@ -135,7 +141,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         InterfaceLanguageStore.mergedDirectory(originals: originals)
         state.setLanguage(code: chosen)
 
-        guard state.language?.code.caseInsensitiveCompare(chosen) != .orderedSame else {
+        guard state.languageCode.caseInsensitiveCompare(chosen) != .orderedSame else {
             onClose()
             return
         }
@@ -143,7 +149,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         alert.messageText = state.text("Label1", form: form,
                                        default: "Выберите язык интерфейса программы")
         alert.informativeText = """
-            Перевод «\(languages[row].displayName)» сохранён в папке «Слова», но главное \
+            Перевод «\(languages[row].name)» сохранён в папке «Слова», но главное \
             окно читает переводы из папки VisioBible и этого файла пока не видит.
 
             Файл лежит здесь:

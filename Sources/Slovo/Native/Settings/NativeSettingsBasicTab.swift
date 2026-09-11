@@ -1,17 +1,17 @@
 import AppKit
 import SlovoCore
 
-/// 6.1.1 «Основные» на AppKit.
+/// 6.1.1 «Основні» на AppKit.
 ///
-/// Порядок и состав — как на вкладке `TSBasic` оригинала: реакция на кнопки,
-/// выбор монитора для слайда со схемой расположения, размеры по умолчанию,
-/// что выносить на передний план, процент заполнения страницы и частота
-/// анимации.
+/// Порядок і склад — як на вкладці `TSBasic` оригіналу: реакція на кнопки,
+/// вибір монітора для слайда зі схемою розташування, розміри за умовчанням,
+/// що виносити на передній план, відсоток заповнення сторінки й частота
+/// анімації.
 ///
-/// Окно проекции отсюда не трогаем. Раньше выбор из списка сразу двигал
-/// слайд, и «Отмена» его уже не возвращала: в файле оставалось старое
-/// значение, а слайд висел на новом мониторе. Значение доезжает до окна
-/// слайда через `AppState.applyProgramOptions`, то есть по «Ок».
+/// Вікно проєкції звідси не чіпаємо. Раніше вибір зі списку одразу рухав
+/// слайд, і «Скасувати» його вже не повертало: у файлі лишалося старе
+/// значення, а слайд висів на новому моніторі. Значення доїжджає до вікна
+/// слайда через `AppState.applyProgramOptions`, тобто за «Ок».
 @MainActor
 final class NativeSettingsBasicTab {
 
@@ -35,7 +35,7 @@ final class NativeSettingsBasicTab {
 
     private var screens: [NSScreen] { state.projection.availableScreens }
 
-    // MARK: (1) Реакция на кнопки
+    // MARK: (1) Реакція на кнопки
 
     private var buttonAction: NativeForm.Group {
         NativeForm.Group(state.vb("RGButAction", "Реакция на кнопки:"), [
@@ -51,12 +51,12 @@ final class NativeSettingsBasicTab {
         ])
     }
 
-    // MARK: (5)…(9) Монитор для отображения слайда
+    // MARK: (5)…(9) Монітор для відображення слайда
 
     private var monitor: NativeForm.Group {
-        // Нулевой пункт — «Ручная настройка»: в оригинале это единственный
-        // способ вывести слайд туда, где монитора сейчас нет, но он появится
-        // к служению.
+        // Нульовий пункт — «Ручная настройка»: в оригіналі це єдиний
+        // спосіб вивести слайд туди, де монітора зараз немає, але він з'явиться
+        // до служіння.
         let titles = [state.vb("TextMessages25", "Ручная настройка")] + screens.map(\.slovoTitle)
         manualFields = [
             NativeForm.number(intTie(\.customLeft), range: -20000...20000, width: 70),
@@ -87,8 +87,8 @@ final class NativeSettingsBasicTab {
                     [weak self] in self?.flash()
                 },
             ]),
-            // (9) Панель ручных настроек: слайд выводится по этим координатам,
-            // даже когда монитора с таким номером нет.
+            // (9) Панель ручних налаштувань: слайд виводиться за цими координатами,
+            // навіть коли монітора з таким номером немає.
             NativeForm.Row(state.vb("Label40", "Левый:") + " / " + state.vb("Label42", "Верх:")
                            + " / " + state.vb("Label41", "Ширина:") + " / " + state.vb("Label43", "Высота:"),
                            width: 300, manualFields),
@@ -98,7 +98,7 @@ final class NativeSettingsBasicTab {
         ])
     }
 
-    // MARK: (7) Размеры по умолчанию, (2) На передний план
+    // MARK: (7) Розміри за умовчанням, (2) На передній план
 
     private var sizes: NativeForm.Group {
         NativeForm.Group(state.vb("GroupBox2", "Размеры по умолчанию"), [
@@ -124,7 +124,7 @@ final class NativeSettingsBasicTab {
         ])
     }
 
-    // MARK: (3) и (4)
+    // MARK: (3) і (4)
 
     private var pageAndAnimation: NativeForm.Group {
         NativeForm.Group("", [
@@ -172,8 +172,8 @@ final class NativeSettingsBasicTab {
             connection.textColor = .systemOrange
         }
 
-        // Координаты показываем так же, как оригинал: смещение верхнего
-        // левого угла монитора от угла главного, ось Y вниз.
+        // Координати показуємо так само, як оригінал: зсув верхнього
+        // лівого кута монітора від кута головного, вісь Y донизу.
         if let frame = selectedScreen?.frame {
             let point = SettingsCoordinates.original(frame)
             placement.stringValue = "\(point.left), \(point.top)   "
@@ -200,8 +200,8 @@ final class NativeSettingsBasicTab {
         }
     }
 
-    /// (6) Схема расположения мониторов: прямоугольники в масштабе, у каждого
-    /// координаты и размер — ровно то, что рисует оригинал.
+    /// (6) Схема розташування моніторів: прямокутники в масштабі, у кожного
+    /// координати й розмір — рівно те, що малює оригінал.
     final class MonitorMap: NSView {
         var screens: [NSScreen] = []
         var selected = -1
@@ -209,8 +209,8 @@ final class NativeSettingsBasicTab {
         override var isFlipped: Bool { true }
 
         override func draw(_ dirtyRect: NSRect) {
-            // Красим только свою площадь: `dirtyRect` бывает больше вида, и
-            // заливка по нему стирает нарисованное соседями.
+            // Фарбуємо тільки свою площу: `dirtyRect` буває більшим за вид, і
+            // заливка по ньому стирає намальоване сусідами.
             NSColor.clear.setFill()
             bounds.fill()
             let union = screens.reduce(CGRect.null) { $0.union($1.frame) }
@@ -221,8 +221,8 @@ final class NativeSettingsBasicTab {
 
             for (index, screen) in screens.enumerated() {
                 let frame = screen.frame
-                // Экраны в AppKit считаются снизу вверх, а рисуем сверху вниз
-                // — иначе схема окажется зеркальной по вертикали.
+                // Екрани в AppKit рахуються знизу вгору, а малюємо згори донизу
+                // — інакше схема виявиться дзеркальною по вертикалі.
                 let rect = NSRect(x: (frame.minX - union.minX) * scale + offsetX,
                                   y: (union.maxY - frame.maxY) * scale + offsetY,
                                   width: max(frame.width * scale, 1),
@@ -234,8 +234,8 @@ final class NativeSettingsBasicTab {
                 NSColor.separatorColor.setStroke()
                 path.stroke()
 
-                // Подписи — в координатах оригинала (Y вниз), как и поле
-                // «Расположение» рядом.
+                // Підписи — у координатах оригіналу (Y донизу), як і поле
+                // «Расположение» поруч.
                 let point = SettingsCoordinates.original(frame)
                 let lines = ["\(index + 1)", "\(point.left), \(point.top)",
                              "\(Int(frame.width)) x \(Int(frame.height))"]

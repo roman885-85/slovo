@@ -1,15 +1,15 @@
 import AppKit
 import SlovoCore
 
-/// Второй источник NDI — «Слово Wi-Fi»: тот же кадр зала, но уменьшенный и
-/// реже, чтобы клиент по Wi-Fi выбирал его, а не полный.
+/// Друге джерело NDI — «Слово Wi-Fi»: той самий кадр залу, але зменшений і
+/// рідше, щоб клієнт по Wi-Fi вибирав його, а не повний.
 ///
-/// Владелец: основной NDI оставить как есть, а для Wi-Fi — отдельный
-/// источник с настройкой качества. У NDI в полной полосе других рычагов
-/// качества нет: только размер кадра и частота — ими и управляем.
+/// Власник: основний NDI лишити як є, а для Wi-Fi — окреме
+/// джерело з налаштуванням якості. У NDI в повній смузі інших важелів
+/// якості немає: тільки розмір кадру й частота — ними й керуємо.
 ///
-/// Живёт на очереди насоса кадров: кадры и звук приходят оттуда, там же
-/// создаётся и закрывается отправитель. Снаружи — только счётчики под
+/// Живе на черзі насоса кадрів: кадри й звук приходять звідти, там же
+/// створюється й закривається відправник. Ззовні — тільки лічильники під
 /// замком.
 final class NDIWiFiSender: @unchecked Sendable {
     private let lock = NSLock()
@@ -19,8 +19,8 @@ final class NDIWiFiSender: @unchecked Sendable {
     private var lastSentAt: CFTimeInterval = 0
     private var lastIdentity: Int?
     private var lastRepeatAt: CFTimeInterval = 0
-    /// Уменьшенный кадр для нынешнего отпечатка: слайд не масштабируем
-    /// заново на каждый такт.
+    /// Зменшений кадр для теперішнього відбитка: слайд не масштабуємо
+    /// заново на кожен такт.
     private var scaled: (identity: Int, frame: RenderedFrame)?
     private var poll = 0
 
@@ -32,7 +32,7 @@ final class NDIWiFiSender: @unchecked Sendable {
     var connections: Int { lock.lock(); defer { lock.unlock() }; return connectionsStorage }
     var state: String { lock.lock(); defer { lock.unlock() }; return stateStorage }
 
-    /// На очереди насоса.
+    /// На черзі насоса.
     func start(name: String, height: Int, fps: Int) {
         self.height = max(90, height)
         self.fps = max(1, min(60, fps))
@@ -49,7 +49,7 @@ final class NDIWiFiSender: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// На очереди насоса.
+    /// На черзі насоса.
     func stop() {
         if sender != nil { NDITrace.say("джерело Wi-Fi: закрито") }
         sender?.close()
@@ -58,16 +58,16 @@ final class NDIWiFiSender: @unchecked Sendable {
         lock.lock(); stateStorage = ""; lock.unlock()
     }
 
-    /// На очереди насоса: приходит каждый такт, отправляем не чаще своей
-    /// частоты, неизменный кадр — раз в секунду, как и основной.
+    /// На черзі насоса: приходить кожен такт, надсилаємо не частіше за свою
+    /// частоту, незмінний кадр — раз на секунду, як і основний.
     func submit(frame: RenderedFrame) {
         guard let sender else { return }
         let now = CACurrentMediaTime()
         guard now - lastSentAt >= 1.0 / Double(fps) - 0.002 else { return }
-        // Ровный поток: неизменный слайд уходит на той же частоте, а не раз в
-        // секунду. Владелец: «для Wi-Fi тормозит больше основного» — клиент,
-        // не получая кадров, считает поток остановившимся и заново копит
-        // буфер; при 640×360 повторы стоят единицы мегабит.
+        // Рівний потік: незмінний слайд іде на тій самій частоті, а не раз на
+        // секунду. Власник: «для Wi-Fi тормозит больше основного» — клієнт,
+        // не отримуючи кадрів, вважає потік зупиненим і заново накопичує
+        // буфер; за 640×360 повтори коштують одиниці мегабіт.
         let changed = lastIdentity != frame.identity
 
         if scaled?.identity != frame.identity {
@@ -98,7 +98,7 @@ final class NDIWiFiSender: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// На очереди насоса.
+    /// На черзі насоса.
     func submitAudio(planar: Data, channels: Int, samples: Int, sampleRate: Int) {
         _ = sender?.sendAudio(planar: planar, channels: channels, samples: samples, sampleRate: sampleRate)
     }

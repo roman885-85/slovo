@@ -4,16 +4,16 @@ import Combine
 import CoreMedia
 import SlovoCore
 
-/// «Видео по Wi-Fi»: кадр зала и звук уходят в H.264/AAC, режутся на
-/// секундные куски HLS и раздаются нашим HTTP-сервером по адресу `/wifi/`.
+/// «Відео по Wi-Fi»: кадр залу й звук ідуть у H.264/AAC, ріжуться на
+/// секундні шматки HLS і роздаються нашим HTTP-сервером за адресою `/wifi/`.
 ///
-/// Зачем: клиент владельца подключён по Wi-Fi, а полная полоса NDI по Wi-Fi
-/// не проходит. NDI|HX (H.264 внутри NDI) — путь Advanced SDK с
-/// тридцатиминутным ограничением без лицензии, поэтому отдельный канал.
-/// Задержка 2–4 с — цена протокола с кусками; владелец её допустил.
+/// Навіщо: клієнт власника підключений по Wi-Fi, а повна смуга NDI по Wi-Fi
+/// не проходить. NDI|HX (H.264 усередині NDI) — шлях Advanced SDK з
+/// тридцятихвилинним обмеженням без ліцензії, тому окремий канал.
+/// Затримка 2–4 с — ціна протоколу зі шматками; власник її допустив.
 ///
-/// Кадры приходят из насоса NDI (тот же размер и та же частота), звук — с
-/// отвода плеера напрямую, минуя правила NDI.
+/// Кадри приходять із насоса NDI (той самий розмір і та сама частота), звук — з
+/// відводу плеєра напряму, минаючи правила NDI.
 @MainActor
 final class WebVideoOutput: ObservableObject {
     @Published private(set) var isEnabled = false
@@ -62,20 +62,20 @@ final class WebVideoOutput: ObservableObject {
         }
     }
 
-    /// Кадр с очереди насоса NDI.
+    /// Кадр із черги насоса NDI.
     nonisolated func submit(frame: RenderedFrame) {
         encoder.submit(frame: frame)
     }
 
-    /// Звук с отвода плеера (любой поток).
+    /// Звук із відводу плеєра (будь-який потік).
     nonisolated func submitAudio(planar: Data, channels: Int, samples: Int, sampleRate: Int) {
         encoder.submitAudio(planar: planar, channels: channels, samples: samples, sampleRate: sampleRate)
     }
 }
 
-/// Кодер и нарезка: AVAssetWriter в профиле Apple HLS отдаёт куски fMP4 сам,
-/// нам остаётся класть кадры и звук с общими часами и хранить последние
-/// куски для сервера.
+/// Кодер і нарізка: AVAssetWriter у профілі Apple HLS віддає шматки fMP4 сам,
+/// нам лишається класти кадри й звук зі спільним годинником і зберігати останні
+/// шматки для сервера.
 final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unchecked Sendable {
     struct Snapshot {
         var segments = 0
@@ -88,12 +88,12 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
     private let queue = DispatchQueue(label: "slovo.webvideo", qos: .userInitiated)
     private let lock = NSLock()
 
-    // Настройки (под замком).
+    // Налаштування (під замком).
     private var wantedHeight = 720
     private var bitrate = 3_000_000
     private var fps = 25
 
-    // Писатель — только на своей очереди.
+    // Записувач — тільки на своїй черзі.
     private var writer: AVAssetWriter?
     private var video: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
@@ -107,7 +107,7 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
     private var encodedHeight = 0
     private var failure: String?
 
-    // Куски (под замком): сервер читает их с другого потока.
+    // Шматки (під замком): сервер читає їх з іншого потоку.
     private var initData: Data?
     private var segments: [(name: String, data: Data, duration: Double)] = []
     private var nextSequence = 0
@@ -121,7 +121,7 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
         wantedHeight = max(180, height)
         bitrate = max(300, bitrateKbps) * 1000
         lock.unlock()
-        // Новые настройки — новый писатель со следующего кадра.
+        // Нові налаштування — новий записувач з наступного кадру.
         queue.async { [self] in tearDown(resetSegments: true) }
     }
 
@@ -163,12 +163,12 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
         return segments.first { $0.name == name }?.data
     }
 
-    // MARK: - Кадры и звук
+    // MARK: - Кадри й звук
 
     func submit(frame: RenderedFrame) {
         queue.async { [self] in
             let now = CACurrentMediaTime()
-            // Не чаще заявленной частоты: насос NDI тикает и на 60.
+            // Не частіше за заявлену частоту: насос NDI тікає й на 60.
             if started, now - lastVideoAt < 1.0 / Double(fps) - 0.002 { return }
             if writer == nil { setUp(for: frame) }
             guard let writer, let video, let adaptor, writer.status == .writing else { return }
@@ -192,7 +192,7 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
         guard channels > 0, samples > 0, sampleRate > 0 else { return }
         queue.async { [self] in
             guard started, let audio, audio.isReadyForMoreMediaData else { return }
-            // Приводим к 48 кГц стерео: у писателя один формат на весь поток.
+            // Зводимо до 48 кГц стерео: у записувача один формат на весь потік.
             let ratio = Double(Self.audioRate) / Double(sampleRate)
             let outSamples = max(1, Int(Double(samples) * ratio))
             var interleaved = [Float](repeating: 0, count: outSamples * Self.audioChannels)
@@ -212,9 +212,9 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
                     }
                 }
             }
-            // Живой звук не должен убегать вперёд видео больше чем на треть
-            // секунды — иначе куски рассинхронятся; отстающий подтягивается
-            // тишиной в fillSilence.
+            // Живий звук не має втікати вперед відео більше ніж на третину
+            // секунди — інакше шматки розсинхронізуються; відсталий підтягується
+            // тишею в fillSilence.
             let videoClock = CACurrentMediaTime() - startTime
             let audioClock = Double(audioSamplesWritten) / Double(Self.audioRate)
             if audioClock - videoClock > 0.35 { return }
@@ -222,7 +222,7 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
         }
     }
 
-    // MARK: - Внутреннее
+    // MARK: - Внутрішнє
 
     private func setUp(for frame: RenderedFrame) {
         lock.lock()
@@ -344,8 +344,8 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
             }
             return buffer
         }
-        // Другой размер — рисуем через Core Graphics: масштаб и построчный
-        // шаг закрываются одним вызовом.
+        // Інший розмір — малюємо через Core Graphics: масштаб і порядковий
+        // крок закриваються одним викликом.
         guard let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
@@ -357,8 +357,8 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
         return buffer
     }
 
-    /// Пока звука нет (слайды), дорожку заполняет тишина — иначе плеер ждёт
-    /// звук и стоит.
+    /// Поки звуку немає (слайди), доріжку заповнює тиша — інакше плеєр чекає
+    /// звук і стоїть.
     private func fillSilence(upTo videoClock: Double) {
         guard let audio, audio.isReadyForMoreMediaData else { return }
         let audioClock = Double(audioSamplesWritten) / Double(Self.audioRate)
@@ -406,7 +406,7 @@ final class HLSEncoder: NSObject, HLSStreamProvider, AVAssetWriterDelegate, @unc
             let name = "seg\(nextSequence).m4s"
             nextSequence += 1
             segments.append((name, segmentData, duration > 0 ? duration : 1))
-            // Держим шесть последних: клиенту хватает для старта, память не растёт.
+            // Тримаємо шість останніх: клієнтові вистачає для старту, пам'ять не росте.
             if segments.count > 6 { segments.removeFirst(segments.count - 6) }
             let now = CACurrentMediaTime()
             bytesWindow.append((now, segmentData.count))

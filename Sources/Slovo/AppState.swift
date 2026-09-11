@@ -785,7 +785,14 @@ final class AppState: ObservableObject {
         let directory = InterfaceLanguageStore.mergedDirectory(
             originals: dataRoot.appendingPathComponent("Language"))
         let catalog = LanguageCatalog(directory: directory)
-        guard !catalog.languages.isEmpty else { return }
+        guard !catalog.languages.isEmpty else {
+            // Файлів перекладу VisioBible немає (чиста установка «Слова»): мова —
+            // з убудованих, українська за умовчанням. Раніше тут був просто вихід,
+            // наш словник лишався російським, а з ним і весь інтерфейс.
+            let code = Defaults.languageCode ?? "uk"
+            OurWords.language = Self.builtInLanguages.contains { $0.code == code } ? code : "uk"
+            return
+        }
         languageCatalog = catalog
 
         // При перечитуванні тримаємося вже обраної мови, а не тієї, що
@@ -806,8 +813,26 @@ final class AppState: ObservableObject {
         OurWords.applyOverrides(section.mapValues(\.caption))
     }
 
+    /// Мови, які «Слово» знає саме, без файлів перекладу VisioBible: підписи
+    /// автора йдуть через наш словник так само, як і наші власні.
+    static let builtInLanguages: [(code: String, name: String)] = [
+        ("uk", "Українська"), ("ru", "Русский"), ("en", "English"), ("de", "Deutsch"),
+    ]
+
+    /// Код мови інтерфейсу — файлу перекладу або вбудованої.
+    var languageCode: String { language?.code ?? OurWords.language }
+
     func setLanguage(code: String) {
-        guard let picked = languageCatalog?.language(code: code) else { return }
+        guard let picked = languageCatalog?.language(code: code) else {
+            // Файла цієї мови немає, але мова вбудована — перемикаємо наш словник.
+            guard Self.builtInLanguages.contains(where: { $0.code == code }) else { return }
+            language = nil
+            Defaults.languageCode = code
+            OurWords.language = code
+            OurWords.applyOverrides([:])
+            bumpMenu()
+            return
+        }
         language = picked
         Defaults.languageCode = code
         // Наши собственные подписи автор не переводил — их переводим мы сами.

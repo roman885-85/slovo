@@ -17,16 +17,16 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-/// Разговор с программой по её каналу пульта: HTTP и JSON, ничего сверх.
+/// Розмова з програмою її каналом пульта: HTTP і JSON, нічого понад це.
 ///
-/// `HttpURLConnection`, а не сторонняя библиотека: запросов два вида, и
-/// тащить ради них мегабайты чужого кода незачем. Каждый запрос — своё
-/// соединение с `Connection: close`: Android любит подсовывать залежавшийся
-/// сокет из запаса, и первый запрос после паузы тогда молча падает.
+/// `HttpURLConnection`, а не стороння бібліотека: запитів два види, і
+/// тягти заради них мегабайти чужого коду нема чого. Кожен запит — своє
+/// з'єднання з `Connection: close`: Android любить підсовувати залежаний
+/// сокет із запасу, і перший запит після паузи тоді мовчки падає.
 final class Api {
 
-    /// Сервер отверг PIN — отдельная ошибка, чтобы пульт сказал об этом
-    /// словами, а не «нет связи».
+    /// Сервер відхилив PIN — окрема помилка, щоб пульт сказав про це
+    /// словами, а не «немає зв'язку».
     static final class PinRejected extends IOException {
         PinRejected() { super("PIN"); }
     }
@@ -67,34 +67,34 @@ final class Api {
 
     String base() { return base; }
 
-    /// Состояние программы. `since` — номер уже виденного состояния: сервер
-    /// держит ответ, пока не появится новое (долгий опрос), поэтому таймаут
-    /// чтения длиннее, чем время удержания на сервере.
+    /// Стан програми. `since` — номер уже баченого стану: сервер
+    /// тримає відповідь, доки не з'явиться новий (довгий опит), тому тайм-аут
+    /// читання довший, ніж час утримання на сервері.
     State state(long since) throws IOException {
         JSONObject json = request("GET", "/api/state?since=" + since, null, 40_000);
         return State.from(json);
     }
 
-    /// Команда без тела: `next`, `prev`, `show`, `hide`, `black`…
+    /// Команда без тіла: `next`, `prev`, `show`, `hide`, `black`…
     void command(String name) throws IOException {
         request("POST", "/api/" + name, new JSONObject(), 8_000);
     }
 
-    /// Команда с числом: пункт плана, часть песни, страница показа.
+    /// Команда з числом: пункт плану, частина пісні, сторінка показу.
     void command(String name, int index) throws IOException {
         JSONObject body = new JSONObject();
         try { body.put("index", index); } catch (JSONException ignored) { }
         request("POST", "/api/" + name, body, 8_000);
     }
 
-    /// Команда со строкой: место Писания.
+    /// Команда з рядком: місце Писання.
     void command(String name, String text) throws IOException {
         JSONObject body = new JSONObject();
         try { body.put("text", text); } catch (JSONException ignored) { }
         request("POST", "/api/" + name, body, 8_000);
     }
 
-    /// Поиск песен по слову: строки «номер. название».
+    /// Пошук пісень за словом: рядки «номер. назва».
     JSONArray searchSongs(String query) throws IOException {
         JSONObject body = new JSONObject();
         try { body.put("text", query); } catch (JSONException ignored) { }
@@ -185,7 +185,7 @@ final class Api {
         request("POST", "/api/pointer-off", new JSONObject(), 5_000);
     }
 
-    /// Картинка страницы показа — JPEG заданной ширины.
+    /// Картинка сторінки показу — JPEG заданої ширини.
     byte[] pageImage(int index, int width) throws IOException {
         HttpURLConnection connection = open("GET", "/api/page?index=" + index + "&w=" + width, 20_000);
         try {
@@ -198,8 +198,8 @@ final class Api {
         }
     }
 
-    /// Файл с телефона — программе: та откроет его в показе. Ответ — имя,
-    /// число страниц и номер колоды.
+    /// Файл із телефона — програмі: та відкриє його в показі. Відповідь — ім'я,
+    /// кількість сторінок і номер колоди.
     JSONObject upload(String name, byte[] bytes) throws IOException {
         return upload(name, bytes, false);
     }
@@ -213,8 +213,8 @@ final class Api {
             connection.setRequestProperty("Content-Type", "application/octet-stream");
             connection.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream out = connection.getOutputStream()) {
-                // Крупный файл шлём кусками: одним куском поток буферизует всё
-                // и на слабом телефоне падает по памяти.
+                // Великий файл шлемо шматками: одним шматком потік буферизує все
+                // і на слабкому телефоні падає через пам'ять.
                 int offset = 0;
                 while (offset < bytes.length) {
                     int chunk = Math.min(65536, bytes.length - offset);
@@ -226,6 +226,70 @@ final class Api {
         } finally {
             connection.disconnect();
         }
+    }
+
+    /// Файл плану проповіді — лише зберегти в програмі, нічого не відкриваючи.
+    /// Відповідь — ім'я, під яким файл там лежить.
+    String storeFile(String name, byte[] bytes) throws IOException {
+        JSONObject json = post("/api/upload?store=1&name=" + encode(name), bytes, 300_000);
+        return json == null ? name : json.optString("file", name);
+    }
+
+    /// Модуль, якого в програмі немає: програма ставить його собі й вмикає.
+    /// Відповідь — імена модулів, як їх тепер знає програма.
+    JSONObject importModule(String name, byte[] bytes) throws IOException {
+        JSONObject json = post("/api/module-import?name=" + encode(name), bytes, 300_000);
+        return json == null ? new JSONObject() : json;
+    }
+
+    /// План проповіді. Програма відповідає, коли дочитає бібліотеку після
+    /// імпорту модулів, — тому строк читання довгий.
+    JSONObject sermonPlan(JSONObject plan) throws IOException {
+        JSONObject json = request("POST", "/api/sermon-plan", plan, 90_000);
+        return json == null ? new JSONObject() : json;
+    }
+
+    /// Сирі байти: переклад чи пісенник для бібліотеки планшета.
+    byte[] bytes(String path) throws IOException {
+        HttpURLConnection connection = open("GET", path, 180_000);
+        try {
+            int code = connection.getResponseCode();
+            if (code == 401 || code == 403) throw new PinRejected();
+            if (code >= 400) {
+                InputStream error = connection.getErrorStream();
+                String text = error == null ? "" : read(error);
+                String reason = text;
+                try { reason = new JSONObject(text).optString("error", text); } catch (JSONException ignored) { }
+                throw new IOException(reason.isEmpty() ? "HTTP " + code : reason);
+            }
+            try (InputStream stream = connection.getInputStream()) { return readBytes(stream); }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private JSONObject post(String path, byte[] bytes, int readTimeout) throws IOException {
+        HttpURLConnection connection = open("POST", path, readTimeout);
+        try {
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/octet-stream");
+            connection.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream out = connection.getOutputStream()) {
+                int offset = 0;
+                while (offset < bytes.length) {
+                    int chunk = Math.min(65536, bytes.length - offset);
+                    out.write(bytes, offset, chunk);
+                    offset += chunk;
+                }
+            }
+            return finish(connection);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static String encode(String name) throws IOException {
+        return URLEncoder.encode(name, "UTF-8").replace("+", "%20");
     }
 
     private JSONObject request(String method, String path, JSONObject body, int readTimeout) throws IOException {
@@ -260,7 +324,7 @@ final class Api {
         return connection;
     }
 
-    /// Прочитать ответ JSON; ошибки сервера — словами из его же ответа.
+    /// Прочитати відповідь JSON; помилки сервера — словами з його ж відповіді.
     private JSONObject finish(HttpURLConnection connection) throws IOException {
         int code = connection.getResponseCode();
         if (code == 401 || code == 403) throw new PinRejected();

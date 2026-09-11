@@ -2,18 +2,18 @@ import AppKit
 import CoreGraphics
 import SlovoCore
 
-/// Замечания 4 и 5: «предпросмотр путает содержимое / отстаёт на слайд».
+/// Зауваження 4 і 5: «предпросмотр путает содержимое / отстаёт на слайд».
 ///
-/// Снимки тура показали корень: при своём шаблоне предпросмотр рисовал фон
-/// без единой буквы, потому что тексты объектов брал у ЗАЛА (`slideTexts`
-/// из `liveSlide`), а не у подготовленного слайда. При выключенном показе
-/// зал пуст — и стиха в предпросмотре нет; при включённом под подготовленным
-/// стихом стоял текст того, что в зале. Здесь это проверяется по пикселям:
-/// в кадре предпросмотра должен быть текст, и текст именно подготовленного
-/// стиха, а не того, что в зале.
+/// Знімки туру показали корінь: за свого шаблону попередній перегляд малював фон
+/// без жодної літери, бо тексти об'єктів брав у ЗАЛУ (`slideTexts`
+/// з `liveSlide`), а не в підготовленого слайда. За вимкненого показу
+/// зал порожній — і вірша в попередньому перегляді немає; за ввімкненого під
+/// підготовленим віршем стояв текст того, що в залі. Тут це перевіряється за
+/// пікселями: у кадрі попереднього перегляду має бути текст, і текст саме
+/// підготовленого вірша, а не того, що в залі.
 extension Diagnostics {
 
-    /// Доля точек, где две картинки одного размера заметно расходятся.
+    /// Частка точок, де дві картинки одного розміру помітно розходяться.
     static func pixelDifference(_ a: CGImage, _ b: CGImage) -> Double {
         guard a.width == b.width, a.height == b.height,
               let da = a.dataProvider?.data, let db = b.dataProvider?.data,
@@ -51,14 +51,14 @@ extension Diagnostics {
             Signals.shared.send(.mode)
         }
 
-        /// Кадр предпросмотра после того, как очередь дорисовала.
+        /// Кадр попереднього перегляду після того, як черга домалювала.
         func rendered() -> CGImage? {
             bottom.refreshPreview()
             wait(untilTrue: { SlideRenderQueue.shared.isIdle }, seconds: 5)
             wait(untilTrue: { false }, seconds: 0.3)
             return preview.renderedPicture
         }
-        /// Эталон: тот же шаблон с данными текстами, того же размера в точках.
+        /// Еталон: той самий шаблон із даними текстами, того самого розміру в точках.
         func reference(_ texts: ConstructorSample, slide: Slide, like picture: CGImage) -> CGImage? {
             var order = SlideDrawing.Order(slide: slide, style: SlideStyle(), preset: preset, texts: texts,
                                            drawsBackground: true, clock: nil,
@@ -72,7 +72,7 @@ extension Diagnostics {
         var faults: [String] = []
         var lines: [String] = []
 
-        // 1. Показ выключен, стих подготовлен: в предпросмотре должен быть текст.
+        // 1. Показ вимкнено, вірш підготовлено: у попередньому перегляді має бути текст.
         state.isLive = false
         state.mode = .bible
         Signals.shared.send(.mode)
@@ -92,12 +92,12 @@ extension Diagnostics {
         lines.append(String(format: "показ вимкнено: текст займає %.1f %% кадру (%d×%d)", ink * 100, picture.width, picture.height))
         if ink < 0.005 { faults.append("при вимкненому показі передпоказ малює один фон, без вірша") }
 
-        // 2. В зале стих А, в предпросмотре подготовлен стих Б: кадр должен
-        //    быть ближе к Б, чем к А.
-        state.showCurrent()                          // А — в зал
+        // 2. У залі вірш А, у попередньому перегляді підготовлено вірш Б: кадр має
+        //    бути ближчим до Б, ніж до А.
+        state.showCurrent()                          // А — у зал
         wait(untilTrue: { false }, seconds: 0.3)
         let hall = state.liveSlide
-        state.stepVerse(by: 1, live: false)          // Б — только в предпросмотр
+        state.stepVerse(by: 1, live: false)          // Б — тільки в попередній перегляд
         let next = state.slide
         guard !next.isBlank, next.mainText != hall.mainText else {
             return [Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
@@ -118,10 +118,10 @@ extension Diagnostics {
         var checks = [Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
                             detail: (faults.isEmpty ? "" : faults.joined(separator: "; ") + ". ") + lines.joined(separator: "; "))]
 
-        // 3. Смена вкладки: в предпросмотре — только своё (замечание 3). На
-        //    вкладках показа и «Медиа» без кадра — пусто или картинка; на
-        //    «Песнях» и «Тексте» — что угодно, кроме стиха Библии, а пустой
-        //    слайд — без остатков прежнего текста в кадре.
+        // 3. Зміна вкладки: у попередньому перегляді — тільки своє (зауваження 3). На
+        //    вкладках показу й «Медіа» без кадру — порожньо або картинка; на
+        //    «Піснях» і «Тексті» — що завгодно, крім вірша Біблії, а порожній
+        //    слайд — без залишків колишнього тексту в кадрі.
         let verseText = next.mainText
         var tabLines: [String] = []
         var tabFaults: [String] = []

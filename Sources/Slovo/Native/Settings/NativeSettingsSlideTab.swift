@@ -3,12 +3,12 @@ import SlovoCore
 
 /// 6.1.3 «Слайд» — вкладка `TSSlide` на AppKit.
 ///
-/// Здесь только то, что попадает на слайд подписью: вид адреса места Писания
-/// (18) (19) и вид номера песни в её названии (20). Оформление текста задаёт
-/// конструктор слайда, а не эта вкладка.
+/// Тут тільки те, що потрапляє на слайд підписом: вигляд адреси місця Писання
+/// (18) (19) і вигляд номера пісні в її назві (20). Оформлення тексту задає
+/// конструктор слайда, а не ця вкладка.
 ///
-/// Примеры под каждой группой пересчитываются на месте: человек меняет вид
-/// адреса и тут же видит, как он будет выглядеть в зале.
+/// Приклади під кожною групою перераховуються на місці: людина міняє вигляд
+/// адреси й одразу бачить, як вона виглядатиме в залі.
 @MainActor
 final class NativeSettingsSlideTab {
 
@@ -33,9 +33,9 @@ final class NativeSettingsSlideTab {
 
     // MARK: Указка (своя)
 
-    /// Пятно, которым показывают место на слайде: мышью по зеркалу проектора
-    /// или пальцем с телефона. Владелец просил цвет, размер, яркость и выбор
-    /// выводов — сюда они и легли, на вкладку «Слайд».
+    /// Пляма, якою показують місце на слайді: мишею по дзеркалу проєктора
+    /// або пальцем із телефона. Власник просив колір, розмір, яскравість і вибір
+    /// виводів — сюди вони й лягли, на вкладку «Слайд».
     private var pointer: NativeForm.Group {
         let store = store
         let fallback = SlidePointer.Look()
@@ -71,10 +71,10 @@ final class NativeSettingsSlideTab {
         ])
     }
 
-    // MARK: (18) (19) Адрес места Писания
+    // MARK: (18) (19) Адреса місця Писання
 
-    /// Эффект смены слайда: двадцать шаблонов, кривая и длительность.
-    /// Владелец искал их здесь, на вкладке «Слайд», а не в «Дополнительных».
+    /// Ефект зміни слайда: двадцять шаблонів, крива й тривалість.
+    /// Власник шукав їх тут, на вкладці «Слайд», а не в «Додаткових».
     private var transitions: NativeForm.Group {
         NativeForm.Group(OurWords.t("Эффект смены слайда"), [
             NativeForm.Row(OurWords.t("Переход слайда:"), width: 200, [
@@ -180,7 +180,7 @@ final class NativeSettingsSlideTab {
         ])
     }
 
-    /// Длинный или короткий — два положения, как у автора.
+    /// Довгий або короткий — два положення, як в автора.
     private func style(_ path: WritableKeyPath<ProgramOptions, ProgramOptions.AddressStyle>) -> NSView {
         NativeForm.popup([state.vb("TextMessages39", "Длинный"),
                           state.vb("TextMessages40", "Короткий")],
@@ -192,7 +192,7 @@ final class NativeSettingsSlideTab {
                          }), width: 140)
     }
 
-    // MARK: (21) (22) Пример адреса
+    // MARK: (21) (22) Приклад адреси
 
     private var addressExample: NativeForm.Group {
         NativeForm.Group(state.vb("GBBibleAddressExamp", "Пример адреса:"), [
@@ -202,12 +202,12 @@ final class NativeSettingsSlideTab {
         ])
     }
 
-    // MARK: (20) Название песни
+    // MARK: (20) Назва пісні
 
     private var songName: NativeForm.Group {
         NativeForm.Group(state.vb("GBSongName", "Название песни:"), [
-            // Запасные подписи — формулировки автора из SettingsForm, а не
-            // свои: без установленного VisioBible видны именно они.
+            // Запасні підписи — формулювання автора з SettingsForm, а не
+            // свої: без установленої VisioBible видно саме їх.
             NativeForm.Row("", [NativeForm.check(state.vb("CBNumPP", "Номер по порядку"),
                                                  tie(\.songNumberPP))]),
             NativeForm.Row("", [
@@ -226,7 +226,7 @@ final class NativeSettingsSlideTab {
                          [NativeForm.Row("", [songLine])])
     }
 
-    // MARK: - Связки и примеры
+    // MARK: - Зв'язки й приклади
 
     private func tie(_ path: WritableKeyPath<ProgramOptions, Bool>) -> NativeForm.Tie<Bool> {
         NativeForm.Tie(get: { [store] in store.settings.options[keyPath: path] },
@@ -236,8 +236,8 @@ final class NativeSettingsSlideTab {
                        })
     }
 
-    /// Названия книг для примера берём из сообщений автора: TextMessages41…44
-    /// — «Бытие», «Genesis», «Быт.», «Gen.». Свои примеры тут были бы чужими.
+    /// Назви книг для прикладу беремо з повідомлень автора: TextMessages41…44
+    /// — «Бытие», «Genesis», «Быт.», «Gen.». Свої приклади тут були б чужими.
     private func refresh() {
         let option = store.settings.options
         func main(_ style: ProgramOptions.AddressStyle) -> String {

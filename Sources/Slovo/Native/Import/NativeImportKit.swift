@@ -1,22 +1,22 @@
 import AppKit
 
-// Мелочи, из которых сложены страницы мастера импорта (4.2).
+// Дрібниці, з яких складено сторінки майстра імпорту (4.2).
 //
-// Здесь нет ничего умного: подпись, которая умеет переноситься по словам и
-// знает свою высоту, рамка с заголовком и столбик из того и другого. Всё это
-// нужно потому, что страницы мастера — не форма настроек: на них соседствуют
-// абзацы текста, списки и кнопки, и высота абзаца зависит от ширины окна.
-// `NativeForm.Group` считает высоту ряда до раскладки, когда ширины ещё нет,
-// и абзац в две строки у него срезается ровно наполовину.
+// Тут немає нічого розумного: підпис, що вміє переноситися по словах і
+// знає свою висоту, рамка із заголовком і стовпчик з того й іншого. Усе це
+// потрібне тому, що сторінки майстра — не форма налаштувань: на них сусідять
+// абзаци тексту, списки й кнопки, і висота абзацу залежить від ширини вікна.
+// `NativeForm.Group` рахує висоту ряду до розкладки, коли ширини ще немає,
+// і абзац у два рядки в нього зрізається рівно навпіл.
 
-/// Вид, умеющий сказать свою высоту при заданной ширине. Абзац, рамка и
-/// отступ считают её сами — прочих спрашивают об их собственном размере.
+/// Вид, що вміє сказати свою висоту за заданої ширини. Абзац, рамка й
+/// відступ рахують її самі — решту питають про їхній власний розмір.
 @MainActor
 protocol ImportMeasurable: NSView {
     func height(forWidth width: CGFloat) -> CGFloat
 }
 
-/// Подпись, переносимая по словам. Высоту считает по настоящей ширине.
+/// Підпис, що переноситься по словах. Висоту рахує за справжньою шириною.
 @MainActor
 final class ImportText: NSTextField, ImportMeasurable {
 
@@ -27,9 +27,9 @@ final class ImportText: NSTextField, ImportMeasurable {
         isBordered = false
         isSelectable = true
         drawsBackground = false
-        // Перенос по словам включается именно так: одна строка — свойство
-        // ячейки, а не поля, и без `usesSingleLineMode = false` длинный абзац
-        // молча превращается в строку с многоточием.
+        // Перенесення по словах вмикається саме так: один рядок — властивість
+        // комірки, а не поля, і без `usesSingleLineMode = false` довгий абзац
+        // мовчки перетворюється на рядок із трикрапкою.
         usesSingleLineMode = false
         cell?.wraps = true
         cell?.isScrollable = false
@@ -49,8 +49,8 @@ final class ImportText: NSTextField, ImportMeasurable {
     }
 }
 
-/// Строка в одну линию: лишнее срезается многоточием посередине — так пути
-/// остаются узнаваемыми с обоих концов.
+/// Рядок в одну лінію: зайве зрізається трикрапкою посередині — так шляхи
+/// лишаються впізнаваними з обох кінців.
 @MainActor
 func importPathLabel(_ value: String) -> NSTextField {
     let field = NSTextField(labelWithString: value)
@@ -62,7 +62,7 @@ func importPathLabel(_ value: String) -> NSTextField {
     return field
 }
 
-/// Столбик видов сверху вниз. Высоту каждого спрашивает по настоящей ширине.
+/// Стовпчик видів згори донизу. Висоту кожного питає за справжньою шириною.
 @MainActor
 class ImportStack: NSView {
 
@@ -79,7 +79,7 @@ class ImportStack: NSView {
         needsLayout = true
     }
 
-    /// Высота вида при этой ширине.
+    /// Висота виду за цієї ширини.
     func height(of view: NSView, width: CGFloat) -> CGFloat {
         if let measurable = view as? ImportMeasurable { return measurable.height(forWidth: width) }
         if let spacer = view as? ImportSpacer { return spacer.wanted }
@@ -110,7 +110,7 @@ class ImportStack: NSView {
     }
 }
 
-/// Распорка: пустое место заданной высоты.
+/// Розпірка: порожнє місце заданої висоти.
 @MainActor
 final class ImportSpacer: NSView {
     let wanted: CGFloat
@@ -121,8 +121,8 @@ final class ImportSpacer: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
 }
 
-/// Рамка с подписью — `TGroupBox` оригинала. Своя, а не `NativeForm.Group`:
-/// внутри может стоять абзац, и высота считается по ширине.
+/// Рамка з підписом — `TGroupBox` оригіналу. Своя, а не `NativeForm.Group`:
+/// усередині може стояти абзац, і висота рахується за шириною.
 @MainActor
 final class ImportBox: NSView, ImportMeasurable {
 
@@ -161,7 +161,7 @@ final class ImportBox: NSView, ImportMeasurable {
     }
 }
 
-/// Строка «подпись — значение» для сводки.
+/// Рядок «підпис — значення» для зведення.
 @MainActor
 final class ImportPair: NSView {
 
@@ -189,8 +189,8 @@ final class ImportPair: NSView {
     }
 }
 
-/// Столбик в прокрутке. Мастер показывает и опись на сотню строк, и сводку
-/// после переноса — обе выше окна.
+/// Стовпчик у прокрутці. Майстер показує і опис на сотню рядків, і зведення
+/// після перенесення — обидва вищі за вікно.
 @MainActor
 final class ImportScroll: NSView {
 
@@ -219,7 +219,7 @@ final class ImportScroll: NSView {
         body.needsLayout = true
     }
 
-    /// Пересчитать высоту содержимого — после каждой смены строк.
+    /// Перерахувати висоту вмісту — після кожної зміни рядків.
     func refreshHeight() {
         needsLayout = true
         layoutSubtreeIfNeeded()

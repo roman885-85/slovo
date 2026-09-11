@@ -2,11 +2,11 @@ import AppKit
 import UniformTypeIdentifiers
 import SlovoCore
 
-// Страницы мастера импорта: 4.2 вводная, 4.2.1 выбор версии,
-// 4.2.2–4.2.5 списки, 4.2.6 завершение. Порядок, подписи и ключи перевода —
-// авторские; своими словами написано только то, чего у автора нет.
+// Сторінки майстра імпорту: 4.2 вступна, 4.2.1 вибір версії,
+// 4.2.2–4.2.5 списки, 4.2.6 завершення. Порядок, підписи й ключі перекладу —
+// авторські; своїми словами написано тільки те, чого в автора немає.
 
-// MARK: - 4.2 Вводная
+// MARK: - 4.2 Вступна
 
 @MainActor
 final class ImportIntroPage: NSView, ImportPageRefreshing {
@@ -65,7 +65,7 @@ final class ImportIntroPage: NSView, ImportPageRefreshing {
     }
 }
 
-/// Ряд кнопок, прижатых вправо.
+/// Ряд кнопок, притиснутих праворуч.
 @MainActor
 final class ImportRight: NSView {
     private let views: [NSView]
@@ -88,7 +88,7 @@ final class ImportRight: NSView {
     }
 }
 
-// MARK: - 4.2.1 Выбор версии
+// MARK: - 4.2.1 Вибір версії
 
 @MainActor
 final class ImportVersionsPage: NSView, ImportPageRefreshing,
@@ -108,9 +108,9 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
     private let stopButton: NSButton
     private let spinner = NSProgressIndicator()
     private let searchStatus = NSTextField(labelWithString: "")
-    /// Кого показывали в прошлый раз: список приходит из фонового обхода
-    /// дисков десятками, и перетряхивать таблицу на каждую перерисовку —
-    /// значит терять выделение под руками у человека.
+    /// Кого показували минулого разу: список приходить із фонового обходу
+    /// дисків десятками, і перетрушувати таблицю на кожне перемальовування —
+    /// означає губити виділення під руками в людини.
     private var shownIDs: [String] = []
 
     init(state: AppState, model: ImportWizardModel) {
@@ -196,7 +196,7 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         addSubview(scroll)
     }
 
-    // MARK: Перерисовка
+    // MARK: Перемальовування
 
     func refreshPage() {
         let ids = model.sources.map(\.id)
@@ -249,10 +249,10 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         empty.frame = NSRect(x: 0, y: tableTop + tableHeight / 2 - 9, width: width, height: 18)
     }
 
-    /// Сколько строк показано на самом деле — для самопроверки.
+    /// Скільки рядків показано насправді — для самоперевірки.
     var shownRows: Int { table.numberOfRows }
 
-    // MARK: Таблица
+    // MARK: Таблиця
 
     func numberOfRows(in tableView: NSTableView) -> Int { model.sources.count }
 
@@ -274,9 +274,9 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         return field
     }
 
-    /// Откуда взялся источник. Значков в оригинале нет — пишем словом, чтобы
-    /// в списке было видно, что перед тобой: установленная копия, папка или
-    /// архив.
+    /// Звідки взялося джерело. Значків в оригіналі немає — пишемо словом, щоб
+    /// у списку було видно, що перед тобою: установлена копія, тека чи
+    /// архів.
     private func mark(for kind: ImportSource.Kind) -> String {
         switch kind {
         case .installed: return "▣"
@@ -291,9 +291,9 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         model.selectedSourceID = model.sources[row].id
     }
 
-    /// OpenDialogSelHandly — «Выбрать папку с предыдущей версией». Кроме папки
-    /// принимаем архив и отдельный файл модуля: мастер по заданию работает не
-    /// только с прошлой версией программы.
+    /// OpenDialogSelHandly — «Выбрать папку с предыдущей версией». Крім теки
+    /// приймаємо архів і окремий файл модуля: майстер за завданням працює не
+    /// тільки з минулою версією програми.
     private func choose() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true

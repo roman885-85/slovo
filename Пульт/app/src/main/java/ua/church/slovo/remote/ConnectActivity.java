@@ -40,6 +40,21 @@ public final class ConnectActivity extends Activity {
 
         findViewById(R.id.connect).setOnClickListener(v -> connectManually());
         findViewById(R.id.rescan).setOnClickListener(v -> restartDiscovery());
+
+        // Планшет: план проповіді складають і без підключення, тож вхід до
+        // нього є й тут. У пульта для телефона екрана плану немає — рядок
+        // `sermon_activity` у нього порожній, і кнопки не буде.
+        String sermon = getString(R.string.sermon_activity);
+        if (!sermon.isEmpty() && foundList.getParent() instanceof LinearLayout) {
+            Button button = new Button(this, null, 0, R.style.SmallButton);
+            button.setText(R.string.sermon_open);
+            button.setOnClickListener(v -> {
+                Intent intent = new Intent();
+                intent.setClassName(this, sermon);
+                startActivity(intent);
+            });
+            ((LinearLayout) foundList.getParent()).addView(button, 0);
+        }
     }
 
     @Override

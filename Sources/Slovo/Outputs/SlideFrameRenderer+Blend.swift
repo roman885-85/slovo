@@ -4,16 +4,16 @@ import SlovoCore
 
 extension SlideFrameRenderer {
 
-    /// Промежуточный кадр перехода: старая картинка перетекает в новую.
+    /// Проміжний кадр переходу: стара картинка перетікає в нову.
     ///
-    /// В сеть уходит поток кадров, а не живой вид, поэтому переход здесь
-    /// приходится рисовать самим: на каждый такт таймера мы складываем две
-    /// картинки в одну по нужной доле пути. Без этого «как сменяется слайд»
-    /// работало в зале и в предпросмотре, а на микшере текст подменялся
-    /// рывком — что и было видно.
+    /// У мережу йде потік кадрів, а не живий вид, тому перехід тут
+    /// доводиться малювати самим: на кожен такт таймера ми складаємо дві
+    /// картинки в одну за потрібною часткою шляху. Без цього «як змінюється слайд»
+    /// працювало в залі й у попередньому перегляді, а на мікшері текст підмінявся
+    /// ривком — що й було видно.
     ///
-    /// `nonisolated`: складывание идёт на очереди канала, в главном потоке
-    /// ему делать нечего.
+    /// `nonisolated`: складання йде на черзі каналу, у головному потоці
+    /// йому робити нічого.
     nonisolated static func blend(from: CGImage?, to: CGImage,
                                   progress: Double,
                                   transition: SlideStyle.Transition,
@@ -38,7 +38,7 @@ extension SlideFrameRenderer {
             let whole = CGRect(x: 0, y: 0, width: width, height: height)
             context.clear(whole)
 
-            // Уходящий слой — там, где он ещё виден.
+            // Шар, що йде, — там, де його ще видно.
             if let from {
                 context.saveGState()
                 context.setAlpha(leaveOpacity(transition, step))
@@ -46,7 +46,7 @@ extension SlideFrameRenderer {
                 context.draw(from, in: whole)
                 context.restoreGState()
             }
-            // Приходящий: у шторок — только открытая часть.
+            // Шар, що приходить: у шторок — тільки відкрита частина.
             context.saveGState()
             if let clip = enterClip(transition, step, size: whole.size) { context.clip(to: clip) }
             context.setAlpha(enterOpacity(transition, step))
@@ -88,17 +88,17 @@ extension SlideFrameRenderer {
                              hasTransparency: transparent)
     }
 
-    // MARK: Как именно расходятся два слоя
+    // MARK: Як саме розходяться два шари
 
     private nonisolated static func enterOpacity(_ transition: SlideStyle.Transition, _ rawStep: Double) -> CGFloat {
-        // Пружина перелетает за 1 — для прозрачности это уже «полностью».
+        // Пружина перелітає за 1 — для прозорості це вже «повністю».
         let step = min(1, max(0, rawStep))
         switch transition {
         case .none:                 return 1
         case .fadeBlack:            return CGFloat(max(0, step * 2 - 1))
         case .flip:                 return step >= 0.5 ? 1 : 0
         case .fade, .zoom, .zoomOut, .spin, .blur, .bounce: return CGFloat(step)
-        default:                    return 1   // сдвиги, накрытия, шторки — без прозрачности
+        default:                    return 1   // зсуви, накриття, шторки — без прозорості
         }
     }
 
@@ -113,7 +113,7 @@ extension SlideFrameRenderer {
         }
     }
 
-    /// Открытая часть кадра для шторок (ось Y у CoreGraphics — снизу вверх).
+    /// Відкрита частина кадру для шторок (вісь Y у CoreGraphics — знизу вгору).
     private nonisolated static func enterClip(_ transition: SlideStyle.Transition,
                                               _ step: Double, size: CGSize) -> CGRect? {
         let s = CGFloat(min(1, max(0, step)))
@@ -135,7 +135,7 @@ extension SlideFrameRenderer {
             return .identity
         case .slideLeft, .coverLeft:   return CGAffineTransform(translationX: w * (1 - s), y: 0)
         case .slideRight, .coverRight: return CGAffineTransform(translationX: -w * (1 - s), y: 0)
-        // Ось Y снизу вверх: «вверх» на экране — прибавить к y.
+        // Вісь Y знизу вгору: «вгору» на екрані — додати до y.
         case .slideUp, .coverUp:       return CGAffineTransform(translationX: 0, y: -h * (1 - s))
         case .slideDown, .coverDown:   return CGAffineTransform(translationX: 0, y: h * (1 - s))
         case .zoom:                    return zoom(0.92 + 0.08 * s, size: size)
@@ -143,7 +143,7 @@ extension SlideFrameRenderer {
         case .spin:
             return spin(scale: 0.85 + 0.15 * s, angle: -(.pi / 6) * (1 - s), size: size)
         case .flip:
-            // Вторая половина: разворачивается по горизонтали из нуля.
+            // Друга половина: розгортається по горизонталі з нуля.
             let open = max(0.001, s * 2 - 1)
             return CGAffineTransform(translationX: w / 2, y: 0).scaledBy(x: open, y: 1).translatedBy(x: -w / 2, y: 0)
         case .bounce:                  return CGAffineTransform(translationX: 0, y: h * 0.35 * (1 - s))
@@ -172,7 +172,7 @@ extension SlideFrameRenderer {
         }
     }
 
-    /// Поворот с масштабом — тоже от середины кадра.
+    /// Поворот із масштабом — теж від середини кадру.
     private nonisolated static func spin(scale: CGFloat, angle: CGFloat, size: CGSize) -> CGAffineTransform {
         CGAffineTransform(translationX: size.width / 2, y: size.height / 2)
             .rotated(by: angle)
@@ -180,14 +180,14 @@ extension SlideFrameRenderer {
             .translatedBy(x: -size.width / 2, y: -size.height / 2)
     }
 
-    /// Увеличение от середины кадра, а не от угла.
+    /// Збільшення від середини кадру, а не від кута.
     private nonisolated static func zoom(_ scale: CGFloat, size: CGSize) -> CGAffineTransform {
         CGAffineTransform(translationX: size.width / 2, y: size.height / 2)
             .scaledBy(x: scale, y: scale)
             .translatedBy(x: -size.width / 2, y: -size.height / 2)
     }
 
-    /// Делит цвет обратно на альфу — та же работа, что в `pack`.
+    /// Ділить колір назад на альфу — та сама робота, що в `pack`.
     private nonisolated static func unpremultiplyBytes(_ bytes: UnsafeMutablePointer<UInt8>, count: Int) {
         var index = 0
         while index + 3 < count {
