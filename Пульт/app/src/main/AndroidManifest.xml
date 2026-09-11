@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Пульт для «Слова»: управление показом с телефона по Wi-Fi.
+
+  Никаких сторонних библиотек — только то, что есть в самом Android. Поэтому
+  пакет собирается без Gradle, одним сценарием build.sh, и не зависит от
+  версий чужого кода. Открытый трафик разрешён: программа стоит в той же
+  локальной сети, и сертификатов у неё нет — HTTP по адресу вида
+  192.168.x.x — это единственный способ до неё достучаться.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ua.church.slovo.remote"
+    android:versionCode="7"
+    android:versionName="1.6">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Bonjour и UDP-рассылка: без блокировки многоадресных пакетов
+         телефон не услышит ни ответа программы, ни её объявления. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:theme="@style/Theme.Slovo"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="true">
+
+        <activity
+            android:name=".RemoteActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ConnectActivity"
+            android:exported="false"
+            android:label="@string/connect_title"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

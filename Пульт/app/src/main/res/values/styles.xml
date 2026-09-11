@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Темна тема: пультом користуються в затемненому залі, і білий екран
+     сліпить оператора та людей поруч. -->
+<resources>
+    <!-- Без панели заголовка окна: на Android 15+ содержимое окна лежит под
+         строкой состояния и под этой панелью (edge-to-edge), и верхние
+         надписи пульта уходили под них. Шапка теперь своя, внутри разметки,
+         а отступы под системные полосы даёт fitsSystemWindows. -->
+    <style name="Theme.Slovo" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#1E2A3A</item>
+        <item name="android:colorPrimaryDark">#121B26</item>
+        <item name="android:colorAccent">#4C8DFF</item>
+        <item name="android:windowBackground">#101418</item>
+        <!-- Android 15 при targetSdk 35+ насильно растягивает содержимое под
+             строку состояния и панель заголовка (edge-to-edge): верхние
+             надписи пульта уходили под них и были не видны. Отказываемся —
+             у пульта своя простая раскладка сверху вниз. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:textColorPrimary">#F2F4F7</item>
+        <item name="android:textColorSecondary">#9AA4B2</item>
+    </style>
+
+    <style name="BigButton" parent="@android:style/Widget.Material.Button">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">64dp</item>
+        <item name="android:layout_margin">4dp</item>
+    </style>
+
+    <style name="SmallButton" parent="@android:style/Widget.Material.Button">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:layout_margin">3dp</item>
+    </style>
+
+    <style name="TabButton" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">44dp</item>
+    </style>
+</resources>

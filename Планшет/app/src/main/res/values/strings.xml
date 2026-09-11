@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Рядки планшета. Спільні рядки (з'єднання, Біблія, указка) — з пульта
+     для телефона; тут лише свої й ті, що в планшета звучать інакше. -->
+<resources>
+    <string name="app_name">Планшет Слова</string>
+    <!-- Куди веде вікно з'єднання, коли комп'ютер знайдено. -->
+    <string name="work_activity" translatable="false">ua.church.slovo.remote.TabletActivity</string>
+
+    <string name="t_tab_bible">Біблія</string>
+    <string name="t_tab_songs">Пісні</string>
+    <string name="t_tab_presentation">Презентація</string>
+    <string name="t_tab_media">Медіа</string>
+    <string name="t_tab_pictures">Зображення</string>
+    <string name="t_tab_screen">Екран</string>
+    <string name="t_tab_text">Текст</string>
+
+    <string name="t_plan">План</string>
+    <string name="t_history">Історія</string>
+    <string name="t_plan_add">+ Поточне</string>
+    <string name="t_up">↑</string>
+    <string name="t_down">↓</string>
+    <string name="t_remove">✕</string>
+    <string name="t_history_empty">Історія порожня — сюди потрапляє все, що показано в залі</string>
+    <string name="t_plan_empty">План порожній. «+ Поточне» кладе сюди те, що вибрано</string>
+
+    <string name="t_blank">Порожній</string>
+    <string name="t_hall">Зал</string>
+    <string name="t_hall_video">У залі відео: %1$s</string>
+    <string name="t_hall_black">Зал затемнено</string>
+    <string name="t_hall_empty">У залі нічого не показано</string>
+    <string name="t_preview">Передпоказ: %1$s</string>
+
+    <string name="t_search_hint">Пошук за словами</string>
+    <string name="t_search_go">Знайти</string>
+    <string name="t_search_close">До книг</string>
+    <string name="t_searching">Шукаю «%1$s»…</string>
+    <string name="t_search_none">За «%1$s» нічого не знайдено</string>
+    <string name="t_search_found">«%1$s»: %2$d. Дотик — у передпоказ, довгий дотик — у зал</string>
+
+    <string name="t_songbook">Пісенник</string>
+    <string name="t_song_filter">Номер або слова назви</string>
+    <string name="t_parts">Частини пісні — дотик виводить у зал</string>
+    <string name="t_songs_loading">Завантажую пісні…</string>
+
+    <string name="t_media_empty">Список плеєра порожній — файли додають на комп\'ютері</string>
+    <string name="t_play">▶</string>
+    <string name="t_pause">⏸</string>
+    <string name="t_stop">⏹</string>
+    <string name="t_to_begin">⏮</string>
+    <string name="t_mute">Без звуку</string>
+    <string name="t_to_screen">На екран</string>
+    <string name="t_repeat">Повтор</string>
+    <string name="t_volume">Гучність</string>
+    <string name="t_nothing_open">Нічого не відкрито</string>
+
+    <string name="t_pictures_empty">Картинок немає. «Фото з планшета» додає їх сюди</string>
+    <string name="t_add_photos">Фото з планшета</string>
+    <string name="t_add_file">Файл з планшета</string>
+
+    <string name="t_screen_refresh">Оновити</string>
+    <string name="t_screen_stop">Зупинити показ</string>
+    <string name="t_screen_empty">Джерел немає. Можливо, програмі потрібен дозвіл на запис екрана: Системні параметри → Приватність і безпека → Запис екрана</string>
+    <string name="t_screen_running">Показ іде: %1$s</string>
+
+    <string name="t_text_title_hint">Заголовок (необов\'язково)</string>
+    <string name="t_text_body_hint">Текст оголошення</string>
+    <string name="t_text_preview">У передпоказ</string>
+    <string name="t_text_show">Показати в залі</string>
+    <string name="t_text_pages">Сторінка %1$d з %2$d</string>
+
+    <!-- Порожній показ: на планшеті кнопка зветься інакше, ніж на телефоні. -->
+    <string name="show_empty">Презентацію не відкрито. «Файл з планшета» відкриє PDF або PowerPoint із планшета, а на комп\'ютері — вкладка «Презентація»</string>
+    <string name="t_decks">Презентації</string>
+    <string name="t_pages">Слайди</string>
+</resources>

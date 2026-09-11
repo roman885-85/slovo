@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Значок: пульт на тёмном поле — скруглённый прямоугольник и две
+     стрелки. Векторный: один файл на все плотности экрана. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#1E2A3A"
+        android:pathData="M18,18 h72 a12,12 0 0 1 12,12 v48 a12,12 0 0 1 -12,12 h-72 a12,12 0 0 1 -12,-12 v-48 a12,12 0 0 1 12,-12 z" />
+    <path android:fillColor="#4C8DFF"
+        android:pathData="M30,42 v24 a4,4 0 0 0 4,4 h40 a4,4 0 0 0 4,-4 v-24 a4,4 0 0 0 -4,-4 h-40 a4,4 0 0 0 -4,4 z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M46,46 l-9,8 9,8 z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M62,46 l9,8 -9,8 z" />
+</vector>
