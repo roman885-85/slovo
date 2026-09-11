@@ -549,6 +549,11 @@ final class AppState: ObservableObject {
         }
         secondaryModuleIDs = secondaryModuleIDs.filter { loaded.module(withIdentifier: $0) != nil }
         isLoadingLibrary = false
+        // Хід пошуку — одразу, у фоні. Перший пошук читає весь переклад
+        // (13 с на вільному комп'ютері, під навантаженням понад 20), а з
+        // планшета поля програми ніхто не торкається, і ці секунди падали
+        // на перший же запит: планшет писав «нічого не знайдено».
+        DeskModel.shared.prepareSearch(state: self)
 
         // Перечитали библиотеку по ходу работы (добавили модуль в «Параметрах»)
         // — полоса переводов встаёт по списку настроек тут же. При первом

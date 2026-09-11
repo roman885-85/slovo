@@ -35,6 +35,7 @@
     <string name="t_search_close">До книг</string>
     <string name="t_searching">Шукаю «%1$s»…</string>
     <string name="t_search_none">За «%1$s» нічого не знайдено</string>
+    <string name="t_search_slow">Програма ще шукає «%1$s» — спробуйте ще раз за хвилину</string>
     <string name="t_search_found">«%1$s»: %2$d. Дотик — у передпоказ, довгий дотик — у зал</string>
 
     <string name="t_songbook">Пісенник</string>

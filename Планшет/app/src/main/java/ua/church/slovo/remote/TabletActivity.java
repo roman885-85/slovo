@@ -1113,8 +1113,15 @@ public final class TabletActivity extends Activity {
     private void pollSearch(String query, int attempt) {
         read("/api/search", json -> {
             boolean searching = json.optBoolean("searching", false);
-            if (searching && attempt < 50) {
+            // Поки програма шукає — чекаємо до хвилини: перший пошук на
+            // зайнятому комп'ютері буває довшим за 20 с, і тоді тут писало
+            // «нічого не знайдено», хоча пошук ще йшов.
+            if (searching && attempt < 150) {
                 main.postDelayed(() -> pollSearch(query, attempt + 1), 400);
+                return;
+            }
+            if (searching) {
+                searchNote.setText(getString(R.string.t_search_slow, query));
                 return;
             }
             JSONArray hits = json.optJSONArray("hits");

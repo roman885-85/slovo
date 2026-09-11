@@ -632,7 +632,9 @@ async function runSearch() {
   $("searchBox").classList.add("shown"); $("bibleBox").classList.remove("shown");
   $("searchList").innerHTML = ""; $("searchNote").textContent = "Шукаю «" + query + "»…";
   await send("bible-search", { text: query });
-  for (let attempt = 0; attempt < 50; attempt++) {
+  // Поки програма шукає — чекаємо (на зайнятому комп'ютері перший пошук
+  // буває довшим за 20 с); «нічого не знайдено» — лише коли вона закінчила.
+  for (let attempt = 0; attempt < 150; attempt++) {
     const json = await api("/api/search").catch(() => ({}));
     if (!json.searching) {
       const hits = json.hits || [];
@@ -644,6 +646,7 @@ async function runSearch() {
     }
     await new Promise(r => setTimeout(r, 400));
   }
+  $("searchNote").textContent = "Програма ще шукає «" + query + "» — спробуйте ще раз за хвилину";
 }
 $("searchGo").onclick = runSearch;
 $("searchText").onkeydown = event => { if (event.key === "Enter") runSearch(); };

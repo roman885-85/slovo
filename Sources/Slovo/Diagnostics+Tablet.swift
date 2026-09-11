@@ -171,10 +171,15 @@ extension Diagnostics {
                 .first { $0.count >= 5 }.map(String.init)
             if let word {
                 let asked = json("POST", "/api/bible-search", ["text": word])
-                wait(untilTrue: { !desk.isSearching && !desk.hits.isEmpty }, seconds: 20)
+                // Чекаємо, доки програма справді закінчить, а не 20 с: перший
+                // пошук у свіжому процесі читав увесь переклад (13 с на вільному
+                // комп'ютері), і під навантаженням перевірка бачила «знайдено 0».
+                let started = Date()
+                wait(untilTrue: { !desk.isSearching }, seconds: 90)
+                let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
                 let found = rows(json("GET", "/api/search").json["hits"])
                 var ok = asked.code == 200 && !found.isEmpty
-                var detail = "«\(word)»: знайдено \(found.count)"
+                var detail = "«\(word)»: знайдено \(found.count) за \(seconds) с"
                 if ok, let first = desk.hits.first {
                     let picked = json("POST", "/api/search-hit", ["index": 0])
                     ok = picked.code == 200 && state.selectedChapterNumber == first.chapter
