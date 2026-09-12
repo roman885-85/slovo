@@ -121,7 +121,7 @@ final class SlideCanvasView: NSView {
         } else {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            layer.contents = image
+            SlideTransitionAnimator.settle(layer, contents: image)
             CATransaction.commit()
         }
     }

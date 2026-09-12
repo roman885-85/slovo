@@ -70,6 +70,16 @@
                 android:id="@+id/pointerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+            <!-- Власник: «в пульт добавить кнопку исходного состояния после
+                 зума». Видна лише тоді, коли наближення ввімкнене. -->
+            <Button
+                android:id="@+id/zoomBack"
+                android:text="@string/zoom_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="6dp"
+                android:visibility="gone" />
         </FrameLayout>
         <LinearLayout
             android:orientation="horizontal"

@@ -15,9 +15,11 @@ final class NativeBibleWorkspace {
     private weak var state: AppState?
     private var columns: NativeColumnsView?
     private var panes: [NativeLabelledPane] = []
-    private var bookColumn: NativeBookColumn?
-    private var chapterColumn: NativeChapterColumn?
-    private var verseColumn: NativeVerseColumn?
+    /// Стовпці. Не `private`: самоперевірка міряє, чи вміщається в рядок
+    /// текст після зміни вигляду списків і кегля.
+    private(set) var bookColumn: NativeBookColumn?
+    private(set) var chapterColumn: NativeChapterColumn?
+    private(set) var verseColumn: NativeVerseColumn?
     /// Смуга перекладів (7). Не `private`: у режимі пісень на її місці
     /// стають закладки Пісенників, і просить про це пісенник.
     private(set) var strip: NativeTranslationStripView?

@@ -7,7 +7,11 @@ import SlovoCore
 /// мониторы (12) со своими ручными настройками, маркер конца песни (13),
 /// три переключателя (14) (15) (16) и номера стихов (17).
 @MainActor
-final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
+final class NativeSettingsAdvancedTab: NSObject, NativeListSource, NativeSettingsRows {
+
+    /// Перечитати свій список — після скидання або ввезення налаштувань.
+    func reloadRows() { list.reload() }
+
 
     private let state: AppState
     private let store: SettingsStore
@@ -38,7 +42,7 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
 
     private var timings: NativeForm.Group {
         NativeForm.Group("", [
-            NativeForm.Row(state.vb("Label16", "Время плавной смены слайдов:"), width: 280, [
+            NativeForm.Row(state.vb("Label16", OurWords.t("Время плавной смены слайдов:")), width: 280, [
                 NativeForm.number(intTie(\.crossfadeTime), range: 0...10000),
                 NativeForm.label(state.vb("Label17", "мс")),
             ]),
@@ -69,7 +73,7 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
                                      store.settings.options.slideTransitionEasing = all[index].rawValue
                                  }), width: 160),
             ]),
-            NativeForm.Row(state.vb("Label18", "Время скрытия слайда:"), width: 280, [
+            NativeForm.Row(state.vb("Label18", OurWords.t("Время скрытия слайда:")), width: 280, [
                 NativeForm.number(intTie(\.hideSlideTime), range: 0...10000),
                 NativeForm.label(state.vb("Label19", "мс")),
             ]),
@@ -111,7 +115,7 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
             SettingsMonitorFlash.show(left: monitor.x, top: monitor.y,
                                       width: monitor.width, height: monitor.height)
         })
-        return NativeForm.Group(state.vb("Label30", "Дублирование слайда на мониторы:"),
+        return NativeForm.Group(state.vb("Label30", OurWords.t("Дублирование слайда на мониторы:")),
                                 [NativeForm.Row("", stretch: true, [box, buttons])])
     }
 
@@ -125,7 +129,7 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
             NativeForm.number(coordinate(\.width), range: 1...20000),
             NativeForm.number(coordinate(\.height), range: 1...20000),
         ]
-        return NativeForm.Group(state.vb("GB1", "Координаты монитора:"), [
+        return NativeForm.Group(state.vb("GB1", OurWords.t("Координаты монитора:")), [
             NativeForm.Row("", [
                 NativeForm.label(state.vb("Label36", "X =")), fields[0],
                 NativeForm.label(state.vb("Label37", "Y =")), fields[1],
@@ -139,7 +143,7 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource {
 
     private var marker: NativeForm.Group {
         NativeForm.Group("", [
-            NativeForm.Row(state.vb("Label46", "Выводить в конце последней части Песни:"), width: 300, [
+            NativeForm.Row(state.vb("Label46", OurWords.t("Выводить в конце последней части Песни:")), width: 300, [
                 NativeForm.text(NativeForm.Tie(get: { [store] in store.settings.options.songsEndMarker },
                                                set: { [store] in store.settings.options.songsEndMarker = $0 }),
                                 width: 90),

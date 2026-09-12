@@ -12,7 +12,11 @@ import SlovoCore
 /// человек знал порт и имя файла, а собирать из них ссылку — и догадываться
 /// про проценты вместо кириллицы — приходилось самому.
 @MainActor
-final class NativeSettingsRemoteTab: NSObject, NativeListSource {
+final class NativeSettingsRemoteTab: NSObject, NativeListSource, NativeSettingsRows {
+
+    /// Перечитати свій список — після скидання або ввезення налаштувань.
+    func reloadRows() { list.reload() }
+
 
     private let state: AppState
     private let store: SettingsStore

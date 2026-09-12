@@ -2153,7 +2153,7 @@ enum Diagnostics {
     /// один её раздел — и сразу. Имена короткие и русские, как в отчёте.
     static let namedSections: [(name: String, run: @MainActor (AppState) -> [Check])] = [
         ("тур", { tourSection(state: $0) }),
-        ("показ", { showTabsSection(state: $0) }),
+        ("показ", { showTabsSection(state: $0) + projectorScreenNoticeSection(state: $0) }),
         ("мова", { languageSection(state: $0) + russianLeftoversSection(state: $0)
                     + unlabeledButtonsSection(state: $0) }),
         ("параметри", { settingsTabsSection(state: $0) }),
@@ -2164,6 +2164,8 @@ enum Diagnostics {
         ("низ", { nativeBottomSection(state: $0) }),
         ("модулі", { modulesRosterSection(state: $0) }),
         ("модулі-вікно", { modulesWindowSection(state: $0) }),
+        ("налаштування-служба", { settingsServiceSection(state: $0) }),
+        ("вигляд-списків", { listStylesSection(state: $0) }),
         ("повзунки", { webKnobSection(state: $0) }),
         ("проектор-тип", { projectorTypeSwitchSection(state: $0) }),
         ("кольори-конструктора", { constructorColoursSection(state: $0) }),

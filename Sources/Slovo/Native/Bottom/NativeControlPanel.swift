@@ -202,9 +202,9 @@ final class NativeControlPanel: NSView {
 
         // Кнопка зобов'язана робити рівно те саме, що пункт меню «Показати слайд»
         // і F5: підготовлений вірш іде в зал і пишеться в «Історію».
-        showButton = NativeBottomLabelButton(symbol: "eye", title: "Показать", hint: "Показать слайд",
+        showButton = NativeBottomLabelButton(symbol: "eye", title: OurWords.t("Показать"), hint: OurWords.t("Показать слайд"),
                                        prominent: true) { [weak self] in self?.state.showCurrent() }
-        hideButton = NativeBottomLabelButton(symbol: "eye.slash", title: "Скрыть", hint: "Скрыть слайд",
+        hideButton = NativeBottomLabelButton(symbol: "eye.slash", title: OurWords.t("Скрыть"), hint: OurWords.t("Скрыть слайд"),
                                        prominent: false) { [weak self] in self?.state.isLive = false }
         addSubview(showButton)
         addSubview(hideButton)
@@ -259,7 +259,7 @@ final class NativeControlPanel: NSView {
                                hint: state.hint("PngSBSelCommonBg", default: "Общий фон"),
                                dimmed: !state.showsCommonBackground)
         showButton.apply(title: state.text("SBShowOutScr", default: "Показать"),
-                         hint: state.hint("SBShowOutScr", default: "Показать слайд"))
+                         hint: state.hint("SBShowOutScr", default: OurWords.t("Показать слайд")))
         hideButton.apply(title: state.text("SBHideOutScr", default: "Скрыть"),
                          hint: state.hint("SBHideOutScr", default: "Скрыть слайд"))
         refreshLive()

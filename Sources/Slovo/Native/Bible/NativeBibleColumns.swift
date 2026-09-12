@@ -11,7 +11,7 @@ import SlovoCore
 final class NativeBookClassColumn: NSView {
 
     private let rows = NativeBookClassRows()
-    private let list = NativeList(mode: .list, metrics: NativeBookClassColumn.metrics,
+    private(set) var list = NativeList(mode: .list, metrics: NativeBookClassColumn.metrics,
                                   heights: .uniform(20), fontSize: 12)
     private weak var state: AppState?
     private var tokens: [Signals.Token] = []
@@ -81,6 +81,9 @@ final class NativeBookColumn: NSView {
     private let separator = NativeHairline()
     private let rows = NativeBookRows()
     private let list: NativeList
+
+    /// Список — самоперевірці: вона міряє, чи вміщається рядок у свою висоту.
+    var bookList: NativeList { list }
     let quick = NativeQuickField()
     private weak var state: AppState?
     private var tokens: [Signals.Token] = []
@@ -292,6 +295,9 @@ final class NativeChapterColumn: NSView {
 
     private let rows = NativeChapterRows()
     private let list: NativeList
+
+    /// Список — самоперевірці: вона міряє, чи вміщається рядок у свою висоту.
+    var chapterList: NativeList { list }
     let quick = NativeQuickField()
     private let spinner = NSProgressIndicator()
     private weak var state: AppState?

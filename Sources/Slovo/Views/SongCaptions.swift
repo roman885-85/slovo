@@ -18,17 +18,21 @@ struct SongCaptions {
     private static let prefix = "SongsPluginFrame->"
 
     /// Підпис елемента (перша половина рядка перекладу).
+    ///
+    /// Запасний підпис проводимо через наш словник: у перекладі автора
+    /// половини цих рядків немає, і панель пісень лишалася російською в
+    /// українському вікні.
     func caption(_ key: String, _ fallback: String) -> String {
         let text = language?.caption(Self.prefix + key, form: Self.form, default: "") ?? ""
         // У кнопок із картинкою підпис дорівнює імені елемента — показувати його
         // не можна, це службове значення, а не текст для людини.
-        return (text.isEmpty || text == key) ? fallback : text
+        return (text.isEmpty || text == key) ? OurWords.t(fallback) : text
     }
 
     /// Спливна підказка (друга половина рядка перекладу).
     func hint(_ key: String, _ fallback: String) -> String {
         let text = language?.hint(Self.prefix + key, form: Self.form) ?? ""
-        return text.isEmpty ? fallback : text.replacingOccurrences(of: "\\n", with: "\n")
+        return text.isEmpty ? OurWords.t(fallback) : text.replacingOccurrences(of: "\\n", with: "\n")
     }
 
     /// `SongsPluginFrame->TextMessagesN` — тексти запитів і попереджень.

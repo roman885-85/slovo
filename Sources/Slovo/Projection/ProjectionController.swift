@@ -22,6 +22,8 @@ final class ProjectionController: ObservableObject {
     }
 
     private var window: NSWindow?
+    /// Які були екрани, коли вікно слайда будувалося, — див. `screenSignature`.
+    private var builtScreens: String?
     /// Для самопроверки переходов: есть ли на слое окна уходящий кадр и
     /// движется ли он (по слою представления, а не по модели).
     struct TransitionState {
@@ -54,6 +56,24 @@ final class ProjectionController: ObservableObject {
         return probe.level.rawValue
     }
     var isSlideWindowVisible: Bool { window?.isVisible ?? false }
+    /// Номер вікна слайда — самоперевірка звіряє, те саме воно чи перебудоване.
+    var slideWindowNumber: Int? { window?.windowNumber }
+
+    /// Екрани, як їх бачить вікно слайда: скільки, де, якого розміру й
+    /// масштабу. Робоча частина екрана (`visibleFrame`) сюди не входить:
+    /// вона міняється від Dock і рядка меню, а вікну слайда до неї діла нема.
+    static func screenSignature() -> String {
+        NSScreen.screens.map { screen in
+            let f = screen.frame
+            return "\(screen.slovoIdentifier)@\(Int(f.minX)),\(Int(f.minY)),\(Int(f.width))x\(Int(f.height))×\(screen.backingScaleFactor)"
+        }.joined(separator: ";")
+    }
+
+    /// Для самоперевірки: поводитися так, ніби екрани справді змінилися.
+    func rebuildAsIfScreensChanged() {
+        builtScreens = nil
+        rebuildWindowIfNeeded()
+    }
     private let content = SlideBox()
 
     init() {
@@ -130,6 +150,19 @@ final class ProjectionController: ObservableObject {
     // MARK: -
 
     private func rebuildWindowIfNeeded() {
+        // Власник: «сворачиваю или разворачиваю окно других программ … и на
+        // проекторе пропадает изображение (на ndi все работает)». macOS шле
+        // «змінилися параметри екранів» і тоді, коли згортають чи
+        // розгортають чуже вікно (Dock, рядок меню), — а програма щоразу
+        // перебудовувала вікно слайда, і нове стояло чорним до наступного
+        // слайда. Перебудовуємо лише тоді, коли самі екрани інші.
+        let screens = Self.screenSignature()
+        guard screens != builtScreens else {
+            NativeTrace.say("проектор: сповіщення про екрани, а екрани ті самі — вікно слайда лишаю")
+            return
+        }
+        NativeTrace.say("проектор: екранів \(NSScreen.screens.count), вікно слайда "
+                        + (isVisible ? "перебудовую" : "не показане — не чіпаю"))
         guard isVisible else { return }
         rebuildWindow()
     }
@@ -143,7 +176,11 @@ final class ProjectionController: ObservableObject {
     }
 
     private func rebuildWindow() {
+        // Плеєр запам'ятовуємо до закриття: `closeWindow` його забуває, і
+        // кадр у нове вікно не вертався — рядок нижче не спрацьовував ніколи.
+        let keptMedia = attachedMedia
         closeWindow()
+        builtScreens = Self.screenSignature()
         guard let screen = preferredScreen else { return }
 
         let window: NSWindow
@@ -198,8 +235,10 @@ final class ProjectionController: ObservableObject {
         pointer.autoresizingMask = [.width, .height]
         container.addSubview(pointer, positioned: .above, relativeTo: video)
         self.pointerView = pointer
-        // Окно пересобрали посреди показа — кадр обязан вернуться на место.
-        if let media = attachedMedia { applyVideo(media) }
+        // Окно пересобрали посреди показа — слайд и кадр обязаны вернуться на
+        // место сразу, а не со следующим слайдом.
+        canvas.refresh()
+        if let media = keptMedia { applyVideo(media) }
         applyPointer(pointerMark, look: pointerLook)
         if let web = hostedWeb {
             let wanted = webShown
@@ -494,6 +533,7 @@ final class ProjectionController: ObservableObject {
     }
 
     private func closeWindow() {
+        if window != nil { NativeTrace.say("проектор: вікно слайда прибрано") }
         if let videoLayer { attachedMedia?.detach(videoLayer) }
         videoLayer = nil
         // Иначе пересобранное окно решит, что слой уже подключён к этому же

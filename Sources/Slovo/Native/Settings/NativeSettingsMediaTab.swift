@@ -43,7 +43,7 @@ final class NativeSettingsMediaTab {
 
     private var player: NativeForm.Group {
         let devices = SettingsAudioDevices.list()
-        return NativeForm.Group(state.vb("GBMediaPlayer", "Медиа проигрыватель:"), [
+        return NativeForm.Group(state.vb("GBMediaPlayer", OurWords.t("Медиа проигрыватель:")), [
             NativeForm.Row(state.vb("LAudioDevice", "Аудио устройство:"), width: 200, [
                 NativeForm.popup(devices.map(\.name), NativeForm.Tie(get: { [store] in
                     devices.firstIndex { $0.id == store.settings.options.audioDeviceID } ?? 0

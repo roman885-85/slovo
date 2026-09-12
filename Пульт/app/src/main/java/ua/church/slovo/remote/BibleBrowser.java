@@ -97,6 +97,10 @@ final class BibleBrowser {
     private int chapterBook = -1;
     private final List<Verse> verses = new ArrayList<>();
     private final TreeSet<Integer> picked = new TreeSet<>();
+    /// Коли вірші востаннє вибирали тут. Відповідь програми приходить із
+    /// запізненням, і без цієї позначки свіже торкання перебивалося б старим
+    /// станом — вибір «відскакував» би назад.
+    private long touched;
     private boolean loaded;
     private ColorStateList plainText;
 
@@ -124,6 +128,7 @@ final class BibleBrowser {
         translationButton.setOnClickListener(v -> chooseTranslation());
         showButton.setOnClickListener(v -> send(true));
         clearButton.setOnClickListener(v -> {
+            touched = System.currentTimeMillis();
             picked.clear();
             render();
         });
@@ -227,6 +232,46 @@ final class BibleBrowser {
         return true;
     }
 
+    /// Іти за програмою: вірш перемкнули не звідси.
+    ///
+    /// Власник: «у планшеті при перемиканні тексту сам текст перемикається, а
+    /// виділений текст лишається на старому місці». Розділ малювався один раз
+    /// — при відкритті вкладки, — і далі жив своїм життям. Тепер підсвічення
+    /// переїжджає слідом за програмою, а список підводиться до нього.
+    void follow(int position, int chapterNumber, String numbers) {
+        if (!loaded || level != Level.VERSES || chapterNumber <= 0) return;
+        if (System.currentTimeMillis() - touched < 1500) return;
+        List<Integer> chosen = new ArrayList<>();
+        for (String part : numbers.split(",")) {
+            String text = part.trim();
+            if (text.isEmpty()) continue;
+            try { chosen.add(Integer.parseInt(text)); } catch (NumberFormatException ignored) { }
+        }
+        if (book == null || book.position != position || chapter != chapterNumber) {
+            for (Book item : books) {
+                if (item.position != position) continue;
+                openChapter(item, chapterNumber, chosen);
+                return;
+            }
+            return;
+        }
+        if (picked.size() == chosen.size() && picked.containsAll(chosen)) return;
+        picked.clear();
+        picked.addAll(chosen);
+        render();
+        scrollToPicked();
+    }
+
+    /// Підвести список до першого вибраного вірша.
+    private void scrollToPicked() {
+        if (picked.isEmpty()) return;
+        for (int i = 0; i < verses.size(); i++) {
+            if (verses.get(i).number != picked.first()) continue;
+            list.setSelection(Math.max(0, i - 1));
+            return;
+        }
+    }
+
     private void openChapter(Book target, int number, List<Integer> chosen) {
         if (target == null) return;
         Api api = host.api();
@@ -292,6 +337,7 @@ final class BibleBrowser {
         if (level == Level.VERSES) {
             if (position < 0 || position >= verses.size()) return;
             int number = verses.get(position).number;
+            touched = System.currentTimeMillis();
             if (picked.contains(number)) picked.remove(number); else picked.add(number);
             render();
             send(false);
@@ -302,6 +348,7 @@ final class BibleBrowser {
     private boolean rowHeld(int position) {
         if (level != Level.VERSES || position < 0 || position >= verses.size()) return false;
         list.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        touched = System.currentTimeMillis();
         int number = verses.get(position).number;
         if (picked.isEmpty()) {
             picked.add(number);

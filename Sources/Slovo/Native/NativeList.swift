@@ -70,13 +70,37 @@ final class NativeList: NSView, NativeListChecking {
             rebuildStyle()
             // Строки одной высоты растут вместе с кеглем: при 22 точках на
             // крупном шрифте подписи наползали друг на друга (владелец).
-            if let base = baseUniformHeight {
-                heights = .uniform(max(base, (fontSize * 1.55 + 3).rounded()))
-            }
+            //
+            // Рахуємо це в `applyHeights`, а не тут: висоту рядка задають і
+            // після того, як кегль уже змінили — коли міняють вигляд списку
+            // («значки», «список», «таблиця»). Доти таке призначення ставило
+            // висоту з голови, кегля не питаючи, і великий текст вилазив за
+            // рядок. Власник: «при зміні стилів частина тексту губиться,
+            // текст наповзає за видимі межі».
+            applyHeights()
         }
     }
     /// Высота строки, заданная при создании, — от неё считаем рост с кеглем.
     private var baseUniformHeight: CGFloat?
+
+    /// Висота рядка (чи плитки) під поточний кегль: менша за свій текст вона
+    /// бути не може, хоч би що задав той, хто міняв вигляд.
+    ///
+    /// Рахуємо не від кегля на око, а від справжньої висоти рядка шрифту та
+    /// відступів — тих самих, за якими рядок і малюється. Формула «кегль ×
+    /// 1,55 + 3» була близька, але на дрібних кеглях давала на дві точки
+    /// менше, ніж треба, і текст усе одно не вміщався.
+    private func grown(_ base: CGFloat) -> CGFloat {
+        max(base, minimumRowHeight)
+    }
+
+    /// Найменша висота, за якої в рядок ще влазить один рядок тексту.
+    ///
+    /// Відступи сюди не входять навмисно: у щільних списках (План, Історія)
+    /// рядок навмисно нижчий за відступи, і текст у ньому малюється по
+    /// центру. А от менше, ніж сам рядок тексту, не можна ніколи — саме там
+    /// текст і різався.
+    var minimumRowHeight: CGFloat { ceil(style.textLineHeight) + 2 }
 
     var metrics: NativeListMetrics {
         didSet { rebuildStyle() }
@@ -207,6 +231,17 @@ final class NativeList: NSView, NativeListChecking {
         NotificationCenter.default.removeObserver(self)
     }
 
+    /// Ширина, по якій рахуються стовпці плитки й міряються рядки.
+    ///
+    /// Це ширина самої таблиці — та, якою потім малюється рядок. Полотно
+    /// (`contentSize`) буває на кілька точок ширшим за таблицю, і на цій
+    /// різниці третя плитка вилазила за край списку, а зміряні висоти не
+    /// сходилися з намальованими.
+    private var contentWidth: CGFloat {
+        let inner = table.bounds.width - table.intercellSpacing.width
+        return inner > 1 ? inner : max(1, scrollView.contentSize.width)
+    }
+
     @objc private func visibleWidthChanged() {
         guard abs(scrollView.contentSize.width - lastWidth) > 0.5 else { return }
         needsLayout = true
@@ -230,7 +265,9 @@ final class NativeList: NSView, NativeListChecking {
             column.width = width
             table.sizeLastColumnToFit()
         }
-        let columns = tileColumns(for: width)
+        // Стовпці рахуємо від ширини таблиці — тієї, якою потім малюється
+        // рядок: інакше край плитки не збігався б із краєм списку.
+        let columns = tileColumns(for: contentWidth)
         if columns != columnsPerRow {
             columnsPerRow = columns
             table.reloadData()
@@ -259,7 +296,7 @@ final class NativeList: NSView, NativeListChecking {
             measuredHeights = []
         }
         heightsToNote.removeAll()
-        columnsPerRow = tileColumns(for: scrollView.contentSize.width)
+        columnsPerRow = tileColumns(for: contentWidth)
         selection = selection.filteredIndexSet(includeInteger: { $0 < itemCount })
         if let anchor, anchor >= itemCount { self.anchor = nil }
 
@@ -487,7 +524,7 @@ final class NativeList: NSView, NativeListChecking {
         let row = table.row(at: point)
         guard row >= 0 else { return nil }
         guard columnsPerRow > 1 else { return row < itemCount ? row : nil }
-        let step = tileStep(width: scrollView.contentSize.width)
+        let step = tileStep(width: contentWidth)
         let column = min(columnsPerRow - 1, max(0, Int(point.x / max(1, step))))
         let index = row * columnsPerRow + column
         return index < itemCount ? index : nil
@@ -515,10 +552,12 @@ final class NativeList: NSView, NativeListChecking {
     fileprivate func refresh(cell: NativeRowCell, tableRow row: Int) {
         guard let source else { cell.items = []; return }
         cell.style = style
+        cell.fixedHeight = !isMeasured
         if columnsPerRow > 1, case .tiles(_, _, let gap) = mode {
-            let step = tileStep(width: scrollView.contentSize.width)
+            let step = tileStep(width: contentWidth)
             cell.tileWidth = max(1, step - gap)
             cell.tileGap = gap
+            cell.tileColumns = columnsPerRow
             var items: [(index: Int, row: NativeRow, selected: Bool)] = []
             items.reserveCapacity(columnsPerRow)
             for position in 0..<columnsPerRow {
@@ -557,10 +596,11 @@ final class NativeList: NSView, NativeListChecking {
     private func applyHeights() {
         switch heights {
         case .uniform(let height):
-            table.rowHeight = height
+            baseUniformHeight = height
+            table.rowHeight = grown(height)
             measuredHeights = []
         case .measured(let estimate):
-            table.rowHeight = estimate
+            table.rowHeight = grown(estimate)
             measuredHeights = Array(repeating: 0, count: itemCount)
         }
         bridge.wantsRowHeights = isMeasured
@@ -579,7 +619,7 @@ final class NativeList: NSView, NativeListChecking {
     }
 
     fileprivate func height(ofTableRow row: Int) -> CGFloat {
-        if case .tiles(_, let itemHeight, let gap) = mode { return itemHeight + gap }
+        if case .tiles(_, let itemHeight, let gap) = mode { return grown(itemHeight) + gap }
         guard case .measured(let estimate) = heights else { return table.rowHeight }
         guard row >= 0, row < measuredHeights.count else { return estimate }
         let known = measuredHeights[row]
@@ -591,7 +631,7 @@ final class NativeList: NSView, NativeListChecking {
     fileprivate func noteRealHeight(ofTableRow row: Int) {
         guard case .measured = heights, row >= 0, row < measuredHeights.count,
               measuredHeights[row] == 0, let source else { return }
-        let width = max(1, scrollView.contentSize.width)
+        let width = contentWidth
         let layout = NativeRowLayout(row: ask(source, row), width: width, style: style, measure: true)
         let real = max(1, layout.height)
         measuredHeights[row] = real
@@ -619,6 +659,57 @@ final class NativeList: NSView, NativeListChecking {
         }
     }
 
+    // MARK: - Самоперевірка
+
+    /// Чи вміщається рядок у відведену йому висоту.
+    ///
+    /// `потрібно` — висота, якої просить текст рядка за поточним кеглем і
+    /// шириною стовпця; `дано` — висота, яку рядкові відводить таблиця.
+    /// Коли потрібно більше, ніж дано, текст або обрізається, або наповзає
+    /// на сусідній рядок — саме на це скаржився власник після зміни вигляду
+    /// списків.
+    func fit(ofRow index: Int) -> (drawn: CGFloat, given: CGFloat, cut: Bool)? {
+        guard let source, index >= 0, index < source.rowCount else { return nil }
+        let row = ask(source, index)
+        let width = tileStep(width: contentWidth)
+
+        // Плитка: підпис і назва в один рядок кожен, кегль підганяється.
+        if case .tiles(_, let itemHeight, _) = mode {
+            let title = row.lead.isEmpty ? row.text : row.lead
+            let hasCaption = !row.lead.isEmpty && !row.text.isEmpty
+            let block = style.leadLineHeight + (hasCaption ? style.detailLineHeight + 1 : 0)
+            let inner = max(1, width - 6)
+            var cut = fitsCut(title, font: style.leadFont, width: inner, minimum: 0.72)
+            if hasCaption, fitsCut(row.text, font: style.detailFont, width: inner, minimum: 0.55) { cut = true }
+            return (block, grown(itemHeight), cut)
+        }
+
+        let given: CGFloat
+        if case .measured = heights { given = height(ofTableRow: index) } else { given = table.rowHeight }
+        let full = NativeRowLayout(row: row, width: width, style: style, measure: !row.singleLine)
+        if !row.singleLine, full.height <= given + 0.5 { return (full.height, given, false) }
+        // Список із міряними висотами малює перенос як є: висота наздожене.
+        if !row.singleLine, isMeasured { return (min(full.height, given), given, false) }
+        // Той самий запасний шлях, яким іде малювання: один рядок, а в тісному
+        // рядку — ще й по центру, без відступів.
+        let one = NativeRowLayout(row: row, width: width, style: style, measure: false)
+        let font = row.bold ? style.boldTextFont : style.textFont
+        let cut = fitsCut(row.text, font: font, width: one.textRect.width, minimum: 0.72)
+        if one.height <= given + 0.5 { return (one.height, given, cut) }
+        return (ceil(style.textLineHeight), given, cut)
+    }
+
+    /// Чи ріже текст три крапки навіть після підгонки кегля.
+    private func fitsCut(_ text: String, font: NSFont, width: CGFloat, minimum: CGFloat) -> Bool {
+        guard !text.isEmpty, width > 1 else { return false }
+        let shrunk = NativeRowCell.fitted(font, to: text, width: width, minimum: minimum)
+        let need = (text as NSString).size(withAttributes: [.font: shrunk]).width
+        return need > width + 0.5
+    }
+
+    /// Скільки рядків у списку — самоперевірці.
+    var rowsNow: Int { source?.rowCount ?? 0 }
+
     // MARK: - Плитка
 
     private func tileColumns(for width: CGFloat) -> Int {
@@ -640,7 +731,7 @@ final class NativeList: NSView, NativeListChecking {
         if case .measured = heights {
             measuredHeights = Array(repeating: 0, count: itemCount)
         }
-        columnsPerRow = tileColumns(for: scrollView.contentSize.width)
+        columnsPerRow = tileColumns(for: contentWidth)
         table.reloadData()
     }
 

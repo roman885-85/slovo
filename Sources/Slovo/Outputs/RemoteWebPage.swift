@@ -56,6 +56,17 @@ section { display:flex; flex-direction:column; min-height:0; padding:8px; }
 .panel.shown { display:flex; }
 #hallBox { position:relative; flex:1; background:#000; margin-top:4px; min-height:160px; }
 #hall { position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+#zoomBack { position:absolute; top:8px; right:8px; z-index:3; font-size:17px; padding:10px 14px; background:#2f6fd6; color:#fff; }
+/* Підказки (власник: «в веб версии почти ничего не понятно и не удобно»). */
+.hint { color:var(--dim); font-size:13px; margin:2px 0 6px; line-height:1.35; }
+body.no-hints .hint, body.view-only .hint { display:none; }
+#hintsButton.on { color:var(--accent); }
+#planTools { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:6px; }
+#planTools button { padding:8px 6px; }
+#tip { position:fixed; z-index:30; max-width:320px; background:#1e2a3a; border:1px solid var(--accent); color:var(--text); border-radius:8px; padding:8px 12px; font-size:14px; pointer-events:none; }
+#tip[hidden] { display:none; }
+section { min-width:0; }
+#footHint { padding:0 12px; margin:4px 0 0; }
 #hallNote { position:absolute; left:0; right:0; top:45%; text-align:center; color:var(--dim); font-size:18px; pointer-events:none; }
 #hallCaption { font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #liveText { padding-top:6px; max-height:5.5em; overflow:hidden; white-space:pre-line; }
@@ -92,22 +103,27 @@ body.view-only main { grid-template-columns:1fr; }
      сховане за краєм власник назвав недопустимим. */
   #tabs { flex-wrap:wrap; }
   #tabs button { flex:1 0 25%; padding:10px 6px; }
+  .wide { display:none; }
+  /* Шість кнопок залу в ряд на телефоні не вміщаються — два ряди по три. */
+  footer { flex-wrap:wrap; }
+  footer .big { flex:1 0 30%; }
 }
 </style>
 </head>
 <body>
 <header>
   <span id="status">Підключаюся…</span>
-  <button id="zoomOff" title="Зняти наближення">1:1</button>
-  <button id="androidButton">Android</button>
-  <button id="pinButton">Пароль</button>
+  <button id="hintsButton" title="Показати чи сховати підказки на сторінці">Підказки</button>
+  <button id="androidButton" title="Встановити «Пульт Слова» чи «Планшет Слова» на телефон або планшет з Android"><span class="wide">Програми для </span>Android</button>
+  <button id="pinButton" title="Увести пароль, якщо його задано в програмі (Параметри → Remote API)">Пароль</button>
 </header>
 <nav id="tabs"></nav>
 <main>
   <section id="left">
     <!-- Біблія -->
     <div class="panel" id="p-bible">
-      <div class="row"><input id="searchText" class="grow" placeholder="Пошук за словами"><button id="searchGo">Знайти</button></div>
+      <div class="row"><input id="searchText" class="grow" placeholder="Пошук за словами"><button id="searchGo" title="Знайти вірші за словами">Знайти</button></div>
+      <div class="hint">Клацніть вірш — він у передпоказі (з Shift — кілька підряд). Подвійне клацання — одразу в зал.</div>
       <div id="searchBox" class="panel">
         <div class="row"><span id="searchNote" class="note grow"></span><button id="searchClose">До книг</button></div>
         <ul class="list" id="searchList"></ul>
@@ -122,35 +138,40 @@ body.view-only main { grid-template-columns:1fr; }
     </div>
     <!-- Пісні -->
     <div class="panel" id="p-songs">
-      <div class="row"><select id="songBook" class="grow"></select><input id="songFilter" class="grow" placeholder="Номер або слова назви"></div>
+      <div class="row"><select id="songBook" class="grow" title="Пісенник"></select><input id="songFilter" class="grow" placeholder="Номер або слова назви"></div>
+      <div class="hint">Клацніть пісню, потім частину внизу — вона одразу в залі.</div>
       <ul class="list" id="songList"></ul>
       <div class="note">Частини пісні — клацання виводить у зал</div>
       <div class="row" id="parts"></div>
     </div>
     <!-- Презентація -->
     <div class="panel" id="p-presentation">
-      <div class="row"><label><button id="fileButton">Файл з комп'ютера…</button></label><input type="file" id="fileInput" accept=".pdf,.pptx,.ppsx,.potx,.pptm,.ppsm" hidden></div>
+      <div class="row"><label><button id="fileButton" title="Відкрити в програмі PDF чи PowerPoint з цього пристрою">Файл з комп'ютера…</button></label><input type="file" id="fileInput" accept=".pdf,.pptx,.ppsx,.potx,.pptm,.ppsm" hidden></div>
+      <div class="hint">Клацніть слайд — він у залі. «Файл з комп'ютера…» відкриває PDF чи PowerPoint.</div>
       <div class="row" id="decks"></div>
       <div class="note" id="pageNote"></div>
       <div class="grid" id="pageGrid"></div>
     </div>
     <!-- Медіа -->
     <div class="panel" id="p-media">
-      <div class="row"><button id="mBegin">⏮</button><button id="mPlay">▶</button><button id="mStop">⏹</button><span id="mTime" class="grow note"></span></div>
+      <div class="row"><button id="mBegin" title="Перемотати на початок">⏮ Спочатку</button><button id="mPlay" title="Грати або поставити на паузу">▶ Грати</button><button id="mStop" title="Зупинити">⏹ Стоп</button><span id="mTime" class="grow note"></span></div>
       <input type="range" id="mSeek" min="0" max="1000" value="0">
       <div class="row"><span>Гучність</span><input type="range" id="mVolume" min="0" max="100" class="grow"></div>
-      <div class="row"><button id="mMute">Без звуку</button><button id="mScreen">На екран</button><button id="mRepeat">Повтор</button></div>
+      <div class="row"><button id="mMute" title="Вимкнути чи увімкнути звук">Без звуку</button><button id="mScreen" title="Показувати відео в залі чи ні">На екран</button><button id="mRepeat" title="Повторювати файл по колу">Повтор</button></div>
+      <div class="hint">Файли плеєра додають у програмі. Клацніть файл — він грає; «На екран» — показувати відео в залі.</div>
       <ul class="list" id="mediaList"></ul>
     </div>
     <!-- Зображення -->
     <div class="panel" id="p-pictures">
-      <div class="row"><button id="photoButton">Фото з комп'ютера…</button><input type="file" id="photoInput" accept="image/*" multiple hidden></div>
+      <div class="row"><button id="photoButton" title="Надіслати в програму фото з цього пристрою">Фото з комп'ютера…</button><input type="file" id="photoInput" accept="image/*" multiple hidden></div>
+      <div class="hint">Клацніть картинку — вона в залі. «Фото з комп'ютера…» додає нові.</div>
       <div class="note" id="picturesNote"></div>
       <div class="grid" id="pictureGrid"></div>
     </div>
     <!-- Екран -->
     <div class="panel" id="p-screen">
-      <div class="row"><button id="screenReload">Оновити</button><button id="screenStop">Зупинити показ</button></div>
+      <div class="row"><button id="screenReload" title="Оновити список моніторів і вікон">Оновити</button><button id="screenStop" title="Зупинити показ екрана">Зупинити показ</button></div>
+      <div class="hint">Клацніть монітор чи вікно — зал покаже його наживо.</div>
       <div class="note" id="screenNote"></div>
       <ul class="list" id="screenList"></ul>
     </div>
@@ -158,41 +179,47 @@ body.view-only main { grid-template-columns:1fr; }
     <div class="panel" id="p-text">
       <input id="textTitle" placeholder="Заголовок (необов'язково)" style="margin-bottom:6px">
       <textarea id="textBody" rows="10" placeholder="Текст оголошення"></textarea>
-      <div class="row" style="margin-top:6px"><button id="textPreview">У передпоказ</button><button id="textShow">Показати в залі</button></div>
+      <div class="row" style="margin-top:6px"><button id="textPreview" title="Показати текст лише в передпоказі">У передпоказ</button><button id="textShow" title="Вивести текст у зал">Показати в залі</button></div>
+      <div class="hint">Наберіть оголошення. «У передпоказ» — лише для вас, «Показати в залі» — на стіну.</div>
       <div class="row"><button id="textPrev">◀</button><span id="textPages" class="note"></span><button id="textNext">▶</button></div>
     </div>
   </section>
 
   <section id="center">
-    <div id="hallHead"><div id="hallCaption">Зал</div><button id="viewButton" title="Як показувати зал на цьому екрані">Вигляд</button></div>
+    <div id="hallHead"><div id="hallCaption">Зал</div><button id="viewButton" title="Як показувати зал на цьому екрані: картинкою чи крупним текстом">Мій перегляд</button></div>
     <div id="viewPanel" hidden>
       <label><input type="checkbox" id="viewText"> Текстом — зручно читати</label>
       <select id="viewTheme"><option value="dark">Темне</option><option value="light">Світле</option><option value="sepia">Сепія</option></select>
       <label>Розмір <input type="range" id="viewSize" min="14" max="80"></label>
       <span class="note">Картинки й презентації завжди видно такими, як на стіні</span>
     </div>
-    <div id="hallBox"><canvas id="hall"></canvas><div id="hallNote"></div><div id="personal"></div></div>
+    <div id="hallBox"><canvas id="hall"></canvas><div id="hallNote"></div><div id="personal"></div><button id="zoomBack" hidden title="Прибрати наближення — зал знову цілий">↺ Вихідний вигляд</button></div>
+    <div class="hint">Ведіть по залу з натиснутою кнопкою миші чи пальцем — указка на стіні. Колесо миші чи два пальці — наближення.</div>
     <div id="liveText"></div>
     <div id="previewText"></div>
   </section>
 
   <section id="right">
-    <nav><button id="tabPlan" class="chosen">План</button><button id="tabHistory">Історія</button></nav>
+    <nav><button id="tabPlan" class="chosen" title="План служіння: клацніть пункт — він у залі">План</button><button id="tabHistory" title="Історія: усе, що вже було в залі">Історія</button></nav>
     <div id="sideNote" class="note"></div>
     <ul class="list" id="sideList"></ul>
-    <div class="row" style="margin-top:6px">
-      <button id="planAdd">+ Поточне</button><button id="planUp">↑</button><button id="planDown">↓</button><button id="sideRemove">✕</button>
+    <div id="planTools">
+      <button id="planAdd" title="Додати в План те, що зараз вибрано ліворуч">＋ Додати вибране</button><button id="sideRemove" title="Прибрати вибраний пункт">✕ Прибрати</button>
+      <button id="planUp" title="Посунути вибраний пункт вище">↑ Вище</button><button id="planDown" title="Посунути вибраний пункт нижче">↓ Нижче</button>
     </div>
+    <div class="hint">Клацніть пункт — він одразу в залі. Потім «↑ Вище», «↓ Нижче» чи «✕ Прибрати» — для нього.</div>
   </section>
 </main>
+<div class="hint" id="footHint">«Назад» / «Далі» — сусідній вірш, куплет чи слайд · «Показати» — передпоказ у зал · «Сховати» — прибрати слайд · «Чорний екран» — затемнити зал</div>
 <footer>
-  <button class="big" data-command="prev">◀ Назад</button>
-  <button class="big" data-command="next">Далі ▶</button>
-  <button class="big" data-command="show">Показати</button>
-  <button class="big" data-command="hide">Сховати</button>
-  <button class="big" data-command="black" id="black">Чорний екран</button>
-  <button class="big" data-command="blank">Порожній</button>
+  <button class="big" data-command="prev" title="Попередній вірш, куплет чи слайд">◀ Назад</button>
+  <button class="big" data-command="next" title="Наступний вірш, куплет чи слайд">Далі ▶</button>
+  <button class="big" data-command="show" title="Вивести в зал те, що в передпоказі">Показати</button>
+  <button class="big" data-command="hide" title="Прибрати слайд із залу — фон лишається">Сховати</button>
+  <button class="big" data-command="black" id="black" title="Затемнити зал повністю; ще раз — повернути">Чорний екран</button>
+  <button class="big" data-command="blank" title="Порожній слайд: фон без тексту">Порожній</button>
 </footer>
+<div id="tip" hidden></div>
 <div id="pinBox"><div>
   <b>Програма просить пароль</b>
   <span class="note">Той, що в Параметри → Remote API → «Пульт у браузері».</span>
@@ -291,10 +318,39 @@ function apply(fresh) {
   const preview = p.text ? (p.reference ? p.reference + " — " + p.text : p.text) : (p.reference || "");
   $("previewText").textContent = preview ? "Передпоказ: " + preview.replace(/\n/g, " ") : "";
   if (sideHistory) loadHistory(); else fillPlan();
-  if (mode === "songs") { if ((fresh.songBook || "") !== songsBook) loadSongs(); fillParts(); }
+  if (mode === "songs") {
+    if ((fresh.songBook || "") !== songsBook) loadSongs();
+    // Пісню перемкнули не звідси — підсвічення в переліку теж має переїхати.
+    else if (((before.song || {}).title || "") !== ((fresh.song || {}).title || "")) { scrollToSong = true; fillSongs(); }
+    fillParts();
+  }
   if (mode === "presentation") fillPresentation();
   if (mode === "pictures" && fresh.show && fresh.mode === "pictures" && fresh.show.count !== picturesCount) loadPictures();
   if (mode === "bible" && before.bible && fresh.bible && !bibleLoaded) bibleOpen();
+  syncBible(fresh);
+}
+
+// Підсвічення йде за програмою.
+//
+// Власник: «у веб-пульті при перемиканні тексту сам текст перемикається, а
+// виділений текст лишається на старому місці». Сторінка малювала розділ один
+// раз і більше ні про що не питала: перехід на інший вірш — з комп'ютера,
+// з планшета чи гарячою клавішею — до неї не доходив. Тепер доходить, але не
+// одразу після власного вибору: інакше свіже натискання тут перебивалося б
+// відповіддю програми, яка ще не встигла його врахувати.
+function sameNumbers(a, b) { return a.length === b.length && a.every((n, i) => n === b[i]); }
+
+function syncBible(fresh) {
+  const info = fresh && fresh.bible;
+  if (!info || !bibleLoaded || mode !== "bible" || level !== "verses") return;
+  if (Date.now() - bibleTouched < 1500) return;
+  const wanted = String(info.verses || "").split(",").filter(t => t !== "").map(Number);
+  if (info.position !== bookPos || info.chapter !== chapterNo) {
+    scrollToPicked = true;
+    openChapter(info.position, info.chapter, wanted);
+    return;
+  }
+  if (!sameNumbers(wanted, picked)) { picked = wanted; scrollToPicked = true; renderBible(); }
 }
 
 // ---------- Вкладки ----------
@@ -356,6 +412,9 @@ function applyHall(fresh) {
   $("hallCaption").textContent = caption;
   $("liveText").textContent = h.kind === "text" ? (slide.text || "") : "";
   applyPersonal(fresh);
+  // Власник: «в пульт добавить кнопку исходного состояния после зума».
+  // Кнопка стоїть над залом лише тоді, коли наближення ввімкнене.
+  $("zoomBack").hidden = !(fresh.zoom && fresh.zoom.on) || !!fresh.viewOnly;
   if (h.kind === "video" || h.kind === "black") {
     hallImage = null;
     $("hallNote").textContent = h.kind === "video" ? "У залі відео: " + (h.title || "") : "Зал затемнено";
@@ -363,7 +422,10 @@ function applyHall(fresh) {
     return;
   }
   $("hallNote").textContent = h.kind === "empty" ? "У залі нічого не показано" : "";
-  if (fresh.seq !== hallSeq) { hallSeq = fresh.seq; loadHall(); } else drawHall();
+  // Картинку залу перезабираємо, лише коли вона справді інша: рух указки її
+  // не міняє (пляму малюємо самі), а раніше будив нову картинку щоразу.
+  const hallMark = typeof fresh.hallSeq === "number" ? fresh.hallSeq : fresh.seq;
+  if (hallMark !== hallSeq) { hallSeq = hallMark; loadHall(); } else drawHall();
 }
 
 // ---------- Мій перегляд ----------
@@ -533,11 +595,57 @@ hall.addEventListener("wheel", event => {
   queueZoom(current * (event.deltaY < 0 ? 1.15 : 1 / 1.15), point);
 }, { passive: false });
 hall.addEventListener("dblclick", () => { if (!state.viewOnly) send("zoom", { zoom: 1 }); });
-$("zoomOff").onclick = () => send("zoom", { zoom: 1 });
+$("zoomBack").onclick = () => send("zoom", { zoom: 1 });
+
+// Підказки: рядки під частинами сторінки (ховає «Підказки», браузер
+// пам'ятає) і пояснення до кнопок — мишею наведенням (title), а пальцем —
+// довгим дотиком: тоді кнопка не натискається, а над нею з'являється плашка.
+let hintsOn = true;
+try { hintsOn = localStorage.getItem("slovo-hints") !== "off"; } catch (e) {}
+function applyHints() {
+  document.body.classList.toggle("no-hints", !hintsOn);
+  $("hintsButton").classList.toggle("on", hintsOn);
+}
+$("hintsButton").onclick = () => {
+  hintsOn = !hintsOn;
+  try { localStorage.setItem("slovo-hints", hintsOn ? "on" : "off"); } catch (e) {}
+  applyHints();
+};
+applyHints();
+let tipTimer = null, tipShown = false;
+function showTip(target) {
+  const tip = $("tip"), box = target.getBoundingClientRect();
+  tip.textContent = target.title; tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(4, Math.min(window.innerWidth - w - 4, box.left + box.width / 2 - w / 2)) + "px";
+  tip.style.top = (box.top - h - 8 < 4 ? box.bottom + 8 : box.top - h - 8) + "px";
+  tipShown = true;
+  setTimeout(() => { tip.hidden = true; }, 3500);
+}
+document.addEventListener("pointerdown", event => {
+  const target = event.target.closest && event.target.closest("button[title]");
+  if (!target || event.pointerType === "mouse") return;
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => showTip(target), 550);
+}, true);
+["pointerup", "pointercancel", "pointerleave"].forEach(name =>
+  document.addEventListener(name, () => {
+    clearTimeout(tipTimer);
+    // Глушимо лише клацання, що йде одразу за утриманням, а не наступне.
+    if (tipShown) setTimeout(() => { tipShown = false; }, 400);
+  }, true));
+document.addEventListener("click", event => {
+  if (!tipShown) return;
+  tipShown = false;
+  event.stopPropagation(); event.preventDefault();
+}, true);
+document.addEventListener("contextmenu", event => { if (event.target.closest && event.target.closest("button[title]")) event.preventDefault(); });
 
 // ---------- Біблія ----------
 
 let books = [], bibleLoaded = false, level = "books", bookPos = -1, chapterNo = 0, verses = [], picked = [];
+// Коли вірші востаннє вибирали тут, і чи треба підвести список до підсвіченого.
+let bibleTouched = 0, scrollToPicked = false, scrollToSong = false;
 
 async function bibleOpen() {
   if (bibleLoaded) return renderBible();
@@ -596,18 +704,25 @@ function renderBible() {
     }
   } else {
     $("biblePath").textContent = (book ? book.name : "") + " · розділ " + chapterNo;
+    let firstPicked = null;
     verses.forEach(v => {
       const li = row(list, "", "", picked.includes(v.number), event => toggleVerse(v.number, event.shiftKey));
       li.classList.add("verse");
       const n = document.createElement("b"); n.textContent = v.number;
       li.appendChild(n); li.appendChild(document.createTextNode(v.text));
-      li.ondblclick = () => { picked = [v.number]; renderBible(); sendBible(true); };
+      li.ondblclick = () => { bibleTouched = Date.now(); picked = [v.number]; renderBible(); sendBible(true); };
+      if (!firstPicked && picked.includes(v.number)) firstPicked = li;
     });
+    // Програма перейшла на інший вірш — підводимо список до нього: інакше
+    // підсвічене лишається за краєм екрана, і на вигляд «нічого не змінилося».
+    if (scrollToPicked && firstPicked) firstPicked.scrollIntoView({ block: "center" });
+    scrollToPicked = false;
     $("bibleShow").textContent = picked.length ? "Показати в залі (" + picked.length + ")" : "Показати в залі";
   }
 }
 
 function toggleVerse(number, range) {
+  bibleTouched = Date.now();
   if (range && picked.length) {
     const from = Math.min(picked[0], number), to = Math.max(picked[0], number);
     picked = []; for (let n = from; n <= to; n++) picked.push(n);
@@ -622,7 +737,7 @@ function sendBible(live) {
   return send("bible-select", { book: bookPos, chapter: chapterNo, verses: picked, live });
 }
 $("bibleShow").onclick = () => sendBible(true);
-$("bibleClear").onclick = () => { picked = []; renderBible(); };
+$("bibleClear").onclick = () => { bibleTouched = Date.now(); picked = []; renderBible(); };
 $("bibleBack").onclick = () => { level = level === "verses" ? "chapters" : "books"; renderBible(); };
 
 // Пошук за словами.
@@ -670,15 +785,19 @@ $("songFilter").oninput = fillSongs;
 
 function fillSongs() {
   const list = $("songList"); list.innerHTML = "";
+  let currentRow = null;
   const needle = $("songFilter").value.trim().toLowerCase();
   const byNumber = /^\d+$/.test(needle);
   const title = (state.song || {}).title || "";
   let shown = 0;
   for (const s of songs) {
     if (needle && (byNumber ? !String(s.number).startsWith(needle) : !s.title.toLowerCase().includes(needle))) continue;
-    row(list, s.number + ". " + s.title, s.subtitle, s.title === title, () => send("song", { index: s.index }));
+    const li = row(list, s.number + ". " + s.title, s.subtitle, s.title === title, () => send("song", { index: s.index }));
+    if (!currentRow && s.title === title) currentRow = li;
     if (++shown >= 500) break;
   }
+  if (scrollToSong && currentRow) currentRow.scrollIntoView({ block: "center" });
+  scrollToSong = false;
 }
 
 function fillParts() {
@@ -806,7 +925,7 @@ async function loadMedia() {
     if (shown !== mediaShown) {
       mediaShown = shown;
       mediaDuration = json.duration || 0;
-      $("mPlay").textContent = json.playing ? "⏸" : "▶";
+      $("mPlay").textContent = json.playing ? "⏸ Пауза" : "▶ Грати";
       if (!seeking) $("mSeek").value = mediaDuration > 0 ? Math.round(json.position / mediaDuration * 1000) : 0;
       $("mTime").textContent = (json.title || "Нічого не відкрито") + (mediaDuration > 0 ? "   " + clock(json.position) + " / " + clock(mediaDuration) : "");
       if (document.activeElement !== $("mVolume")) $("mVolume").value = Math.round((json.volume || 0) * 100);

@@ -144,7 +144,7 @@ final class NativeSongsWorkspace {
     /// `BooksStyle` («Значки» / «Мал. значки» / «Список» / «Таблиця») лягає
     /// на список пісень, `LinesStyle` («одна лінія» / «багато рядків») — на
     /// список частин: це ті самі два списки, що в Біблії.
-    private func applyInterface() {
+    private func applyInterface(force: Bool = false) {
         let interface = InterfaceSettings.shared
         let font = CGFloat(state?.listFontSize ?? 13)
 
@@ -159,7 +159,9 @@ final class NativeSongsWorkspace {
         }
 
         let kind = interface.bookView(.songs)
-        guard appliedSongView != kind else { return }
+        // Кегль теж привід перезібрати: висота плитки рахується від нього, і
+        // без цього великий текст вилазив за плитку.
+        guard force || appliedSongView != kind else { return }
         appliedSongView = kind
         switch kind {
         case .icons:
@@ -698,6 +700,8 @@ final class NativeSongsWorkspace {
             self.groupList.fontSize = CGFloat(size)
             self.songList.fontSize = CGFloat(size)
             self.partList.fontSize = CGFloat(size)
+            // Плитки й висоти рядків рахуються від кегля — перезбираємо їх.
+            self.applyInterface(force: true)
         })
         tokens.append(Signals.shared.subscribe(.listKind) { [weak self] in
             guard let self else { return }

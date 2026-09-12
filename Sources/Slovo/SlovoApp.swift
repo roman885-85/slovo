@@ -52,6 +52,7 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
         // Заглушка сцены могла показаться и позвать нас второй раз.
         guard !started else { return }
         started = true
+        MainThreadWatchdog.shared.start()
         InterfaceSettings.start()      // 7.2: оформление применяется до первого кадра
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

@@ -7,7 +7,11 @@ import SlovoCore
 /// Путь без буквы диска ищется относительно папки с данными программы — как
 /// и в оригинале, поэтому в списке остаётся запись вида «BackGrounds\».
 @MainActor
-final class NativeSettingsPathsTab: NSObject, NativeListSource {
+final class NativeSettingsPathsTab: NSObject, NativeListSource, NativeSettingsRows {
+
+    /// Перечитати свій список — після скидання або ввезення налаштувань.
+    func reloadRows() { list.reload() }
+
 
     private let state: AppState
     private let store: SettingsStore
@@ -55,7 +59,7 @@ final class NativeSettingsPathsTab: NSObject, NativeListSource {
             [weak self] in self?.toggleSubfolders()
         })
 
-        return NativeForm.Group(state.vb("Label2", "Пути для фоновых рисунков:"), [
+        return NativeForm.Group(state.vb("Label2", OurWords.t("Пути для фоновых рисунков:")), [
             NativeForm.Row("", stretch: true, [box, buttons]),
             // Считаем по списку, который правят прямо сейчас, а не по уже
             // загруженным фонам: иначе надпись не отзывается на добавленную
@@ -72,10 +76,10 @@ final class NativeSettingsPathsTab: NSObject, NativeListSource {
                                                          store.settings.screenshotFolder = value
                                                          self?.refresh()
                                                      }), width: 380)
-        return NativeForm.Group(state.vb("Label20", "Папка для снимков экрана слайда:"), [
+        return NativeForm.Group(state.vb("Label20", OurWords.t("Папка для снимков экрана слайда:")), [
             NativeForm.Row("", [
                 folderField,
-                NativeForm.button(OurWords.t("Выбрать…"), hint: state.vbHint("PngSBAddScreenShotPath", "Выбрать путь...")) {
+                NativeForm.button(OurWords.t("Выбрать…"), hint: state.vbHint("PngSBAddScreenShotPath", OurWords.t("Выбрать путь..."))) {
                     [weak self] in self?.chooseScreenshots()
                 },
             ]),
@@ -89,7 +93,7 @@ final class NativeSettingsPathsTab: NSObject, NativeListSource {
         NativeForm.Group(state.vb("RGThumbsMode", "Режим миникартинок"), [
             NativeForm.Row("", [
                 NativeForm.choice([state.vb("RGThumbsMode->Item0", "Win Thumbs"),
-                                   state.vb("RGThumbsMode->Item1", "Встроенный")],
+                                   state.vb("RGThumbsMode->Item1", OurWords.t("Встроенный"))],
                                   NativeForm.Tie(get: { [store] in
                                       store.settings.options.thumbsMode == .system ? 0 : 1
                                   }, set: { [store] value in

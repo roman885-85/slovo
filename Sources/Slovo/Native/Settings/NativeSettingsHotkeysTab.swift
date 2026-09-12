@@ -38,7 +38,7 @@ final class NativeSettingsHotkeysTab {
             store.settings.hotkeySetName = names[index]
             self?.reloadPickers()
         }), width: 240)
-        setsPopup.toolTip = state.vbHint("CBHotKeys", "Наборы горячих клавиш")
+        setsPopup.toolTip = state.vbHint("CBHotKeys", OurWords.t("Наборы горячих клавиш"))
 
         return NativeForm.Group("", [
             NativeForm.Row("", [
@@ -75,7 +75,7 @@ final class NativeSettingsHotkeysTab {
             pickers[action.iniKey] = picker
             // Подписи Label21…Label51 — те же, что в форме оригинала;
             // хвостовое двоеточие в столбце не нужно.
-            var caption = state.vb(action.captionKey, action.fallback)
+            var caption = state.vb(action.captionKey, OurWords.t(action.fallback))
             if caption.hasSuffix(":") { caption.removeLast() }
             return NativeForm.Row(caption, width: 300, [picker])
         })
@@ -117,7 +117,7 @@ final class NativeSettingsHotkeysTab {
     }
 
     private func caption(_ action: HotkeyAction) -> String {
-        var text = state.vb(action.captionKey, action.fallback)
+        var text = state.vb(action.captionKey, OurWords.t(action.fallback))
         if text.hasSuffix(":") { text.removeLast() }
         return text
     }

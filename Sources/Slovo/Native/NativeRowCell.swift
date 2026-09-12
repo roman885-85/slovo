@@ -143,6 +143,15 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
     /// Ширина клетки в режиме плитки. 0 — обычный список.
     var tileWidth: CGFloat = 0
     var tileGap: CGFloat = 0
+    /// Чи задана висота рядка ззовні (однакова для всіх) — тоді текст, що не
+    /// вміщається, зводимо до одного рядка. У списках, де висота рахується за
+    /// текстом (вірші, частини пісні), так робити не можна: висота там на мить
+    /// відстає від кегля, і замість повного вірша вийшов би обрізок.
+    var fixedHeight = true
+    /// Скільки плиток у ряду. Крок рахуємо від власної ширини рядка, а не від
+    /// тієї, яку запам'ятав список: розходилися вони рівно на смугу
+    /// прокрутки, і крайня плитка виїжджала за край.
+    var tileColumns: Int = 0
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
 
@@ -158,6 +167,10 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
     }
 
     private func drawRow(_ row: NativeRow, selected: Bool, in rect: NSRect, style: NativeListStyle) {
+        // Усе, що нижче, лишається всередині рядка, хоч би що порахувалося.
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSBezierPath(rect: rect).setClip()
         let m = style.metrics
         if selected {
             m.selectionColor.setFill()
@@ -168,25 +181,57 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
         }
 
         let layout = NativeRowLayout(row: row, width: rect.width, style: style, measure: !row.singleLine)
+        // Рядок не має права малювати себе за свої ж межі.
+        //
+        // Висоту рядкам задають зовні («Значки», «Список», «Таблиця», кегль
+        // повзунка), а текст малювався на всю висоту, якої просить: за
+        // великого кегля назва переносилася на два-три рядки й лягала поверх
+        // сусідніх. Власник: «при зміні стилів частина тексту губиться,
+        // текст наповзає за видимі межі».
+        //
+        // Тепер так: уміщається все — малюємо як було; не вміщається —
+        // один рядок тексту; не вміщається й він із відступами (щільні списки
+        // Плану й Історії навмисно нижчі) — той самий рядок, але по центру.
+        var singleLine = row.singleLine
+        var leadRect = layout.leadRect
+        var textRect = layout.textRect
+        var detailRect = layout.detailRect
+        if fixedHeight, layout.height > rect.height + 0.5 {
+            singleLine = true
+            let one = NativeRowLayout(row: row, width: rect.width, style: style, measure: false)
+            leadRect = one.leadRect
+            textRect = one.textRect
+            detailRect = one.detailRect
+            if one.height > rect.height + 0.5 {
+                textRect.origin.y = max(0, ((rect.height - textRect.height) / 2).rounded())
+                leadRect.origin.y = max(0, ((rect.height - leadRect.height) / 2).rounded())
+                if m.detailWidth > 0 {
+                    detailRect.origin.y = max(0, ((rect.height - detailRect.height) / 2).rounded())
+                } else {
+                    // Приписка окремим рядком під текстом сюди вже не влазить.
+                    detailRect = .zero
+                }
+            }
+        }
 
         if !row.lead.isEmpty {
             let color = selected ? m.selectedTextColor.withAlphaComponent(0.9) : (row.leadColor ?? m.leadColor)
-            draw(row.lead, in: layout.leadRect.offsetBy(dx: rect.minX, dy: rect.minY),
-                 font: Self.fitted(style.leadFont, to: row.lead, width: layout.leadRect.width),
+            draw(row.lead, in: leadRect.offsetBy(dx: rect.minX, dy: rect.minY),
+                 font: Self.fitted(style.leadFont, to: row.lead, width: leadRect.width),
                  color: color, paragraph: style.leadStyle)
         }
 
         let textColor = selected ? m.selectedTextColor : (row.textColor ?? m.textColor)
         let textFont = row.bold ? style.boldTextFont : style.textFont
-        draw(row.text, in: layout.textRect.offsetBy(dx: rect.minX, dy: rect.minY),
-             font: row.singleLine ? Self.fitted(textFont, to: row.text, width: layout.textRect.width) : textFont,
+        draw(row.text, in: textRect.offsetBy(dx: rect.minX, dy: rect.minY),
+             font: singleLine ? Self.fitted(textFont, to: row.text, width: textRect.width) : textFont,
              color: textColor,
-             paragraph: row.singleLine ? style.clipping : style.wrapping)
+             paragraph: singleLine ? style.clipping : style.wrapping)
 
-        if !row.detail.isEmpty {
+        if !row.detail.isEmpty, detailRect.height > 0 {
             let color = selected ? m.selectedTextColor.withAlphaComponent(0.8) : m.detailColor
-            draw(row.detail, in: layout.detailRect.offsetBy(dx: rect.minX, dy: rect.minY),
-                 font: Self.fitted(style.detailFont, to: row.detail, width: layout.detailRect.width),
+            draw(row.detail, in: detailRect.offsetBy(dx: rect.minX, dy: rect.minY),
+                 font: Self.fitted(style.detailFont, to: row.detail, width: detailRect.width),
                  color: color, paragraph: style.clipping)
         }
 
@@ -199,9 +244,12 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
     /// Клетка сетки книг: сокращение крупно, под ним полное название мелко.
     private func drawTiles(style: NativeListStyle) {
         let m = style.metrics
+        let columns = max(items.count, tileColumns)
+        let step = columns > 1 ? (bounds.width + tileGap) / CGFloat(columns) : bounds.width + tileGap
+        let width = max(1, min(tileWidth, step - tileGap))
         for (position, item) in items.enumerated() {
-            let x = CGFloat(position) * (tileWidth + tileGap)
-            let rect = NSRect(x: x, y: 0, width: tileWidth, height: bounds.height)
+            let x = CGFloat(position) * step
+            let rect = NSRect(x: x, y: 0, width: width, height: bounds.height)
             let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
             if item.selected {
                 m.selectionColor.setFill()

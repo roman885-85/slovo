@@ -1275,8 +1275,9 @@ final class MediaPlayerModel: ObservableObject {
         } else {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in sinks.values { layer.contents = shown }
+            for layer in sinks.values { SlideTransitionAnimator.settle(layer, contents: shown) }
             CATransaction.commit()
+            if shown == nil, !sinks.isEmpty { NativeTrace.say("зал: плеєр віддав виводам порожню картинку") }
             onNetworkStill?(shown)
         }
         syncScreenWindow()
@@ -1535,9 +1536,10 @@ final class MediaPlayerModel: ObservableObject {
     }
 
     private func clearSinks() {
+        if !sinks.isEmpty { NativeTrace.say("зал: плеєр очистив виводи") }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for layer in sinks.values { layer.contents = nil }
+        for layer in sinks.values { SlideTransitionAnimator.settle(layer, contents: nil) }
         CATransaction.commit()
     }
 

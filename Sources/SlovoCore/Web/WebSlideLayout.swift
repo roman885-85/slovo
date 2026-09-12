@@ -58,6 +58,8 @@ public struct WebSlideLayout: Sendable, Hashable {
         public var shadowColor: SlideStyle.RGBA
         public var shadowOffset: Double
         public var shadowBlur: Double
+        /// Куди падає тінь, у градусах (45° — управо-вниз, як було завжди).
+        public var shadowAngle: Double
     }
 
     public var canvasWidth: Double
@@ -130,6 +132,7 @@ public struct WebSlideLayout: Sendable, Hashable {
                     "ShadowColor": Self.rgba(object.shadowColor),
                     "ShadowOffset": object.shadowOffset,
                     "ShadowBlur": object.shadowBlur,
+                    "ShadowAngle": object.shadowAngle,
                 ]
                 if let id = object.imageID { item["Image"] = id }
                 return item
@@ -201,7 +204,8 @@ public extension WebSlideLayout {
                 outlineWidth: object.text.outlineWidth,
                 shadowColor: variant.shadow.isEnabled ? variant.shadow.color : SlideStyle.RGBA(0, 0, 0, 0),
                 shadowOffset: variant.shadow.isEnabled ? variant.shadow.offsetPercent / 100 : 0,
-                shadowBlur: variant.shadow.isEnabled ? variant.shadow.blurPercent / 100 : 0))
+                shadowBlur: variant.shadow.isEnabled ? variant.shadow.blurPercent / 100 : 0,
+                shadowAngle: variant.shadow.angleDegrees))
         }
 
         var fonts: [String: String] = [:]

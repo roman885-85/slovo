@@ -86,6 +86,7 @@ public final class RemoteActivity extends Activity {
     // черга картинок і указки. Блок залу на цій вкладці схований.
     private View showBar;
     private View hallBar;
+    private View zoomBack;
     private ImageView pageImage;
     private PointerView pointerView;
     private TextView pageCaption;
@@ -156,6 +157,8 @@ public final class RemoteActivity extends Activity {
         hallBar = findViewById(R.id.hallBar);
         pageImage = findViewById(R.id.pageImage);
         pointerView = findViewById(R.id.pointerView);
+        zoomBack = findViewById(R.id.zoomBack);
+        zoomBack.setOnClickListener(v -> resetZoom());
         pageCaption = findViewById(R.id.pageCaption);
         findViewById(R.id.uploadButton).setOnClickListener(v -> pickFile());
         findViewById(R.id.photoButton).setOnClickListener(v -> pickPhotos());
@@ -500,8 +503,11 @@ public final class RemoteActivity extends Activity {
         // Наступний щипок починається з тієї кратності, що справді в залі:
         // її могли змінити мишею з комп'ютера.
         if (!zooming) zoomNow = fresh.zoomOn ? fresh.zoom : 1;
+        zoomBack.setVisibility(fresh.zoomOn && fresh.zoom > 1.001 ? View.VISIBLE : View.GONE);
         showPage();
         syncRemotePointer(fresh);
+        // Вірш перемкнули на комп'ютері — підсвічення в пульті йде слідом.
+        if (tab == Tab.BIBLE) bible.follow(fresh.biblePosition, fresh.bibleChapter, fresh.bibleVerses);
         if (tab != Tab.SEARCH) adapter.notifyDataSetChanged();
     }
 

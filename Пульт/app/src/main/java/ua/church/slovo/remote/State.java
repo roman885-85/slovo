@@ -44,6 +44,8 @@ final class State {
     final List<Row> plan = new ArrayList<>();
 
     String bibleBook = "";
+    /// Номер книги в переліку програми: за ним пульт знаходить її в себе.
+    int biblePosition = -1;
     int bibleChapter;
     String bibleVerses = "";
     String bibleTranslation = "";
@@ -140,6 +142,7 @@ final class State {
         JSONObject bible = json.optJSONObject("bible");
         if (bible != null) {
             state.bibleBook = bible.optString("book", "");
+            state.biblePosition = bible.optInt("position", -1);
             state.bibleChapter = bible.optInt("chapter", 0);
             state.bibleVerses = bible.optString("verses", "");
             state.bibleTranslation = bible.optString("translation", "");

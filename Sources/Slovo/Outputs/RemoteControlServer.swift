@@ -34,6 +34,16 @@ final class RemoteControlServer {
     private(set) var lastError: String?
     /// Номер состояния: растёт на каждое изменение, телефон по нему ждёт.
     private(set) var seq = 1
+    /// Номер картинки залу: росте на кожну зміну, крім руху указки. Пляму
+    /// телефон і браузер малюють самі поверх картинки, а раніше кожен рух
+    /// будив кожен екран по нову картинку залу — 15–20 разів на секунду, і
+    /// все це малювалося й стискалося в головному потоці.
+    private(set) var hallSeq = 1
+    private var hallFingerprint: Data?
+    /// Віддані картинки залу за шириною: на той самий номер їх не малюємо
+    /// вдруге — але не довше кількох секунд, щоб нове оформлення шаблону,
+    /// яке номера не міняє, доходило, як і раніше.
+    var hallCache: [Int: (seq: Int, made: Date, jpeg: Data)] = [:]
     private(set) var requestCount = 0
     private(set) var beaconCount = 0
 
@@ -394,6 +404,7 @@ final class RemoteControlServer {
         guard isRunning || webRunning || !waiters.isEmpty else { return }
         var snapshot = stateJSON()
         snapshot["seq"] = nil
+        snapshot["hallSeq"] = nil
         // Указка входить у відбиток: телефон показує її в себе. Частоту
         // пробуджень обмежує `pointerChanged`, а не викидання з відбитка.
         guard let data = try? JSONSerialization.data(withJSONObject: snapshot, options: [.sortedKeys]) else { return }
@@ -406,6 +417,14 @@ final class RemoteControlServer {
         guard data != fingerprint else { return }
         fingerprint = data
         seq += 1
+        // Картинка залу — те саме, крім указки.
+        var hallPart = snapshot
+        hallPart["pointer"] = nil
+        if let hallData = try? JSONSerialization.data(withJSONObject: hallPart, options: [.sortedKeys]),
+           hallData != hallFingerprint {
+            hallFingerprint = hallData
+            hallSeq += 1
+        }
         let waiting = waiters
         waiters.removeAll()
         for waiter in waiting {
@@ -974,6 +993,7 @@ final class RemoteControlServer {
         guard let state else { return ["seq": seq] }
         var json: [String: Any] = [
             "seq": seq,
+            "hallSeq": hallSeq,
             "app": "Slovo",
             "name": Host.current().localizedName ?? "Слово",
             "mode": state.mode.rawValue,

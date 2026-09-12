@@ -59,7 +59,7 @@ final class NativeImportWizard: NSView {
         addSubview(content)
 
         build(closeButton, title: state.imp("PBBClose", "Закрыть"),
-              hint: state.impHint("PBBClose", "Закрыть мастер")) { [weak self] in self?.onClose() }
+              hint: state.impHint("PBBClose", OurWords.t("Закрыть мастер"))) { [weak self] in self?.onClose() }
         build(backButton, title: state.imp("PBBPrev", "Назад"),
               hint: state.impHint("PBBPrev", "Предыдущая страница")) { [weak self] in
             self?.model.goBack()

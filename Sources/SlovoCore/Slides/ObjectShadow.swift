@@ -24,17 +24,40 @@ public struct ObjectShadow: Codable, Hashable, Sendable {
     public var opacity: Double
     /// «Цвет тени» (SBObjShadowColor, `ShadowColor`).
     public var color: SlideStyle.RGBA
+    /// Куди падає тінь, у градусах: 0° — управо, 45° — управо-вниз (як в
+    /// оригіналі), 90° — просто вниз, 225° — уліво-вгору. Свого поля для
+    /// напрямку в автора немає, тінь у нього завжди діагональна; власник
+    /// просив «м'якше й різноманітніше» — ось і напрямок.
+    public var angleDegrees: Double
 
     public init(isEnabled: Bool = false,
                 offsetPercent: Double = 2.7,
                 blurPercent: Double = 7,
                 opacity: Double = 1,
-                color: SlideStyle.RGBA = .black) {
+                color: SlideStyle.RGBA = .black,
+                angleDegrees: Double = 45) {
         self.isEnabled = isEnabled
         self.offsetPercent = offsetPercent
         self.blurPercent = blurPercent
         self.opacity = opacity
         self.color = color
+        self.angleDegrees = angleDegrees
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled, offsetPercent, blurPercent, opacity, color, angleDegrees
+    }
+
+    /// Шаблони, збережені до появи напрямку, читаються як були: кута в них
+    /// немає, і тінь у них падає вправо-вниз.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try box.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        offsetPercent = try box.decodeIfPresent(Double.self, forKey: .offsetPercent) ?? 2.7
+        blurPercent = try box.decodeIfPresent(Double.self, forKey: .blurPercent) ?? 7
+        opacity = try box.decodeIfPresent(Double.self, forKey: .opacity) ?? 1
+        color = try box.decodeIfPresent(SlideStyle.RGBA.self, forKey: .color) ?? .black
+        angleDegrees = try box.decodeIfPresent(Double.self, forKey: .angleDegrees) ?? 45
     }
 
     /// Тінь вимкнено цілком — нічого не малюємо.
@@ -56,8 +79,12 @@ public struct ObjectShadow: Codable, Hashable, Sendable {
         let base = fontSize > 0 ? fontSize : objectHeight
         let offset = base * offsetPercent / 100
         let blur = base * blurPercent / 100
-        // Тінь падає вправо-вниз: так її малює й оригінал, окремого поля
-        // «напрямок» у нього немає.
-        return (CGSize(width: offset, height: offset), blur)
+        // Зсув рахуємо по діагоналі: за кута 45° обидві осі дістають рівно
+        // «Зсув», як було завжди, — авторські шаблони від появи напрямку не
+        // змінилися ні на піксель.
+        let radians = angleDegrees * Double.pi / 180
+        let distance = Double(offset) * 2.0.squareRoot()
+        return (CGSize(width: distance * Foundation.cos(radians),
+                       height: distance * Foundation.sin(radians)), blur)
     }
 }

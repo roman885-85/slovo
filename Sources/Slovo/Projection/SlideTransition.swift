@@ -145,9 +145,16 @@ enum SlideTransitionAnimator {
     static func play(on layer: CALayer, from old: CGImage?, to new: CGImage?,
                      kind: SlideStyle.Transition, duration: Double, easing: SlideStyle.Easing) {
         let size = layer.bounds.size
+        // Номер переходу на цьому шарі. Прибирання по закінченні стосується
+        // лише свого переходу: коли наступний почався раніше, ніж скінчився
+        // попередній (сторінки гортають швидко або натискання, що
+        // накопичилися, приходять пачкою), старе прибирання зрізало шари
+        // нового посеред анімації й клало в шар застарілу сторінку.
+        let generation = nextGeneration(on: layer)
         guard kind != .none, duration > 0.01, let old, size.width > 1, size.height > 1 else {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            removeLeftovers(from: layer)
             layer.contents = new
             CATransaction.commit()
             return
@@ -254,14 +261,38 @@ enum SlideTransitionAnimator {
             }
         }
 
-        // По окончании: новый кадр в самом слое, служебные слои прочь.
+        // По окончании: новый кадр в самом слое, служебные слои прочь — если
+        // за это время на слой не лёг другой переход или другая картинка.
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05) {
+            guard (layer.value(forKey: generationKey) as? Int) == generation else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             layer.contents = new
-            layer.sublayers?.filter { ["уходящий", "входящий", "чёрное"].contains($0.name ?? "") }
-                .forEach { $0.removeFromSuperlayer() }
+            removeLeftovers(from: layer)
             CATransaction.commit()
         }
+    }
+
+    private static let generationKey = "slovoTransitionGeneration"
+
+    /// Новый номер перехода на слое: всё, что обещал прежний, отменяется.
+    static func nextGeneration(on layer: CALayer) -> Int {
+        let next = ((layer.value(forKey: generationKey) as? Int) ?? 0) &+ 1
+        layer.setValue(next, forKey: generationKey)
+        return next
+    }
+
+    /// Служебные слои перехода — прочь.
+    static func removeLeftovers(from layer: CALayer) {
+        layer.sublayers?.filter { ["уходящий", "входящий", "чёрное"].contains($0.name ?? "") }
+            .forEach { $0.removeFromSuperlayer() }
+    }
+
+    /// Положить картинку без перехода. Недоигранный переход отменяется —
+    /// иначе его уборка позже вернула бы в слой прежнюю страницу.
+    static func settle(_ layer: CALayer, contents: Any?) {
+        _ = nextGeneration(on: layer)
+        removeLeftovers(from: layer)
+        layer.contents = contents
     }
 }

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.text.SpannableStringBuilder;
@@ -69,6 +70,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import android.graphics.drawable.GradientDrawable;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+import android.widget.PopupWindow;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -156,6 +163,11 @@ public final class TabletActivity extends Activity {
     private ImageView hallImage;
     private PointerView pointerView;
     private View biblePanel, otherPanel, searchBar, bibleBar, planTools, planAdd, planUp, planDown;
+    /// Підказки й кнопки, що пояснюють (див. `setupGuidance`).
+    private final List<View> hintViews = new ArrayList<>();
+    private final Map<String, Integer> explanations = new HashMap<>();
+    private TextView modeHint, planHint;
+    private Button hintsButton, sermonOpen, zoomBack;
     private LinearLayout modeTabs, panelTools, panelFooter;
     private ListView panelList, searchList, sideList;
     private GridView panelGrid;
@@ -236,6 +248,14 @@ public final class TabletActivity extends Activity {
             main.postDelayed(this, 1000);
         }
     };
+
+    /// Масштаб інтерфейсу (див. `UiScale`) — до того, як вікно візьме ресурси.
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        Configuration scaled = UiScale.override(base);
+        if (scaled != null) applyOverrideConfiguration(scaled);
+    }
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -368,6 +388,7 @@ public final class TabletActivity extends Activity {
         ((ViewGroup) hallImage.getParent()).addView(personalView,
             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        setupGuidance();
         chooseSide(false);
         chooseMode(Mode.BIBLE, false);
         setupSermonBar();
@@ -405,7 +426,9 @@ public final class TabletActivity extends Activity {
     private void setupPhone(boolean warn) {
         // Лише вертикально: лежачи телефон має ~400 dp заввишки, і шапка,
         // вкладки та кнопки забирають усе — список віршів зникав зовсім.
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+        // Власник: «программа должна быть железно зафиксирована в ориентации
+        // и не переворачиваться» — книжна без перевертання.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         phoneColumns = new View[] {
             findViewById(R.id.contentColumn), findViewById(R.id.hallColumn), findViewById(R.id.sideColumn),
         };
@@ -512,6 +535,7 @@ public final class TabletActivity extends Activity {
         popup.getMenu().add(0, 3, 2, R.string.menu_zoom_off);
         popup.getMenu().add(0, 4, 3, R.string.menu_sermon);
         popup.getMenu().add(0, 5, 4, R.string.menu_view);
+        popup.getMenu().add(0, 6, 5, R.string.menu_scale);
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 4:
@@ -519,6 +543,9 @@ public final class TabletActivity extends Activity {
                     return true;
                 case 5:
                     showViewDialog();
+                    return true;
+                case 6:
+                    showScaleDialog();
                     return true;
                 case 1:
                     startActivity(new Intent(this, ConnectActivity.class));
@@ -690,8 +717,20 @@ public final class TabletActivity extends Activity {
         }
 
         switch (mode) {
+            case BIBLE:
+                // Вірш перемкнули на комп'ютері або з іншого пульта —
+                // підсвічення на планшеті переїжджає слідом.
+                bible.follow(fresh.biblePosition, fresh.bibleChapter, fresh.bibleVerses);
+                break;
             case SONGS:
                 if (!fresh.songBook.equals(songsBook)) loadSongs();
+                // Пісню перемкнули не звідси: у переліку теж має бути видно,
+                // на якій стоїть програма.
+                else if (!fresh.songTitle.equals(shownSongTitle)) {
+                    shownSongTitle = fresh.songTitle;
+                    fillSongs();
+                    scrollToCurrentSong();
+                }
                 fillParts();
                 break;
             case PRESENTATION:
@@ -888,6 +927,7 @@ public final class TabletActivity extends Activity {
         Bitmap full = hallBitmap;
         if (full == null) return;
         if (!zooming) zoomNow = state.zoomOn ? state.zoom : 1;
+        if (zoomBack != null) zoomBack.setVisibility(state.zoomOn && state.zoom > 1.001 ? View.VISIBLE : View.GONE);
         double[] window = zoomWindow();
         String signature = window[0] + ":" + window[1] + ":" + window[2] + ":" + System.identityHashCode(full);
         if (signature.equals(shownCrop)) return;
@@ -1061,6 +1101,9 @@ public final class TabletActivity extends Activity {
         gridSignature = "";
         panelNote.setText("");
         showGrid(false);
+        if (modeHint != null) { modeHint.setText(modeHintText(chosen)); applyHints(); }
+        // Кнопки вкладки збираються нижче — пояснення їм даємо, щойно зберуться.
+        main.post(() -> explainButtons((ViewGroup) otherPanel));
         switch (chosen) {
             case SONGS: buildSongs(); break;
             case PRESENTATION: buildPresentation(); break;
@@ -1075,6 +1118,228 @@ public final class TabletActivity extends Activity {
     private void showGrid(boolean grid) {
         panelGrid.setVisibility(grid ? View.VISIBLE : View.GONE);
         panelList.setVisibility(grid ? View.GONE : View.VISIBLE);
+    }
+
+    // MARK: Підказки
+
+    /// Власник: «в планшете не понятно как добавить план в программу,
+    /// интерфейс не очень удобный и местами не понятный и сложный, нужно
+    /// переделать и добавить подсказки к действиям». Тут усе, що пояснює:
+    /// план проповіді — кнопкою на видноті, а не в меню; кнопки плану — зі
+    /// словами; рядки-підказки під частинами екрана (ховає «Підказки» вгорі);
+    /// довгий дотик на кнопці каже, що вона робить.
+    private void setupGuidance() {
+        rearrangePlanTools();
+
+        ViewGroup side = (ViewGroup) tabPlan.getParent().getParent();
+        sermonOpen = smallButton(getString(R.string.t_sermon_open),
+            v -> startActivity(new Intent(this, SermonActivity.class)));
+        sermonOpen.setTextColor(Color.WHITE);
+        sermonOpen.setBackground(rounded(ACCENT));
+        side.addView(sermonOpen, 1, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        FrameLayout hallBox = (FrameLayout) hallImage.getParent();
+        zoomBack = smallButton(getString(R.string.t_zoom_back), v -> resetZoom());
+        zoomBack.setTextColor(Color.WHITE);
+        zoomBack.setBackground(rounded(ACCENT));
+        zoomBack.setVisibility(View.GONE);
+        FrameLayout.LayoutParams corner = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        corner.setMargins(dp(6), dp(6), dp(6), dp(6));
+        hallBox.addView(zoomBack, corner);
+
+        View menu = findViewById(R.id.menuButton);
+        ViewGroup top = (ViewGroup) menu.getParent();
+        hintsButton = new Button(this, null, 0, R.style.TabButton);
+        hintsButton.setText(R.string.t_hints);
+        hintsButton.setOnClickListener(v -> {
+            settings.setHints(!settings.hints());
+            applyHints();
+            Toast.makeText(this, settings.hints() ? R.string.t_hints_on : R.string.t_hints_off, Toast.LENGTH_LONG).show();
+        });
+        top.addView(hintsButton);
+
+        addHint((ViewGroup) biblePanel, 1, R.string.t_hint_bible);
+        modeHint = addHint((ViewGroup) otherPanel, 0, 0);
+        ViewGroup hallColumn = (ViewGroup) hallBox.getParent();
+        addHint(hallColumn, hallColumn.indexOfChild(hallBox) + 1, R.string.t_hint_hall);
+        planHint = addHint(side, side.indexOfChild(planTools) + 1, R.string.t_hint_plan);
+        ViewGroup bottomRow = (ViewGroup) findViewById(R.id.prev).getParent();
+        ViewGroup rootView = (ViewGroup) bottomRow.getParent();
+        addHint(rootView, rootView.indexOfChild(bottomRow), R.string.t_hint_bottom);
+
+        int[][] byId = {
+            {R.id.prev, R.string.x_prev}, {R.id.next, R.string.x_next}, {R.id.show, R.string.x_show},
+            {R.id.hide, R.string.x_hide}, {R.id.black, R.string.x_black}, {R.id.blank, R.string.x_blank},
+            {R.id.planAdd, R.string.x_plan_add}, {R.id.planUp, R.string.x_up}, {R.id.planDown, R.string.x_down},
+            {R.id.sideRemove, R.string.x_remove}, {R.id.tabPlan, R.string.x_tab_plan},
+            {R.id.tabHistory, R.string.x_tab_history}, {R.id.menuButton, R.string.x_menu},
+            {R.id.bibleSearchGo, R.string.x_search}, {R.id.searchClose, R.string.x_search_close},
+            {R.id.bibleShow, R.string.x_bible_show}, {R.id.bibleClear, R.string.x_bible_clear},
+            {R.id.bibleTranslation, R.string.x_translation},
+        };
+        for (int[] pair : byId) explain(findViewById(pair[0]), pair[1]);
+        explain(hintsButton, R.string.x_hints);
+        explain(sermonOpen, R.string.x_sermon);
+        explain(zoomBack, R.string.x_zoom_back);
+        // Кнопки вкладок збираються щоразу заново — впізнаємо їх за написом.
+        int[][] byTitle = {
+            {R.string.t_play, R.string.x_play}, {R.string.t_pause, R.string.x_play},
+            {R.string.t_to_begin, R.string.x_to_begin}, {R.string.t_stop, R.string.x_stop},
+            {R.string.t_mute, R.string.x_mute}, {R.string.t_to_screen, R.string.x_to_screen},
+            {R.string.t_repeat, R.string.x_repeat}, {R.string.t_add_file, R.string.x_add_file},
+            {R.string.t_add_photos, R.string.x_add_photos}, {R.string.t_screen_refresh, R.string.x_screen_refresh},
+            {R.string.t_screen_stop, R.string.x_screen_stop}, {R.string.t_text_preview, R.string.x_text_preview},
+            {R.string.t_text_show, R.string.x_text_show}, {R.string.t_songbook, R.string.x_songbook},
+        };
+        for (int[] pair : byTitle) explanations.put(getString(pair[0]), pair[1]);
+        applyHints();
+    }
+
+    /// «Масштаб інтерфейсу…»: менше — більше вміщається. Вікно перебудовується
+    /// одразу; той самий масштаб бере й план проповіді.
+    private void showScaleDialog() {
+        float current = settings.uiScale();
+        String[] labels = new String[UiScale.CHOICES.length];
+        int checked = 0;
+        for (int i = 0; i < UiScale.CHOICES.length; i++) {
+            float value = UiScale.CHOICES[i];
+            labels[i] = value == 0 ? getString(R.string.scale_auto, Math.round(UiScale.auto(getApplicationContext()) * 100))
+                                   : Math.round(value * 100) + "%";
+            if (Math.abs(value - current) < 0.01f) checked = i;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.scale_title)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                dialog.dismiss();
+                settings.setUiScale(UiScale.CHOICES[which]);
+                recreate();
+            })
+            .setNegativeButton(R.string.scale_cancel, null)
+            .show();
+    }
+
+    /// Кнопки плану зі словами в ряд не вміщаються — два ряди:
+    /// «Додати вибране | Прибрати» і «Вище | Нижче».
+    private void rearrangePlanTools() {
+        LinearLayout tools = (LinearLayout) planTools;
+        View remove = findViewById(R.id.sideRemove);
+        tools.removeAllViews();
+        tools.setOrientation(LinearLayout.VERTICAL);
+        // Колонка вузька: написи — дрібніше й в один рядок, кнопки — порівну.
+        for (View each : new View[] {planAdd, remove, planUp, planDown}) {
+            Button button = (Button) each;
+            button.setTextSize(13);
+            button.setSingleLine(true);
+            button.setPadding(dp(4), button.getPaddingTop(), dp(4), button.getPaddingBottom());
+        }
+        LinearLayout first = new LinearLayout(this);
+        first.addView(planAdd, weight(1));
+        first.addView(remove, weight(1));
+        LinearLayout second = new LinearLayout(this);
+        second.addView(planUp, weight(1));
+        second.addView(planDown, weight(1));
+        tools.addView(first, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        tools.addView(second, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private TextView addHint(ViewGroup parent, int index, int text) {
+        TextView view = new TextView(this);
+        if (text != 0) view.setText(text);
+        view.setTextSize(13);
+        view.setTextColor(0xFF9AA4B2);
+        view.setPadding(dp(6), dp(3), dp(6), dp(3));
+        parent.addView(view, Math.max(0, Math.min(index, parent.getChildCount())));
+        hintViews.add(view);
+        return view;
+    }
+
+    private void applyHints() {
+        boolean on = settings.hints();
+        for (View view : hintViews) view.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (planHint != null) planHint.setVisibility(on && !sideHistory ? View.VISIBLE : View.GONE);
+        if (modeHint != null && modeHint.getText().length() == 0) modeHint.setVisibility(View.GONE);
+        if (hintsButton != null) hintsButton.setTextColor(on ? ACCENT : Color.WHITE);
+    }
+
+    private String modeHintText(Mode chosen) {
+        switch (chosen) {
+            case SONGS: return getString(R.string.t_hint_songs);
+            case PRESENTATION: return getString(R.string.t_hint_presentation);
+            case MEDIA: return getString(R.string.t_hint_media);
+            case PICTURES: return getString(R.string.t_hint_pictures);
+            case SCREEN: return getString(R.string.t_hint_screen);
+            case TEXT: return getString(R.string.t_hint_text);
+            default: return "";
+        }
+    }
+
+    /// Довгий дотик на кнопці — що вона робить.
+    private void explain(View view, int text) {
+        if (view == null) return;
+        view.setOnLongClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            showTip(v, text);
+            return true;
+        });
+    }
+
+    /// Пояснення над кнопкою — своєю плашкою, а не `Toast`: той малює
+    /// системний інтерфейс, унизу й дрібно, і на частині пристроїв його не
+    /// видно зовсім. Сама зникає за три з половиною секунди.
+    private PopupWindow tip;
+
+    private void showTip(View anchor, int text) {
+        if (tip != null) tip.dismiss();
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(0xFFFFFFFF);
+        label.setTextSize(15);
+        label.setMaxWidth(dp(420));
+        label.setPadding(dp(12), dp(8), dp(12), dp(8));
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(0xF01E2A3A);
+        shape.setStroke(dp(1), 0xFF4C8DFF);
+        shape.setCornerRadius(dp(8));
+        label.setBackground(shape);
+        label.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at);
+        int width = getResources().getDisplayMetrics().widthPixels;
+        int x = at[0] + anchor.getWidth() / 2 - label.getMeasuredWidth() / 2;
+        x = Math.max(dp(4), Math.min(x, width - label.getMeasuredWidth() - dp(4)));
+        int y = at[1] - label.getMeasuredHeight() - dp(6);
+        if (y < dp(24)) y = at[1] + anchor.getHeight() + dp(6);
+        PopupWindow shown = new PopupWindow(label, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, false);
+        shown.setOutsideTouchable(true);
+        shown.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
+        tip = shown;
+        main.postDelayed(() -> { if (shown.isShowing()) shown.dismiss(); }, 3500);
+    }
+
+    private void explainButtons(ViewGroup root) {
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof Button) {
+                Integer text = explanations.get(((Button) child).getText().toString());
+                if (text != null) explain(child, text);
+            } else if (child instanceof ViewGroup) {
+                explainButtons((ViewGroup) child);
+            }
+        }
+    }
+
+    private GradientDrawable rounded(int colour) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(colour);
+        shape.setCornerRadius(dp(6));
+        return shape;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private Button smallButton(String title, View.OnClickListener action) {
@@ -1201,6 +1466,20 @@ public final class TabletActivity extends Activity {
                 });
             }
         });
+    }
+
+    /// Яку пісню показано підсвіченою в переліку — щоб не перемальовувати
+    /// його на кожну відповідь програми.
+    private String shownSongTitle = "";
+
+    /// Підвести перелік пісень до тієї, на якій стоїть програма.
+    private void scrollToCurrentSong() {
+        for (int i = 0; i < panelRows.size(); i++) {
+            if (!panelRows.get(i).current) continue;
+            final int position = Math.max(0, i - 1);
+            panelList.post(() -> panelList.setSelection(position));
+            return;
+        }
     }
 
     private void fillSongs() {
@@ -1554,6 +1833,8 @@ public final class TabletActivity extends Activity {
         planAdd.setVisibility(showHistory ? View.GONE : View.VISIBLE);
         planUp.setVisibility(showHistory ? View.GONE : View.VISIBLE);
         planDown.setVisibility(showHistory ? View.GONE : View.VISIBLE);
+        if (sermonOpen != null) sermonOpen.setVisibility(showHistory ? View.GONE : View.VISIBLE);
+        applyHints();
         if (showHistory) loadHistory(); else fillPlan();
     }
 

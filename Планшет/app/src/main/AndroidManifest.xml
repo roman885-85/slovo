@@ -10,8 +10,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ua.church.slovo.remote"
-    android:versionCode="4"
-    android:versionName="1.3">
+    android:versionCode="6"
+    android:versionName="1.5">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -30,7 +30,7 @@
             android:name="ua.church.slovo.remote.TabletActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
             <intent-filter>
@@ -41,16 +41,19 @@
 
         <activity
             android:name="ua.church.slovo.remote.ConnectActivity"
+            android:screenOrientation="landscape"
             android:exported="false"
             android:label="@string/connect_title"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- План проповіді: складається без зв'язку з програмою. -->
+        <!-- План проповіді: складається без зв'язку з програмою. Орієнтація —
+             залізно альбомна, як у головного вікна (власник: «не переворачиваться»). -->
         <activity
             android:name="ua.church.slovo.remote.SermonActivity"
             android:exported="false"
             android:label="@string/s_title"
             android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
     </application>
 </manifest>

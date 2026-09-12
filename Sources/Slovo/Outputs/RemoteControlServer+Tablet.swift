@@ -25,10 +25,17 @@ extension RemoteControlServer {
         switch request.path {
         case "/api/hall.jpg":
             let width = min(1920, max(160, Int(request.query["w"] ?? "") ?? 960))
+            if let cached = hallCache[width], cached.seq == hallSeq,
+               Date().timeIntervalSince(cached.made) < 3 {
+                respondData(connection, 200, cached.jpeg, contentType: "image/jpeg")
+                return true
+            }
             guard let image = hallImage(state: state), let jpeg = Self.jpeg(image, width: width) else {
                 respond(connection, 404, ["error": OurWords.t("в зале видео")])
                 return true
             }
+            if hallCache.count > 6 { hallCache.removeAll() }
+            hallCache[width] = (hallSeq, Date(), jpeg)
             respondData(connection, 200, jpeg, contentType: "image/jpeg")
         case "/api/songs/books":
             respond(connection, 200, songBooksJSON(state: state))

@@ -2,7 +2,9 @@ package ua.church.slovo.remote;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.database.Cursor;
@@ -26,6 +28,8 @@ import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.graphics.drawable.GradientDrawable;
+import android.widget.PopupWindow;
 import android.widget.GridView;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -102,6 +106,10 @@ public final class SermonActivity extends Activity {
     private final List<Button> tabButtons = new ArrayList<>();
     private final List<View> panels = new ArrayList<>();
     private final Lines planLines = new Lines(false);
+    /// Кроки, лічильник і зв'язок — щоб було видно, що робити далі.
+    private final List<TextView> steps = new ArrayList<>();
+    private Button plansButton;
+    private TextView planCount, orderHint, linkState;
     private TextView planEmpty;
     private int selected = -1;
 
@@ -137,14 +145,23 @@ public final class SermonActivity extends Activity {
     private EditText textHeading;
     private EditText textBody;
 
+    /// Масштаб інтерфейсу (див. `UiScale`) — до того, як вікно візьме ресурси.
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        Configuration scaled = UiScale.override(base);
+        if (scaled != null) applyOverrideConfiguration(scaled);
+    }
+
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         library = new Library(this);
         settings = new Settings(this);
         phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
-        // На телефоні лише вертикально: лежачи список книг стискався до нуля.
-        if (phone) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+        // На телефоні лише вертикально (лежачи список книг стискався до нуля)
+        // і без перевертання — «железно зафиксирована в ориентации».
+        if (phone) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         plan = SermonPlan.load(this, prefs().getString("current", ""));
         if (plan == null) plan = new SermonPlan();
         setContentView(build());
@@ -185,11 +202,14 @@ public final class SermonActivity extends Activity {
                 savePlan();
             }
         });
-        Button plans = small(getString(R.string.s_plans), v -> choosePlan());
+        // Власник: «в планшете не понятно как добавить план в программу».
+        // Вгорі — лише назва й куди піти; головна дія, «Завантажити в
+        // «Слово»», стоїть окремо великою кнопкою під планом.
+        plansButton = small(getString(R.string.s_plans_count, SermonPlan.all(this).size()), v -> choosePlan());
         Button shelf = small(getString(R.string.s_library), v -> openLibrary());
-        Button upload = small(getString(R.string.s_upload), v -> upload());
-        upload.setTextColor(ACCENT);
-        upload.setTypeface(Typeface.DEFAULT_BOLD);
+        explain(back, R.string.x_back);
+        explain(plansButton, R.string.x_plans);
+        explain(shelf, R.string.x_library);
 
         if (phone) {
             LinearLayout top = row();
@@ -198,20 +218,31 @@ public final class SermonActivity extends Activity {
             root.addView(top);
             HorizontalScrollView scroller = new HorizontalScrollView(this);
             LinearLayout buttons = row();
-            buttons.addView(plans);
+            buttons.addView(plansButton);
             buttons.addView(shelf);
-            buttons.addView(upload);
             scroller.addView(buttons);
             root.addView(scroller);
         } else {
             LinearLayout top = row();
             top.addView(back);
             top.addView(titleField, weight(1));
-            top.addView(plans);
+            top.addView(plansButton);
             top.addView(shelf);
-            top.addView(upload);
             root.addView(top);
         }
+        LinearLayout stepRow = row();
+        for (int text : new int[] {R.string.s_step_1, R.string.s_step_2, R.string.s_step_3}) {
+            TextView step = new TextView(this);
+            step.setText(text);
+            step.setTextSize(TypedValue.COMPLEX_UNIT_SP, phone ? 12 : 14);
+            step.setGravity(Gravity.CENTER);
+            step.setPadding(dp(6), dp(6), dp(6), dp(6));
+            steps.add(step);
+            LinearLayout.LayoutParams gap = weight(1);
+            gap.setMargins(dp(2), dp(4), dp(2), dp(4));
+            stepRow.addView(step, gap);
+        }
+        root.addView(stepRow);
         status = new TextView(this);
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         status.setTextColor(0xFF9AA4B2);
@@ -247,12 +278,12 @@ public final class SermonActivity extends Activity {
 
         LinearLayout right = vertical();
         right.setPadding(phone ? 0 : dp(10), phone ? dp(6) : 0, 0, 0);
-        TextView planTitle = new TextView(this);
-        planTitle.setText(R.string.t_plan);
-        planTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        planTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        planCount = new TextView(this);
+        planCount.setText(getString(R.string.s_plan_count, 0));
+        planCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        planCount.setTypeface(Typeface.DEFAULT_BOLD);
         LinearLayout tools = row();
-        tools.addView(planTitle, weight(1));
+        tools.addView(planCount, weight(1));
         tools.addView(small(getString(R.string.t_up), v -> move(-1)));
         tools.addView(small(getString(R.string.t_down), v -> move(1)));
         tools.addView(small(getString(R.string.t_remove), v -> removeSelected()));
@@ -266,6 +297,18 @@ public final class SermonActivity extends Activity {
             planLines.mark(position);
         });
         right.addView(planList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        orderHint = hint(getString(R.string.s_hint_order));
+        right.addView(orderHint);
+        Button upload = small(getString(R.string.s_upload), v -> upload());
+        upload.setTextColor(0xFFFFFFFF);
+        upload.setTypeface(Typeface.DEFAULT_BOLD);
+        upload.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        upload.setBackground(rounded(ACCENT));
+        explain(upload, R.string.x_upload);
+        right.addView(upload, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+        linkState = hint(getString(R.string.s_checking));
+        linkState.setGravity(Gravity.CENTER);
+        right.addView(linkState);
         body.addView(right, phone
             ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2)
             : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2));
@@ -298,6 +341,7 @@ public final class SermonActivity extends Activity {
 
     private View biblePanel() {
         LinearLayout panel = vertical();
+        panel.addView(hint(getString(R.string.s_hint_bible)));
         bibleSpinner = new Spinner(this);
         bibleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -472,6 +516,7 @@ public final class SermonActivity extends Activity {
 
     private View songsPanel() {
         LinearLayout panel = vertical();
+        panel.addView(hint(getString(R.string.s_hint_songs)));
         songbookSpinner = new Spinner(this);
         songbookSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -612,6 +657,7 @@ public final class SermonActivity extends Activity {
 
     private View textPanel() {
         LinearLayout panel = vertical();
+        panel.addView(hint(getString(R.string.s_hint_text)));
         textHeading = new EditText(this);
         textHeading.setHint(R.string.t_text_title_hint);
         textHeading.setSingleLine(true);
@@ -701,14 +747,24 @@ public final class SermonActivity extends Activity {
     private void refreshPlan() {
         List<String> titles = new ArrayList<>();
         List<String> subtitles = new ArrayList<>();
-        for (SermonPlan.Item item : plan.items) {
-            titles.add(item.title);
+        for (int i = 0; i < plan.items.size(); i++) {
+            SermonPlan.Item item = plan.items.get(i);
+            titles.add((i + 1) + ".  " + kindIcon(item.type) + "  " + item.title);
             subtitles.add(item.subtitle());
         }
         planLines.set(titles, subtitles);
         if (selected >= plan.items.size()) selected = plan.items.size() - 1;
         planLines.mark(selected);
         planEmpty.setVisibility(plan.items.isEmpty() ? View.VISIBLE : View.GONE);
+        boolean empty = plan.items.isEmpty();
+        if (planCount != null) planCount.setText(getString(R.string.s_plan_count, plan.items.size()));
+        if (orderHint != null) orderHint.setVisibility(plan.items.size() > 1 ? View.VISIBLE : View.GONE);
+        for (int i = 0; i < steps.size(); i++) {
+            boolean current = empty ? i == 0 : i == 2;
+            steps.get(i).setTextColor(current ? 0xFFFFFFFF : 0xFF9AA4B2);
+            steps.get(i).setBackground(current ? rounded(ACCENT) : rounded(0xFF1E2A3A));
+        }
+        if (plansButton != null) plansButton.setText(getString(R.string.s_plans_count, SermonPlan.all(this).size()));
     }
 
     private void move(int delta) {
@@ -1163,14 +1219,11 @@ public final class SermonActivity extends Activity {
             startActivity(intent);
             finish();
         };
-        if (notes.isEmpty()) {
-            toast(getString(R.string.s_uploaded, added));
-            open.run();
-            return;
-        }
+        // Після завантаження — що далі: власник не мав звідки дізнатися.
+        String help = getString(R.string.s_uploaded_help);
         new AlertDialog.Builder(this)
             .setTitle(getString(R.string.s_uploaded, added))
-            .setMessage(join(notes).replace(", ", "\n"))
+            .setMessage(notes.isEmpty() ? help : help + "\n\n" + join(notes).replace(", ", "\n"))
             .setPositiveButton(R.string.done, (dialog, which) -> open.run())
             .setCancelable(false)
             .show();
@@ -1251,6 +1304,90 @@ public final class SermonActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkLink();
+    }
+
+    /// «Слово» на зв'язку чи ні — видно під кнопкою, ще до того, як її натиснули.
+    private void checkLink() {
+        if (linkState == null) return;
+        if (!settings.hasHost()) {
+            linkState.setText(R.string.s_need_connection);
+            linkState.setTextColor(0xFFFF6B6B);
+            return;
+        }
+        linkState.setText(R.string.s_checking);
+        linkState.setTextColor(0xFF9AA4B2);
+        Api probe = api();
+        new Thread(() -> {
+            boolean reached;
+            try { probe.state(0); reached = true; } catch (Exception error) { reached = false; }
+            boolean online = reached;
+            main.post(() -> {
+                linkState.setText(online ? R.string.s_online : R.string.s_offline);
+                linkState.setTextColor(online ? 0xFF3FB950 : 0xFFFF6B6B);
+            });
+        }).start();
+    }
+
+    private static String kindIcon(String type) {
+        if (SermonPlan.SCRIPTURE.equals(type)) return "📖";
+        if (SermonPlan.SONG.equals(type)) return "🎵";
+        if (SermonPlan.FILE.equals(type)) return "📄";
+        return "✎";
+    }
+
+    /// Довгий дотик на кнопці — що вона робить.
+    private void explain(View view, int text) {
+        view.setOnLongClickListener(v -> {
+            showTip(v, text);
+            return true;
+        });
+    }
+
+    /// Пояснення над кнопкою — своєю плашкою, а не `Toast`: той малює
+    /// системний інтерфейс, унизу й дрібно, і на частині пристроїв його не
+    /// видно зовсім. Сама зникає за три з половиною секунди.
+    private PopupWindow tip;
+
+    private void showTip(View anchor, int text) {
+        if (tip != null) tip.dismiss();
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(0xFFFFFFFF);
+        label.setTextSize(15);
+        label.setMaxWidth(dp(420));
+        label.setPadding(dp(12), dp(8), dp(12), dp(8));
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(0xF01E2A3A);
+        shape.setStroke(dp(1), 0xFF4C8DFF);
+        shape.setCornerRadius(dp(8));
+        label.setBackground(shape);
+        label.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at);
+        int width = getResources().getDisplayMetrics().widthPixels;
+        int x = at[0] + anchor.getWidth() / 2 - label.getMeasuredWidth() / 2;
+        x = Math.max(dp(4), Math.min(x, width - label.getMeasuredWidth() - dp(4)));
+        int y = at[1] - label.getMeasuredHeight() - dp(6);
+        if (y < dp(24)) y = at[1] + anchor.getHeight() + dp(6);
+        PopupWindow shown = new PopupWindow(label, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, false);
+        shown.setOutsideTouchable(true);
+        shown.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
+        tip = shown;
+        main.postDelayed(() -> { if (shown.isShowing()) shown.dismiss(); }, 3500);
+    }
+
+    private GradientDrawable rounded(int colour) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(colour);
+        shape.setCornerRadius(dp(8));
+        return shape;
     }
 
     private Button small(String title, View.OnClickListener action) {

@@ -91,6 +91,7 @@
     <string name="mode_pictures">Зображення</string>
     <string name="mode_text">Текст</string>
     <string name="menu_zoom_off">Зняти наближення</string>
+    <string name="zoom_back">↺ Вихідний вигляд</string>
     <!-- Біблія: переклад → книга → розділ → вірші. -->
     <string name="bible_translation">Переклад</string>
     <string name="bible_books">Книги</string>

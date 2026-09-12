@@ -307,6 +307,8 @@ final class AppState: ObservableObject {
     private var modeBeforeMedia: WorkMode?
     /// Библиотека уже открывалась хоть раз: следующее чтение — перечитывание.
     private var hasLoadedLibraryOnce = false
+    /// Просили перечитати, поки читання ще йшло: зробимо це слідом.
+    private var reloadWanted = false
 
     /// В списке настроек есть включённые модули, которых библиотека не
     /// открывала: их путь есть на диске, а в `allModules` их нет. Так бывает
@@ -450,7 +452,15 @@ final class AppState: ObservableObject {
     /// не прочитан последний `bibleqt.ini`, и программа выглядит зависшей.
     /// Поэтому читаем в фоне, а в главный поток отдаём уже готовое.
     func reloadLibrary() {
-        guard !isLoadingLibrary else { return }
+        // Читання вже йде — не кидаємо друге поруч, але й не забуваємо: те,
+        // що просять зараз, читатимемо одразу після цього.
+        //
+        // Доти прохання просто зникало. Саме через це доданий у «Параметрах»
+        // модуль міг не з'явитися взагалі: людина встигала натиснути «Ок»,
+        // поки бібліотека ще відкривалася після запуску, — і програма мовчки
+        // лишала все, як було.
+        guard !isLoadingLibrary else { reloadWanted = true; return }
+        reloadWanted = false
         isLoadingLibrary = true
         moduleCache.removeAll()
 
@@ -585,6 +595,9 @@ final class AppState: ObservableObject {
 
         // И то, на чём остановились в прошлый раз.
         restoreState()
+
+        // Поки читали, просили перечитати ще раз — робимо це тепер.
+        if reloadWanted { reloadLibrary() }
     }
 
     /// Порядок как в `[BiblePath]`; чего там нет — в конец, по алфавиту.
@@ -721,11 +734,20 @@ final class AppState: ObservableObject {
             // без `.SQLite3`, и сравнение с именем файла её не находило.
             library.modules.first { $0.identifier.lowercased() == entry.libraryIdentifier.lowercased() }
         }
-        // Включённые строки есть, а в библиотеке не нашлось ни одной — это не
-        // «сняли все галочки», а другая папка модулей: имена к ней не подходят.
-        // Затирать полосу в таком случае нельзя. А вот когда сняты и вправду
-        // все, полоса и должна опустеть — за этим сюда и приходят.
-        guard wanted.isEmpty || !chosen.isEmpty else { return }
+        // Розпис не про цю теку — жодного її модуля в ньому не названо, ні
+        // ввімкненого, ні вимкненого. Тоді смугу не чіпаємо: розпис лишився
+        // від іншої теки модулів, і затерти ним живий список не можна.
+        //
+        // Раніше тут стояло інше: «не знайшлося ЖОДНОГО ввімкненого». Через це
+        // знята остання галочка не робила нічого — програма мовчки лишала все,
+        // як було. Саме на це власник і скаржився: «при відключенні або
+        // включенні модуля в програмі нічого не відбувається».
+        let mentioned = entries.contains { entry in
+            !entry.isSongBook && library.modules.contains {
+                $0.identifier.lowercased() == entry.libraryIdentifier.lowercased()
+            }
+        }
+        guard mentioned else { return }
         orderedModules = chosen
         if !chosen.contains(where: { $0.identifier == primaryModuleID }) {
             primaryModuleID = chosen.first?.identifier ?? ""

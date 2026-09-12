@@ -170,6 +170,143 @@ final class SettingsStore: ObservableObject {
         save()
     }
 
+    // MARK: - Скидання, вивезення та ввезення
+
+    /// Розділ налаштувань — вкладка вікна «Параметри».
+    ///
+    /// Власник: «додати функцію скидання всіх налаштувань за умовчанням і
+    /// також для кожного пункту налаштувань окремий скид». Скидати все —
+    /// просто: беремо той самий стан, з яким програма запускається вперше.
+    /// А щоб скинути одну вкладку, треба знати, що на ній лежить, — звідси
+    /// перелік імен.
+    enum Area: String, CaseIterable {
+        case slide, media, paths, update, remote, basic, advanced, modules, hotkeys
+
+        /// Назва розділу для запитання «Скинути…?».
+        var title: String {
+            switch self {
+            case .slide:    return OurWords.t("Слайд")
+            case .media:    return OurWords.t("Медиа")
+            case .paths:    return OurWords.t("Пути")
+            case .update:   return OurWords.t("Обновление")
+            case .remote:   return OurWords.t("Remote API")
+            case .basic:    return OurWords.t("Основные")
+            case .advanced: return OurWords.t("Дополнительные")
+            case .modules:  return OurWords.t("Модули")
+            case .hotkeys:  return OurWords.t("Горячие клавиши")
+            }
+        }
+
+        /// Імена значень, які правлять на цій вкладці. Імена ті самі, що й у
+        /// файлі налаштувань: розділ скидається підміною цих ключів.
+        var optionKeys: [String] {
+            switch self {
+            case .slide:
+                return ["crossfadeTime", "pointerColour", "pointerNDI", "pointerOpacity",
+                        "pointerProjector", "pointerSize", "refAllMain", "refAllSec", "refMain",
+                        "refSec", "refsSeparated", "showTransition", "showTransitionEasing",
+                        "showTransitionTime", "slideTransition", "slideTransitionEasing",
+                        "songDotAfterNumber", "songNumberInBrackets", "songNumberInCollection",
+                        "songNumberPP"]
+            case .media:
+                return ["audioDeviceID", "ndiAudioGainDb", "ndiEnabled", "ndiFrameHeight",
+                        "ndiFrameRate", "ndiFrameRateIndex", "ndiSendAudio", "ndiSendVideo",
+                        "ndiTransparentBackground", "ndiTransport", "ndiWiFiEnabled",
+                        "ndiWiFiFrameRate", "ndiWiFiHeight", "showVideoOnPreview",
+                        "webVideoEnabled", "webVideoHeight", "webVideoKbps"]
+            case .paths:
+                return ["thumbsMode"]
+            case .update:
+                return ["updateInterval"]
+            case .remote:
+                return ["remoteEnabled", "remotePin", "remotePort", "remoteWebEnabled",
+                        "remoteWebName", "remoteWebNoPort", "remoteWebPassword", "remoteWebPort",
+                        "remoteWebViewOnly", "tcpEnabled", "tcpPort", "udpEnabled", "udpPort",
+                        "webEnabled", "webNetInterface", "webPort", "webSocketEnabled",
+                        "webSocketPort"]
+            case .basic:
+                return ["animationFrequency", "buttonAction", "customHeight", "customLeft",
+                        "customTop", "customWidth", "defaultHeight", "defaultWidth", "foreground",
+                        "monitorIndex", "percentFillingPage", "slovoTitle"]
+            case .advanced:
+                return ["activeInputFieldColor", "doubleMonitors", "fastInputUseBackSpace",
+                        "hideSlideTime", "separatorTenVerses", "showSecondaryVerseNumbers",
+                        "showVerseNumbers", "songsEndMarker", "versesOnOwnLines"]
+            case .modules:
+                return ["lazyLoadModules", "loadAllBooks"]
+            case .hotkeys:
+                return ["useRCPointer"]
+            }
+        }
+    }
+
+    /// Налаштування за умовчанням — ті, з якими програма запускається вперше:
+    /// з файла умовчань автора, вивірених під зал.
+    func factorySettings() -> SlovoSettings {
+        let config = IniSettings.locateConfig().flatMap { try? IniSettings(fileAt: $0) }
+        var fresh = SlovoSettings(config: config, hotkeySets: HotkeySets.load(), dataRoot: dataRoot)
+        if fresh.webSlides.isEmpty { fresh.webSlides = SlovoSettings.builtInWebSlides }
+        return fresh
+    }
+
+    /// Скинути все до умовчань.
+    func resetAll() {
+        settings = factorySettings()
+    }
+
+    /// Скинути одну вкладку, не чіпаючи решти.
+    func reset(_ area: Area) {
+        let fresh = factorySettings()
+        settings.options = Self.merge(settings.options, taking: area.optionKeys, from: fresh.options)
+        // Списки, які живуть на вкладці своїм життям, а не в `options`.
+        switch area {
+        case .modules: settings.modules = fresh.modules
+        case .paths:
+            settings.picturePaths = fresh.picturePaths
+            settings.screenshotFolder = fresh.screenshotFolder
+        case .remote: settings.webSlides = fresh.webSlides
+        case .hotkeys:
+            settings.hotkeySets = fresh.hotkeySets
+            settings.hotkeySetName = fresh.hotkeySetName
+        default: break
+        }
+    }
+
+    /// Підміна названих значень — через той самий запис, яким налаштування
+    /// лягають у файл: іменами полів, без переліку типів.
+    private static func merge(_ current: ProgramOptions, taking keys: [String],
+                              from fresh: ProgramOptions) -> ProgramOptions {
+        let encoder = JSONEncoder()
+        guard let currentData = try? encoder.encode(current),
+              let freshData = try? encoder.encode(fresh),
+              var currentBox = (try? JSONSerialization.jsonObject(with: currentData)) as? [String: Any],
+              let freshBox = (try? JSONSerialization.jsonObject(with: freshData)) as? [String: Any]
+        else { return current }
+        for key in keys {
+            // Немає в умовчаннях — значить, значення там порожнє: прибираємо.
+            if let value = freshBox[key] { currentBox[key] = value } else { currentBox.removeValue(forKey: key) }
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: currentBox),
+              let result = try? JSONDecoder().decode(ProgramOptions.self, from: data)
+        else { return current }
+        return result
+    }
+
+    /// Вивезти налаштування одним файлом — перенести на інший комп'ютер або
+    /// відкласти перед правкою.
+    func export(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(settings).write(to: url, options: .atomic)
+    }
+
+    /// Ввезти налаштування з файла. Чужий або зіпсований файл кидає помилку —
+    /// і тоді нічого не міняється.
+    func importSettings(from url: URL) throws {
+        let incoming = try JSONDecoder().decode(SlovoSettings.self, from: try Data(contentsOf: url))
+        settings = incoming
+    }
+
     // MARK: - Вкладка «Модули» (6.1.4)
 
     func setModule(_ id: String, enabled: Bool) {
@@ -190,6 +327,17 @@ final class SettingsStore: ObservableObject {
         guard settings.modules.indices.contains(target) else { return nil }
         settings.modules.swapAt(index, target)
         return id
+    }
+
+    /// Поміняти місцями два рядки списку.
+    ///
+    /// «↑» і «↓» у вкладці міняють сусідів по вигляду списку, а він тепер
+    /// поділений на розділи: сусід на екрані й сусід у розписі — не завжди
+    /// один рядок, тому переставляємо за іменами, а не за зсувом.
+    func swapModules(_ first: String, _ second: String) {
+        guard let a = settings.modules.firstIndex(where: { $0.id == first }),
+              let b = settings.modules.firstIndex(where: { $0.id == second }) else { return }
+        settings.modules.swapAt(a, b)
     }
 
     /// Что не так с выбранным для добавления модулем — сообщения автора.

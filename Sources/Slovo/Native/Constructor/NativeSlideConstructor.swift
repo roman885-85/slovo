@@ -61,6 +61,12 @@ final class NativeSlideConstructor: NSView, NativeListSource {
 
     override var isFlipped: Bool { true }
 
+    /// Enter у полі закінчує правку поля, а не закриває Конструктор.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if NativeForm.endsFieldEditing(on: event, in: window) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
     /// Подпись задержки прогона: «1200 мс».
     private var delayText: String { "\(Int(model.testDelay)) \(text("Label10", "мс"))" }
 
@@ -275,6 +281,11 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         // за основу: сохраняются правки уже своим файлом.
         let schemes = model.schemes?.templates ?? []
         guard index >= 0 else { return }
+        // Вибрали в списку той самий шаблон, що й відкритий, — міняти нічого,
+        // і питати про збереження нема про що. Власник: «після деяких змін
+        // вискакує вікно про збереження», а натиснувши «Зберегти», він
+        // опинявся поза правкою.
+        if index < presets.count, presets[index].id == model.preset.id { return }
         let departure: SlideConstructorModel.Departure = index < presets.count ? .switchPreset : .importScheme
         if model.asksToSave(before: departure) {
             switch askAboutChanges() {

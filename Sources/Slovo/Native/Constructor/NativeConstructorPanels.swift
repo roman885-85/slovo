@@ -166,11 +166,33 @@ final class NativeConstructorPanels: NSView {
                 NativeForm.check(text("CBObjShadowActive", "Тень"),
                                  changing(model.sceneTie(\.shadow.isEnabled, default: false))),
             ]),
+            // Заготовки м'якості: цілими відсотками тінь виходила або
+            // непомітною, або різкою плямою — власник просив «м'якше й
+            // різноманітніше». Кнопка ставить усі чотири числа разом, а
+            // довести до свого смаку можна повзунками нижче.
+            NativeForm.Row(OurWords.t("Заготовка:"), width: 120, [
+                shadowPreset("Без тени", offset: 0, blur: 0, opacity: 1, on: false),
+                shadowPreset("Лёгкая", offset: 1.5, blur: 8, opacity: 0.45),
+                shadowPreset("Мягкая", offset: 2.7, blur: 14, opacity: 0.6),
+                shadowPreset("Глубокая", offset: 4.5, blur: 20, opacity: 0.8),
+            ]),
+            // Дробові десяті: на кеглі 60 пт один відсоток — це більше за
+            // півпункту, і «на волосину м'якше» цілими не набиралося.
             NativeForm.Row(text("Label33", "Смещение (%):"), width: 120, [
-                NativeForm.number(intTie(\.shadow.offsetPercent, default: 2.7), range: -50...50),
+                NativeForm.slider(doubleTie(\.shadow.offsetPercent, default: 2.7), range: -20...20,
+                                  format: { String(format: "%.1f", $0) }, width: 130),
+                NativeForm.decimal(doubleTie(\.shadow.offsetPercent, default: 2.7),
+                                   range: -50...50, step: 0.1, width: 60),
             ]),
             NativeForm.Row(text("Label34", "Сглаживание(%):"), width: 120, [
-                NativeForm.number(intTie(\.shadow.blurPercent, default: 3), range: 0...50),
+                NativeForm.slider(doubleTie(\.shadow.blurPercent, default: 3), range: 0...40,
+                                  format: { String(format: "%.1f", $0) }, width: 130),
+                NativeForm.decimal(doubleTie(\.shadow.blurPercent, default: 3),
+                                   range: 0...60, step: 0.1, width: 60),
+            ]),
+            NativeForm.Row(OurWords.t("Направление:"), width: 120, [
+                NativeForm.slider(doubleTie(\.shadow.angleDegrees, default: 45), range: 0...360,
+                                  format: { Self.direction($0) }, width: 130),
             ]),
             NativeForm.Row(text("Label35", "Прозрачность:"), width: 120, [
                 NativeForm.slider(scaledTie(\.shadow.opacity, default: 1, by: 255), range: 0...255,
@@ -180,6 +202,29 @@ final class NativeConstructorPanels: NSView {
                 NativeForm.colour(changing(model.sceneTie(\.shadow.color, default: .black))),
             ]),
         ])
+    }
+
+    /// Стрілка й градуси: «↘ 45°». Куди саме падає тінь, числом не видно.
+    private static func direction(_ degrees: Double) -> String {
+        let arrows = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"]
+        let index = Int(((degrees.truncatingRemainder(dividingBy: 360) + 360) / 45).rounded()) % 8
+        return arrows[index] + " " + String(Int(degrees.rounded())) + "°"
+    }
+
+    /// Кнопка заготовки тіні.
+    private func shadowPreset(_ title: String, offset: Double, blur: Double,
+                              opacity: Double, on: Bool = true) -> NSView {
+        NativeForm.button(OurWords.t(title), hint: nil) { [weak self] in
+            guard let self else { return }
+            model.sceneTie(\.shadow.isEnabled, default: false).set(on)
+            if on {
+                model.sceneTie(\.shadow.offsetPercent, default: 2.7).set(offset)
+                model.sceneTie(\.shadow.blurPercent, default: 7).set(blur)
+                model.sceneTie(\.shadow.opacity, default: 1).set(opacity)
+            }
+            changed()
+            rebuild()
+        }
     }
 
     // MARK: Выключка и текст
@@ -231,7 +276,16 @@ final class NativeConstructorPanels: NSView {
             // В пунктах кадра высотой 1080, как QuoteOutLineWidth у автора
             // (2,25; 1,5): целые проценты высоты давали шаг в 11 пикселей.
             NativeForm.Row(text("Label39", "Толщина контура:") + " " + OurWords.t("(пт)"), width: 120, [
-                NativeForm.decimal(objectPoints(\.text.outlineThickness, default: 0.004), range: 0...60),
+                NativeForm.slider(objectPoints(\.text.outlineThickness, default: 0.004), range: 0...20,
+                                  format: { String(format: "%.2f", $0) }, width: 130),
+                NativeForm.decimal(objectPoints(\.text.outlineThickness, default: 0.004),
+                                   range: 0...60, step: 0.25, width: 60),
+            ]),
+            // Напівпрозорий контур — те саме «м'якше»: літера дістає межу, але
+            // не обведення тушшю. Прозорість лежить у самому кольорі контуру.
+            NativeForm.Row(OurWords.t("Прозрачность контура:"), width: 120, [
+                NativeForm.slider(outlineAlpha(), range: 0...255,
+                                  format: { String(Int($0)) }, width: 130),
             ]),
         ])
     }
@@ -416,6 +470,24 @@ final class NativeConstructorPanels: NSView {
                                   tie.set(value / scale)
                                   self?.changed()
                               })
+    }
+
+    /// Прозорість контуру живе в альфі його ж кольору: окремого поля для неї
+    /// в оригіналі немає, а малюють контур саме кольором.
+    private func outlineAlpha() -> NativeForm.Tie<Double> {
+        let tie = model.tie(\.text.outlineColor, default: SlideStyle.RGBA.black)
+        return NativeForm.Tie(get: { tie.get().alpha * 255 },
+                              set: { [weak self] value in
+                                  var colour = tie.get()
+                                  colour.alpha = min(max(value / 255, 0), 1)
+                                  tie.set(colour)
+                                  self?.changed()
+                              })
+    }
+
+    private func doubleTie(_ path: WritableKeyPath<ObjectVariant, Double>,
+                           default fallback: Double) -> NativeForm.Tie<Double> {
+        scaledTie(path, default: fallback, by: 1)
     }
 
     private func scaledIntTie(_ path: WritableKeyPath<ObjectVariant, Double>,

@@ -102,7 +102,7 @@ final class NativeSettingsSlideTab {
                                      store.settings.options.slideTransitionEasing = all[index].rawValue
                                  }), width: 160),
             ]),
-            NativeForm.Row(state.vb("Label16", "Время плавной смены слайдов:"), width: 200, [
+            NativeForm.Row(state.vb("Label16", OurWords.t("Время плавной смены слайдов:")), width: 200, [
                 NativeForm.number(NativeForm.Tie(get: { [store] in store.settings.options.crossfadeTime },
                                                  set: { [store] in store.settings.options.crossfadeTime = $0 }),
                                   range: 0...10000),
@@ -161,17 +161,17 @@ final class NativeSettingsSlideTab {
 
     private var address: NativeForm.Group {
         NativeForm.Group(state.vb("GBBibleAddress", "Адрес места Писания:"), [
-            NativeForm.Row(state.vb("GBAll", "Объединенный:") + " "
-                           + state.vb("LRefAllMain", "Основной перевод:"), width: 260,
+            NativeForm.Row(state.vb("GBAll", OurWords.t("Объединенный:")) + " "
+                           + state.vb("LRefAllMain", OurWords.t("Основной перевод:")), width: 260,
                            [style(\.refAllMain)]),
-            NativeForm.Row(state.vb("GBAll", "Объединенный:") + " "
-                           + state.vb("LRefAllSec", "Второй перевод:"), width: 260,
+            NativeForm.Row(state.vb("GBAll", OurWords.t("Объединенный:")) + " "
+                           + state.vb("LRefAllSec", OurWords.t("Второй перевод:")), width: 260,
                            [style(\.refAllSec)]),
-            NativeForm.Row(state.vb("GBSep", "Отдельный") + " "
-                           + state.vb("LRefMain", "Основной перевод:"), width: 260,
+            NativeForm.Row(state.vb("GBSep", OurWords.t("Отдельный")) + " "
+                           + state.vb("LRefMain", OurWords.t("Основной перевод:")), width: 260,
                            [style(\.refMain)]),
-            NativeForm.Row(state.vb("GBSep", "Отдельный") + " "
-                           + state.vb("LRefSec", "Второй перевод:"), width: 260,
+            NativeForm.Row(state.vb("GBSep", OurWords.t("Отдельный")) + " "
+                           + state.vb("LRefSec", OurWords.t("Второй перевод:")), width: 260,
                            [style(\.refSec)]),
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBRefsSeparated", "Пробел между адресами"),
@@ -196,7 +196,7 @@ final class NativeSettingsSlideTab {
 
     private var addressExample: NativeForm.Group {
         NativeForm.Group(state.vb("GBBibleAddressExamp", "Пример адреса:"), [
-            NativeForm.Row(state.vb("LRefExamplAll", "Объединенный:"), width: 180, [combined]),
+            NativeForm.Row(state.vb("LRefExamplAll", OurWords.t("Объединенный:")), width: 180, [combined]),
             NativeForm.Row(state.vb("LRefExamplMain", "Основной перевод:"), width: 180, [mainOnly]),
             NativeForm.Row(state.vb("LRefExamplSec", "Второй перевод:"), width: 180, [secondOnly]),
         ])
@@ -205,7 +205,7 @@ final class NativeSettingsSlideTab {
     // MARK: (20) Назва пісні
 
     private var songName: NativeForm.Group {
-        NativeForm.Group(state.vb("GBSongName", "Название песни:"), [
+        NativeForm.Group(state.vb("GBSongName", OurWords.t("Название песни:")), [
             // Запасні підписи — формулювання автора з SettingsForm, а не
             // свої: без установленої VisioBible видно саме їх.
             NativeForm.Row("", [NativeForm.check(state.vb("CBNumPP", "Номер по порядку"),

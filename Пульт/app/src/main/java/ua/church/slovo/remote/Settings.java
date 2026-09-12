@@ -49,6 +49,8 @@ final class Settings {
     /// Не гасити екран, поки пульт відкритий: інакше телефон засинає посеред
     /// проповіді, а розблокування — це кілька секунд і зайві рухи.
     boolean keepAwake() { return store.getBoolean("keepAwake", true); }
+    /// Рядки-підказки на екрані планшета: з першого запуску ввімкнені.
+    boolean hints() { return store.getBoolean("hints", true); }
 
     /// Колір плями указки (ARGB) і її розмір — частка висоти слайда, як у
     /// програмі. Те, що вибрано тут, летить у програму з кожною точкою: пляма
@@ -111,6 +113,10 @@ final class Settings {
     void setVolumeKeys(boolean on) { store.edit().putBoolean("volumeKeys", on).apply(); }
     void setVolumeReversed(boolean on) { store.edit().putBoolean("volumeReversed", on).apply(); }
     void setKeepAwake(boolean on) { store.edit().putBoolean("keepAwake", on).apply(); }
+    void setHints(boolean on) { store.edit().putBoolean("hints", on).apply(); }
+    /// Масштаб інтерфейсу планшета: 0 — «Авто» (див. `UiScale`).
+    float uiScale() { return store.getFloat("uiScale", 0f); }
+    void setUiScale(float value) { store.edit().putFloat("uiScale", value).apply(); }
     void setPointer(int colour, float size, float opacity) {
         store.edit()
             .putInt("pointerColour", colour | 0xFF000000)
@@ -127,6 +133,8 @@ final class Settings {
             .remove("volumeKeys")
             .remove("volumeReversed")
             .remove("keepAwake")
+            .remove("hints")
+            .remove("uiScale")
             .remove("pointerColour")
             .remove("pointerSize")
             .remove("pointerOpacity")

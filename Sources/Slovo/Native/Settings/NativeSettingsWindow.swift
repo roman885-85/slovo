@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SlovoCore
+import UniformTypeIdentifiers
 
 /// Окно «Параметры» (6.1) — на AppKit.
 ///
@@ -32,6 +33,8 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
     /// «Модули», «Пути», «Remote API», «Горячие клавиши» — стояли с рамками и
     /// кнопками, но без единой строки; владелец это и увидел.
     private var tabObjects: [AnyObject] = []
+    /// Смуга вкладок — щоб знати, яку саме скидають.
+    private weak var tabsView: NSTabView?
 
     func show(state: AppState) {
         self.state = state
@@ -133,12 +136,32 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
         }
         ok.keyEquivalent = "\r"
         let cancel = NativeForm.button(state.vb("BBCancel", "Отмена"),
-                                       hint: state.vbHint("BBCancel", "Отменить изменения и закрыть")) { [weak self] in
+                                       hint: state.vbHint("BBCancel", OurWords.t("Отменить изменения и закрыть"))) { [weak self] in
             self?.discard()
         }
         cancel.keyEquivalent = "\u{1B}"
 
+        // Скидання й перенесення — ліворуч, окремо від «Ок» і «Відмінити»:
+        // це дії над усіма налаштуваннями, а не над цим вікном.
+        let reset = NativeForm.button(OurWords.t("↺ Сбросить…"),
+                                      hint: OurWords.t("Вернуть значения к тем, с которыми программа запускается впервые")) {
+            [weak self] in self?.askReset()
+        }
+        let save = NativeForm.button(OurWords.t("Сохранить в файл…"),
+                                     hint: OurWords.t("Сложить все настройки в один файл — перенести на другой компьютер или отложить про запас")) {
+            [weak self] in self?.exportSettings()
+        }
+        let load = NativeForm.button(OurWords.t("Взять из файла…"),
+                                     hint: OurWords.t("Прочитать настройки из файла, сохранённого раньше")) {
+            [weak self] in self?.importSettings()
+        }
+
+        tabsView = tabs
         root.tabs = tabs
+        root.leftButtons = [reset, save, load]
+        root.addSubview(reset)
+        root.addSubview(save)
+        root.addSubview(load)
         root.buttons = [cancel, ok]
         root.addSubview(tabs)
         root.addSubview(cancel)
@@ -148,8 +171,16 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
 
     /// Раскладка окна: вкладки во всю площадь, ряд кнопок снизу.
     private final class Root: NSView {
+
+        /// Enter у полі записує набране, а не зачиняє «Параметри» по «Ок».
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if NativeForm.endsFieldEditing(on: event, in: window) { return true }
+            return super.performKeyEquivalent(with: event)
+        }
+
         var tabs: NSTabView?
         var buttons: [NSButton] = []
+        var leftButtons: [NSButton] = []
         var preview: NSView?
         var previewTitle: NSView?
         var onLayout: (() -> Void)?
@@ -177,6 +208,14 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
                 button.frame = NSRect(x: right - width, y: 10, width: width, height: 24)
                 right -= width + 8
             }
+            var left: CGFloat = 12
+            for button in leftButtons {
+                let width = button.intrinsicContentSize.width + 20
+                // Вузьке вікно: далі за «Ок» не лізем, краще обрізати підпис.
+                guard left + width < right - 8 else { button.frame = .zero; continue }
+                button.frame = NSRect(x: left, y: 10, width: width, height: 24)
+                left += width + 6
+            }
         }
     }
 
@@ -199,6 +238,84 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
             if state.rosterNeedsLibraryReload { state.reloadLibrary() }
         }
         close()
+    }
+
+    // MARK: - Скидання та перенесення налаштувань
+
+    /// Яку вкладку зараз видно.
+    private func currentArea() -> SettingsStore.Area {
+        let order = SettingsStore.Area.allCases
+        guard let tabsView, let item = tabsView.selectedTabViewItem else { return .slide }
+        let index = tabsView.tabViewItems.firstIndex(of: item) ?? 0
+        return order.indices.contains(index) ? order[index] : .slide
+    }
+
+    /// «Скинути…»: одну вкладку чи все.
+    ///
+    /// Власник просив і те, і те. Питаємо в одному вікні: людина вже стоїть
+    /// на потрібній вкладці, і назва її тут-таки в кнопці.
+    private func askReset() {
+        let area = currentArea()
+        let alert = NSAlert()
+        alert.messageText = OurWords.t("Сброс настроек")
+        alert.informativeText = OurWords.t("Значения вернутся к тем, с которыми программа запускается впервые. Файлы — модули, песенники, шаблоны слайдов, планы и записи — остаются на месте. Передумали — «Отмена» в окне «Параметры» вернёт всё как было.")
+        alert.addButton(withTitle: OurWords.t("Только вкладку") + " «" + area.title + "»")
+        alert.addButton(withTitle: OurWords.t("Все настройки"))
+        alert.addButton(withTitle: state?.vb("BBCancel", "Отмена") ?? OurWords.t("Отмена"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:  store.reset(area)
+        case .alertSecondButtonReturn: store.resetAll()
+        default: return
+        }
+        refreshAfterChange()
+    }
+
+    /// Скласти всі налаштування в один файл.
+    private func exportSettings() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = OurWords.t("Настройки Слова") + ".json"
+        panel.allowedContentTypes = [.json]
+        panel.message = OurWords.t("Сложить все настройки в один файл")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.export(to: url)
+        } catch {
+            report(OurWords.t("Не удалось сохранить файл настроек"), error)
+        }
+    }
+
+    /// Прочитати налаштування з файла.
+    private func importSettings() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.json]
+        panel.message = OurWords.t("Выберите файл настроек")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.importSettings(from: url)
+        } catch {
+            report(OurWords.t("Это не файл настроек «Слова» или он испорчен"), error)
+            return
+        }
+        refreshAfterChange()
+    }
+
+    private func report(_ message: String, _ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: state?.vb("BBOk", "Ок") ?? "Ок")
+        alert.runModal()
+    }
+
+    /// Значення змінилися не з поля, а цілим набором: поля перечитують себе,
+    /// списки перезбираються, програма одразу показує нове.
+    private func refreshAfterChange() {
+        if let root = window?.contentView { NativeForm.refreshValues(in: root) }
+        for tab in tabObjects { (tab as? NativeSettingsRows)?.reloadRows() }
+        applyLive(store.settings)
+        refreshPreview()
     }
 
     func discard() {
@@ -227,8 +344,13 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
     var previewDrawCount: Int { livePreview?.drawCount ?? -1 }
 
     /// Применить текущие значения хранилища к программе, не записывая их.
+    ///
+    /// Разом з простими значеннями — і галочки модулів: доти живий шлях знав
+    /// лише `options`, і зняти галочку з перекладу означало «нічого не
+    /// сталося» аж до «Ок». Тепер і зняття, і «Відмінити» видно одразу.
     func applyLive(_ settings: SlovoSettings) {
         state?.applyProgramOptions(settings.options)
+        state?.applyModuleRoster(settings.modules)
     }
 
     /// Закрыть окно — зовёт и самопроверка.

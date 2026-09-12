@@ -11,7 +11,8 @@ import SlovoCore
 /// Галочку ставят двойным щелчком по строке: колонки с флажком у нашего
 /// списка нет, а признак этот меняют чаще всего.
 @MainActor
-final class NativeSettingsModulesTab: NSObject, NativeListSource {
+final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettingsRows {
+
 
     private let state: AppState
     private let store: SettingsStore
@@ -34,12 +35,12 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
     // MARK: Список и кнопки
 
     private var modules: NativeForm.Group {
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 260))
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 420))
         list.frame = box.bounds
         list.autoresizingMask = [.width, .height]
         box.addSubview(list)
         box.translatesAutoresizingMaskIntoConstraints = false
-        box.heightAnchor.constraint(equalToConstant: 260).isActive = true
+        box.heightAnchor.constraint(equalToConstant: 420).isActive = true
 
         let buttons = NSStackView()
         buttons.orientation = .vertical
@@ -58,27 +59,35 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
         buttons.addArrangedSubview(NativeForm.button("⤓", hint: state.vbHint("SBImportModules",
                                                      "Импорт модулей...")) { [weak self] in self?.importModule() })
 
-        return NativeForm.Group(state.vb("Label1", "Текстовые модули:"), [
+        return NativeForm.Group(state.vb("Label1", OurWords.t("Текстовые модули:")), [
             NativeForm.Row("", [
-                NativeForm.button(state.vbHint("SBCheckAll", "Пометить все"), hint: nil) { [weak self] in
-                    self?.store.setAllModules(enabled: true); self?.list.reload()
+                NativeForm.button(state.vbHint("SBCheckAll", OurWords.t("Пометить все")), hint: nil) { [weak self] in
+                    self?.store.setAllModules(enabled: true); self?.refreshList()
                 },
-                NativeForm.button(state.vbHint("SBUnCheckAll", "Снять пометку со всех"), hint: nil) { [weak self] in
-                    self?.store.setAllModules(enabled: false); self?.list.reload()
+                NativeForm.button(state.vbHint("SBUnCheckAll", OurWords.t("Снять пометку со всех")), hint: nil) { [weak self] in
+                    self?.store.setAllModules(enabled: false); self?.refreshList()
                 },
                 status,
             ]),
             NativeForm.Row("", stretch: true, [box, buttons]),
+            NativeForm.Row("", stretch: true, [
+                NativeForm.label(OurWords.t("Галочка слева включает модуль: перевод встаёт на полосу переводов, песенник — в список песенников."),
+                                 secondary: true),
+            ]),
+            NativeForm.Row("", stretch: true, [
+                NativeForm.label(OurWords.t("Видно сразу, «Ок» только запоминает. Щелчок по заголовку раздела включает или выключает весь раздел."),
+                                 secondary: true),
+            ]),
         ])
     }
 
     private var loading: NativeForm.Group {
         NativeForm.Group("", [
             NativeForm.Row("", [
-                NativeForm.check(state.vb("CBLoadAllBooks", "Загружать Тексты в память"),
+                NativeForm.check(state.vb("CBLoadAllBooks", OurWords.t("Загружать Тексты в память")),
                                  NativeForm.Tie(get: { [store] in store.settings.options.loadAllBooks },
                                                 set: { [store] in store.settings.options.loadAllBooks = $0 })),
-                NativeForm.check(state.vb("CBLazyLoad", "Отложенная загрузка модулей"),
+                NativeForm.check(state.vb("CBLazyLoad", OurWords.t("Отложенная загрузка модулей")),
                                  NativeForm.Tie(get: { [store] in store.settings.options.lazyLoadModules },
                                                 set: { [store] in store.settings.options.lazyLoadModules = $0 })),
             ]),
@@ -87,27 +96,54 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
 
     // MARK: - Действия
 
+    /// Галочка діє одразу, а не по «Ок».
+    ///
+    /// Власник: «при відключенні або включенні модуля в програмі нічого не
+    /// відбувається». Відбувалося — але тільки після «Ок», а стоячи у
+    /// «Параметрах», побачити це було нічим. Тепер смуга перекладів і список
+    /// пісенників міняються під вікном тієї ж миті; «Відмінити» поверне їх.
     private func toggle(at index: Int) {
-        let list = rows
-        guard list.indices.contains(index) else { return }
-        store.setModule(list[index].id, enabled: !list[index].isEnabled)
-        self.list.reload()
+        if case .header(_, let songBooks)? = line(at: index) {
+            toggleSection(songBooks: songBooks)
+            return
+        }
+        guard case .module(let entry)? = line(at: index) else { return }
+        store.setModule(entry.id, enabled: !entry.isEnabled)
+        refreshList()
+        state.applyModuleRoster(store.settings.modules)
+    }
+
+    /// Увімкнути або вимкнути весь розділ — клацанням по його заголовку.
+    private func toggleSection(songBooks: Bool) {
+        let items = rows.filter { $0.isSongBook == songBooks }
+        guard !items.isEmpty else { return }
+        // Хоч один вимкнений — умикаємо всі; усі ввімкнені — вимикаємо.
+        let enable = items.contains { !$0.isEnabled }
+        for item in items { store.setModule(item.id, enabled: enable) }
+        refreshList()
+        state.applyModuleRoster(store.settings.modules)
     }
 
     private func remove() {
-        guard let index = selected, rows.indices.contains(index) else { return }
-        store.removeModule(rows[index].id)
+        guard case .module(let entry)? = line(at: selected) else { return }
+        store.removeModule(entry.id)
         selected = nil
-        list.reload()
+        refreshList()
+        state.applyModuleRoster(store.settings.modules)
     }
 
+    /// «↑» і «↓» переставляють рядок у своєму розділі: порядок перекладів —
+    /// це порядок вкладок на смузі, і заголовок розділу перестрибувати нікуди.
     private func move(by delta: Int) {
-        guard let index = selected, rows.indices.contains(index) else { return }
-        _ = store.moveModule(rows[index].id, by: delta)
-        let next = min(max(0, index + delta), max(0, rows.count - 1))
+        guard let index = selected, case .module(let entry)? = line(at: index),
+              case .module(let neighbour)? = line(at: index + delta),
+              neighbour.isSongBook == entry.isSongBook else { return }
+        store.swapModules(entry.id, neighbour.id)
+        let next = index + delta
         selected = next
-        list.reload()
+        refreshList()
         list.setSelection(IndexSet(integer: next), active: next)
+        state.applyModuleRoster(store.settings.modules)
     }
 
     /// (26) Добавление модуля в список.
@@ -151,7 +187,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
             guard let reason = store.addModule(at: url), reason != .alreadyListed else { continue }
             if problem == nil { problem = (reason, url) }
         }
-        list.reload()
+        refreshList()
         guard let (reason, url) = problem else { return }
         let alert = NSAlert()
         alert.messageText = title
@@ -214,7 +250,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
             case .alertSecondButtonReturn: self.store.applyFoundTexts(replacing: false)
             default: break
             }
-            self.list.reload()
+            self.refreshList()
         }
     }
 
@@ -250,11 +286,75 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource {
         }
     }
 
-    var rowCount: Int { rows.count }
+    /// Рядок списку: заголовок розділу або сам модуль.
+    ///
+    /// Власник: «у налаштуваннях модулів немає поділу на пісенники й біблії».
+    /// В автора поділу немає — усі рядки впереміш, — але шукати пісенник серед
+    /// шістдесяти перекладів у такому списку неможливо.
+    private enum Line {
+        case header(title: String, songBooks: Bool)
+        case module(SettingsModuleRow)
+    }
+
+    /// Зібрані рядки тримаємо до наступного перечитування: інакше кожен
+    /// рядок таблиці заново перебирав увесь розпис і всю бібліотеку — на
+    /// сімдесяти модулях це вже помітно.
+    private var lineCache: [Line]?
+
+    private var lines: [Line] {
+        if let lineCache { return lineCache }
+        let built = buildLines()
+        lineCache = built
+        return built
+    }
+
+    /// Перебудувати список і перемалювати таблицю.
+    private func refreshList() {
+        lineCache = nil
+        list.reload()
+    }
+
+    /// Перечитати свій список — після скидання або ввезення налаштувань.
+    func reloadRows() { refreshList() }
+
+    private func buildLines() -> [Line] {
+        let all = rows
+        let bibles = all.filter { !$0.isSongBook }
+        let songs = all.filter { $0.isSongBook }
+        var result: [Line] = []
+        if !bibles.isEmpty {
+            result.append(.header(title: heading(OurWords.t("Переводы Библии"), bibles), songBooks: false))
+            result.append(contentsOf: bibles.map(Line.module))
+        }
+        if !songs.isEmpty {
+            result.append(.header(title: heading(OurWords.t("Песенники"), songs), songBooks: true))
+            result.append(contentsOf: songs.map(Line.module))
+        }
+        return result
+    }
+
+    private func heading(_ title: String, _ items: [SettingsModuleRow]) -> String {
+        let on = items.filter(\.isEnabled).count
+        return "\(title.uppercased())  ·  \(OurWords.t("включено")) \(on) \(OurWords.t("из")) \(items.count)"
+    }
+
+    private func line(at index: Int?) -> Line? {
+        guard let index, lines.indices.contains(index) else { return nil }
+        return lines[index]
+    }
+
+    var rowCount: Int { lines.count }
 
     func row(at index: Int) -> NativeRow {
-        let entry = rows[index]
         var row = NativeRow()
+        guard let line = line(at: index) else { return row }
+        guard case .module(let entry) = line else {
+            if case .header(let title, _) = line {
+                row.text = title
+                row.textColor = .secondaryLabelColor
+            }
+            return row
+        }
         // Флажок, как у автора: один щелчок по нему включает и выключает.
         row.lead = entry.isEnabled ? "☑" : "☐"
         // Значок формата — как разные картинки у автора: папка «Цитаты из

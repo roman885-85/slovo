@@ -141,7 +141,16 @@ enum WebSlovoSlidePage {
 
               var effects = [];
               if (item.ShadowBlur || item.ShadowOffset) {
-                effects.push(px(item.ShadowOffset) + 'px ' + px(item.ShadowOffset) + 'px '
+                // Кут 45° — те саме, що було завжди: тінь управо-вниз, зсув по
+                // обох осях однаковий. Інші кути рахуємо по діагоналі.
+                var angle = item.ShadowAngle === undefined ? 45 : item.ShadowAngle;
+                var dx = px(item.ShadowOffset), dy = dx;
+                if (angle !== 45) {
+                  var radians = angle * Math.PI / 180, far = px(item.ShadowOffset) * Math.SQRT2;
+                  dx = Math.round(far * Math.cos(radians) * 100) / 100;
+                  dy = Math.round(far * Math.sin(radians) * 100) / 100;
+                }
+                effects.push(dx + 'px ' + dy + 'px '
                              + px(item.ShadowBlur) + 'px ' + item.ShadowColor);
               }
               if (effects.length) span.style.textShadow = effects.join(', ');

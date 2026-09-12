@@ -92,7 +92,7 @@ final class NativeSettingsBasicTab {
             NativeForm.Row(state.vb("Label40", "Левый:") + " / " + state.vb("Label42", "Верх:")
                            + " / " + state.vb("Label41", "Ширина:") + " / " + state.vb("Label43", "Высота:"),
                            width: 300, manualFields),
-            NativeForm.Row(state.vb("Label4", "Расположение:") + " / " + state.vb("Label5", "Размер:"),
+            NativeForm.Row(state.vb("Label4", OurWords.t("Расположение:")) + " / " + state.vb("Label5", OurWords.t("Размер:")),
                            width: 300, [placement]),
             NativeForm.Row("", [mapBox]),
         ])
@@ -101,7 +101,7 @@ final class NativeSettingsBasicTab {
     // MARK: (7) Розміри за умовчанням, (2) На передній план
 
     private var sizes: NativeForm.Group {
-        NativeForm.Group(state.vb("GroupBox2", "Размеры по умолчанию"), [
+        NativeForm.Group(state.vb("GroupBox2", OurWords.t("Размеры по умолчанию")), [
             NativeForm.Row(state.vb("Label7", "Ширина:"), width: 110,
                            [NativeForm.number(intTie(\.defaultWidth), range: 1...20000)]),
             NativeForm.Row(state.vb("Label8", "Высота:"), width: 110,
@@ -128,7 +128,7 @@ final class NativeSettingsBasicTab {
 
     private var pageAndAnimation: NativeForm.Group {
         NativeForm.Group("", [
-            NativeForm.Row(state.vb("Label6", "Минимальный процент заполнения для создания новой страницы:"),
+            NativeForm.Row(state.vb("Label6", OurWords.t("Минимальный процент заполнения для создания новой страницы:")),
                            width: 340, [
                 NativeForm.number(intTie(\.percentFillingPage), range: 0...100, width: 56),
                 NativeForm.label(state.vb("Label10", "%")),
