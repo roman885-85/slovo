@@ -36,6 +36,8 @@ extension Diagnostics {
         var checks: [Check] = []
         checks.append(fitCheck(area: area, state: state, scope: .bible, title: "Біблія"))
         checks.append(fitCheck(area: area, state: state, scope: .songs, title: "Пісні"))
+        checks.append(hitCheck(area: area, state: state, scope: .bible, title: "Біблія"))
+        checks.append(hitCheck(area: area, state: state, scope: .songs, title: "Пісні"))
         return checks
     }
 
@@ -62,6 +64,58 @@ extension Diagnostics {
             if let column = bible.verseColumn { result.append(("вірші", column.verseList)) }
             return result
         }
+    }
+
+    /// Власник: «вибір книги Біблії в режимі списку не відповідає положенню
+    /// вказівника миші». Клацаємо в середину кожного видимого рядка тим самим
+    /// шляхом, що й миша (`NativeListProbe.item(at:)`), і рядок під вказівником
+    /// мусить бути саме тим, у який клацнули.
+    private static func hitCheck(area: String, state: AppState,
+                                 scope: InterfaceSettings.ListScope, title: String) -> Check {
+        let name = "\(title): клацання влучає в той рядок, що під вказівником"
+        let interface = InterfaceSettings.shared
+        state.mode = scope == .songs ? .songs : .bible
+        settle()
+        var faults: [String] = []
+        var tried = 0
+        var perView: [String: (ok: Int, miss: Int)] = [:]
+        for books in InterfaceSettings.BookViewMode.allCases {
+            for font in [13.0, 22.0] {
+                interface.setBookView(books, in: scope)
+                Signals.shared.send(.listKind)
+                state.listFontSize = font
+                Signals.shared.send(.listFontSize)
+                settle()
+                for (label, list) in lists(for: scope) {
+                    guard let table = NativeListProbe.table(in: list), list.rowsNow > 0 else { continue }
+                    let visible = list.visibleItems
+                    for item in visible.prefix(24) {
+                        guard let rect = list.frameOfItem(item) else { continue }
+                        // Три точки в рядку: ліворуч, посередині, праворуч.
+                        for part in [0.15, 0.5, 0.85] {
+                            let point = NSPoint(x: rect.minX + rect.width * part, y: rect.midY)
+                            tried += 1
+                            let hit = list.item(atListPoint: point)
+                            var tally = perView[books.rawValue] ?? (0, 0)
+                            if hit == item { tally.ok += 1 } else { tally.miss += 1 }
+                            perView[books.rawValue] = tally
+                            guard hit != item else { continue }
+                            let fault = String(format: "%@ · %@ · %@ · кегль %.0f: клацнули в рядок %d (%.0f,%.0f), а влучили в %@",
+                                               title, label, books.rawValue, font, item, point.x, point.y,
+                                               hit.map(String.init) ?? "нікуди")
+                            if faults.count < 6, !faults.contains(fault) { faults.append(fault) }
+                            _ = table
+                        }
+                    }
+                }
+            }
+        }
+        let detail = "клацань: \(tried); по виглядах: "
+            + perView.keys.sorted().map { "\($0) влучило \(perView[$0]!.ok), повз \(perView[$0]!.miss)" }.joined(separator: ", ")
+        guard faults.isEmpty else {
+            return Check(area: area, name: name, status: .failed, detail: faults.joined(separator: "; ") + ". " + detail)
+        }
+        return Check(area: area, name: name, status: .ok, detail: detail)
     }
 
     private static func fitCheck(area: String, state: AppState,

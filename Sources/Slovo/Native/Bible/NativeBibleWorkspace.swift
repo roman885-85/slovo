@@ -127,6 +127,9 @@ final class NativeBibleWorkspace {
     }
 
     private func applyQuickFocus() {
+        // Та сама позначка фокуса — у пісень для їхніх полів. Поки відкрито не
+        // Біблію, свої поля не чіпаємо: інакше курсор тікав би з поля пісні.
+        guard state?.mode == .bible else { return }
         let wanted = DeskModel.shared.quickFocus
         guard wanted != lastQuickFocus else { return }
         lastQuickFocus = wanted

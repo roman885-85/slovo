@@ -869,7 +869,11 @@ final class DeskModel: ObservableObject {
     /// «Щелчок мышью по адресу стиха в истории производит выбор этого места в
     /// связке Книга-Глава-Стих» — именно выбор, а не показ: в зал история
     /// сама ничего не отдаёт.
-    func activate(_ record: HistoryRecord, state: AppState) {
+    /// `show` — вивести в зал, а не лише відкрити. Клацання по рядку Історії
+    /// показує: «повернутися до показаного» (так на планшеті й у пульті).
+    /// Доти рядок лише відкривав місце в передпоказі, і на стіні нічого не
+    /// мінялося — власник: «на деякі пункти не реагує».
+    func activate(_ record: HistoryRecord, state: AppState, show: Bool = false) {
         historySelection = record.id
         switch record.kind {
         case .bible:
@@ -883,18 +887,32 @@ final class DeskModel: ObservableObject {
             // натиснутий із вкладки «Пісні», не робив нічого видимого.
             state.mode = .bible
             guard let position = state.books.firstIndex(where: { $0.index == record.bookIndex })
-                    ?? (state.books.indices.contains(record.bookIndex) ? record.bookIndex : nil) else { return }
-            state.openScripture(bookPosition: position, chapter: record.chapter, verses: record.verses)
+                    ?? (state.books.indices.contains(record.bookIndex) ? record.bookIndex : nil) else {
+                NativeTrace.say("історія: книги №\(record.bookIndex) немає в «\(state.primaryModule?.info.shortName ?? "?")»")
+                return
+            }
+            state.openScripture(bookPosition: position, chapter: record.chapter, verses: record.verses,
+                                then: show ? { state.showCurrent() } : nil)
 
         case .song:
             guard let library = state.songLibrary,
                   let entry = library.books.first(where: {
                       $0.url.lastPathComponent.caseInsensitiveCompare(record.songBookFileName) == .orderedSame
-                  }) else { return }
+                  }) else {
+                NativeTrace.say("історія: пісенника «\(record.songBookFileName)» немає")
+                return
+            }
             state.mode = .songs
             state.songBookID = entry.id
             state.songIndex = record.songIndex
             state.songPartIndex = record.partIndex
+            if show, let book = library.book(entry.id), book.songs.indices.contains(record.songIndex) {
+                let song = book.songs[record.songIndex]
+                if let part = song.parts.first(where: { $0.index == record.partIndex }) ?? song.parts.first {
+                    state.showSongPart(song, part)
+                    state.showCurrent()
+                }
+            }
 
         case .text:
             // Запись везёт объявление с собой — возвращаем его в модуль,
@@ -902,6 +920,7 @@ final class DeskModel: ObservableObject {
             TextModuleModel.shared.attach(state)
             state.mode = .text
             TextModuleModel.shared.receive(reference: record.reference, text: record.quote)
+            if show { state.showCurrent() }
         }
     }
 

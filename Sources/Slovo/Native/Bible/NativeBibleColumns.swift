@@ -122,6 +122,7 @@ final class NativeBookColumn: NSView {
             NativeBibleBridge.shared.sync()
         }
 
+        quick.placeholder = OurWords.t("Название книги…")
         quick.toolTip = state.hint("EBookFastInput",
                                    default: "Быстрый выбор Книги вводом её названия (можно сокращать)")
         quick.onChange = { [weak self] text in
@@ -327,6 +328,7 @@ final class NativeChapterColumn: NSView {
             NativeBibleBridge.shared.sync()
         }
 
+        quick.placeholder = OurWords.t("№ главы")
         quick.toolTip = state.hint("EChaptFastInput", default: "Быстрый выбор Главы вводом её номера")
         tokens.append(Signals.shared.subscribe(.language) { [weak self] in
             guard let self, let state = self.state else { return }

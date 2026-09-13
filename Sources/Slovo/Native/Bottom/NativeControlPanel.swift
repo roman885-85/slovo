@@ -103,10 +103,12 @@ final class NativeControlPanel: NSView {
 
     private let state: AppState
 
-    private var stepButtons: [NativeBottomIconButton] = []
+    private var stepButtons: [NativeBottomLabelButton] = []
     /// Російські ключі підказок кнопок переходу — щоб при зміні мови
     /// перекласти їх заново, а не лишити такими, якими вони були при побудові.
     private var stepHintKeys: [String] = []
+    /// Російські ключі підписів — з тієї ж причини.
+    private var stepTitleKeys: [String] = []
     private var showButton: NativeBottomLabelButton!
     private var hideButton: NativeBottomLabelButton!
     private let separator = NSView(frame: .zero)
@@ -142,13 +144,13 @@ final class NativeControlPanel: NSView {
 
     override func layout() {
         super.layout()
-        let step: CGFloat = 26
+        let step: CGFloat = 68
         let gap: CGFloat = 3
         for (index, button) in stepButtons.enumerated() {
             let column = CGFloat(index % 3)
             let line = CGFloat(index / 3)
-            button.frame = NSRect(x: column * (step + gap), y: line * (20 + gap),
-                                  width: step, height: 20)
+            button.frame = NSRect(x: column * (step + gap), y: line * (21 + gap),
+                                  width: step, height: 21)
         }
         let navWidth = step * 3 + gap * 2
         showButton.frame = NSRect(x: navWidth + 8, y: 0, width: 108, height: 21)
@@ -182,21 +184,25 @@ final class NativeControlPanel: NSView {
     private func buildButtons() {
         // Порядок як у колишньому вікні: зверху назад, знизу вперед, і в кінці
         // повернення до поточного вірша і знімок екрана.
-        let plan: [(String, String, () -> Void)] = [
-            ("chevron.left.2", "Предыдущая глава", { [weak self] in self?.state.stepChapter(by: -1) }),
-            ("chevron.left", "Предыдущий стих", { [weak self] in self?.state.stepVerse(by: -1) }),
-            ("arrow.counterclockwise", "К текущему стиху", { [weak self] in
+        // Значок і слово поруч: самі стрілки власник читав як «незрозуміле
+        // призначення». Підписи короткі, щоб три кнопки стали в ряд.
+        let plan: [(String, String, String, () -> Void)] = [
+            ("chevron.left.2", "Глава", "Предыдущая глава", { [weak self] in self?.state.stepChapter(by: -1) }),
+            ("chevron.left", "Стих", "Предыдущий стих", { [weak self] in self?.state.stepVerse(by: -1) }),
+            ("arrow.counterclockwise", "Текущий", "К текущему стиху", { [weak self] in
                 guard let self else { return }
                 self.state.scrollToCurrentVerse += 1
             }),
-            ("chevron.right.2", "Следующая глава", { [weak self] in self?.state.stepChapter(by: 1) }),
-            ("chevron.right", "Следующий стих", { [weak self] in self?.state.stepVerse(by: 1) }),
-            ("camera", "Сделать снимок экрана слайда", { [weak self] in self?.state.saveScreenshot() }),
+            ("chevron.right.2", "Глава", "Следующая глава", { [weak self] in self?.state.stepChapter(by: 1) }),
+            ("chevron.right", "Стих", "Следующий стих", { [weak self] in self?.state.stepVerse(by: 1) }),
+            ("camera", "Снимок", "Сделать снимок экрана слайда", { [weak self] in self?.state.saveScreenshot() }),
         ]
-        for (symbol, hint, action) in plan {
-            let button = NativeBottomIconButton(symbol: symbol, hint: OurWords.t(hint), bordered: true, action: action)
+        for (symbol, title, hint, action) in plan {
+            let button = NativeBottomLabelButton(symbol: symbol, title: OurWords.t(title), hint: OurWords.t(hint),
+                                                 prominent: false, compact: true, action: action)
             stepButtons.append(button)
             stepHintKeys.append(hint)
+            stepTitleKeys.append(title)
             addSubview(button)
         }
 
@@ -226,7 +232,9 @@ final class NativeControlPanel: NSView {
     private func refresh() {
         // Підказки кнопок переходу — мовою, що зараз обрана: сюди приходять
         // і за поводом `.language`.
-        for (button, key) in zip(stepButtons, stepHintKeys) { button.setHint(OurWords.t(key)) }
+        for (index, button) in stepButtons.enumerated() {
+            button.apply(title: OurWords.t(stepTitleKeys[index]), hint: OurWords.t(stepHintKeys[index]))
+        }
         let current = state.currentTemplate
         // У свого шаблону з Конструктора немає готової картинки на диску:
         // авторські шаблони лежать теками з `thumbs/scene1.jpg`, а свій —
@@ -282,8 +290,10 @@ final class NativeControlPanel: NSView {
         let mine = state.presets.presets
         guard !templates.isEmpty || !mine.isEmpty else { return }
 
+        // На вкладці пісень вибір стосується шаблону пісень; на решті — спільного.
+        let songs = state.mode == .songs
         let menu = NSMenu()
-        menu.addItem(withTitle: state.text("Label3D10", default: "Шаблон:"),
+        menu.addItem(withTitle: songs ? OurWords.t("Шаблон для песен:") : state.text("Label3D10", default: "Шаблон:"),
                      action: nil, keyEquivalent: "")
         menu.addItem(.separator())
 
@@ -293,16 +303,16 @@ final class NativeControlPanel: NSView {
             for preset in mine {
                 let item = NSMenuItem(title: preset.name,
                                       action: #selector(NativeBottomMenuAction.fire), keyEquivalent: "")
-                let action = NativeBottomMenuAction { [weak self] in self?.state.applyPreset(preset) }
+                let action = NativeBottomMenuAction { [weak self] in self?.state.applyPreset(preset, forSongs: songs) }
                 item.target = action
                 item.representedObject = action
                 item.state = preset.id == state.slidePreset?.id ? .on : .off
                 menu.addItem(item)
             }
-            if state.slidePreset != nil {
-                let back = NSMenuItem(title: OurWords.t("Вернуться к авторскому"),
+            if songs ? state.presets.preset(for: .screen, songs: true) != nil : state.slidePreset != nil {
+                let back = NSMenuItem(title: songs ? OurWords.t("Как для Библии") : OurWords.t("Вернуться к авторскому"),
                                       action: #selector(NativeBottomMenuAction.fire), keyEquivalent: "")
-                let action = NativeBottomMenuAction { [weak self] in self?.state.applyPreset(nil) }
+                let action = NativeBottomMenuAction { [weak self] in self?.state.applyPreset(nil, forSongs: songs) }
                 back.target = action
                 back.representedObject = action
                 menu.addItem(back)
@@ -315,7 +325,7 @@ final class NativeControlPanel: NSView {
                                   action: #selector(NativeBottomMenuAction.fire), keyEquivalent: "")
             let name = scheme.name
             let action = NativeBottomMenuAction { [weak self] in
-                self?.state.applyPreset(nil)
+                self?.state.applyPreset(nil, forSongs: songs)
                 self?.state.applyTemplate(named: name)
             }
             item.target = action

@@ -51,11 +51,11 @@ final class NativeHistoryPane: NSView, NativeListSource {
             // Клацання по рядку повертає до місця — так само, як «Перейти».
             guard let self, cause == .click, let record = self.record(at: index) else { return }
             self.desk.historySelection = record.id
-            self.desk.activate(record, state: self.state)
+            self.desk.activate(record, state: self.state, show: true)
         }
         list.onActivate = { [weak self] index in
             guard let self, let record = self.record(at: index) else { return }
-            self.desk.activate(record, state: self.state)
+            self.desk.activate(record, state: self.state, show: true)
         }
 
         tokens.append(Signals.shared.subscribe(.history) { [weak self] in self?.reloadHistory() })
@@ -97,7 +97,7 @@ final class NativeHistoryPane: NSView, NativeListSource {
         let menu = NSMenu()
         menu.addItem(item(caption("N15", "Перейти")) { [weak self] in
             guard let self else { return }
-            self.desk.activate(record, state: self.state)
+            self.desk.activate(record, state: self.state, show: true)
         })
         menu.addItem(.separator())
         menu.addItem(item(caption("MIDelHisItem", "Удалить")) { [weak self] in

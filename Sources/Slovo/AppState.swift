@@ -109,7 +109,18 @@ final class AppState: ObservableObject {
     /// Экран служителя и веб-страницы живут своим шаблоном — у них своя
     /// задача. Зал, предпросмотр и трансляция идут одним: в Конструкторе
     /// шаблон один, и правка в нём обязана дойти до всех троих.
-    var slidePreset: SlidePreset? { livePreset ?? presets.preset(for: .screen) }
+    var slidePreset: SlidePreset? { livePreset ?? ownPreset(for: .screen) }
+
+    /// Чи слайд зараз — пісня: тоді береться шаблон пісень, якщо він є.
+    /// Слайд збирається за вкладкою (`refreshSlide`), тому й тут — вкладка.
+    var showsSongSlide: Bool { mode == .songs }
+
+    /// Свій шаблон виводу з урахуванням того, що на слайді: пісням — їхній,
+    /// коли призначено, інакше спільний.
+    func ownPreset(for kind: OutputKind) -> SlidePreset? {
+        if showsSongSlide, let own = presets.preset(for: kind, songs: true) { return own }
+        return presets.preset(for: kind)
+    }
 
     /// Шаблон, который сейчас правят в Конструкторе: зал показывает его, не
     /// дожидаясь сохранения. Владелец просил видеть правки на проекторе на
@@ -130,8 +141,8 @@ final class AppState: ObservableObject {
     /// человек менял, а на микшере оставалось прежнее.
     func preset(for kind: OutputKind) -> SlidePreset? {
         let target: OutputKind = kind == .ndi ? .screen : kind
-        var chosen = (target == .screen || target == .preview) ? (livePreset ?? presets.preset(for: target))
-                                                                : presets.preset(for: target)
+        var chosen = (target == .screen || target == .preview) ? (livePreset ?? ownPreset(for: target))
+                                                                : ownPreset(for: target)
         // Переход, выбранный в «Параметрах», главнее перехода шаблона: иначе
         // выбор в настройках не менял ничего, пока в зале стоит свой шаблон
         // (владелец: «половина эффектов не работает»).
@@ -1916,7 +1927,24 @@ final class AppState: ObservableObject {
     ///
     /// Снятый шаблон возвращает слайд к авторскому: так человек всегда может
     /// вернуться к тому, что работало.
-    func applyPreset(_ preset: SlidePreset?) {
+    /// `forSongs` — призначити (або зняти) шаблон саме для пісень: Біблія й
+    /// решта лишаються зі спільним.
+    func applyPreset(_ preset: SlidePreset?, forSongs: Bool = false) {
+        if forSongs {
+            if let preset {
+                presets.assign(preset, to: .screen, songs: true)
+                presets.assign(preset, to: .preview, songs: true)
+                presets.assign(preset, to: .ndi, songs: true)
+            } else {
+                presets.unassign(.screen, songs: true)
+                presets.unassign(.preview, songs: true)
+                presets.unassign(.ndi, songs: true)
+            }
+            objectWillChange.send()
+            refreshSlide()
+            pushToOutputs()
+            return
+        }
         // Зал, предпросмотр и трансляция держатся вместе: предпросмотр затем и
         // нужен, чтобы видеть, что уйдёт в зал, а трансляция показывает тот же
         // слайд, только без подложки — за подложку отвечает правило вывода

@@ -385,16 +385,26 @@ final class MediaPlayerModel: ObservableObject {
         didSet {
             player.isMuted = isMuted
             youTube?.setMuted(isMuted)
-            networkGain = isMuted ? 0 : Float(min(1, max(0, volume)))
+            networkGain = isMuted ? 0 : Self.gain(volume)
         }
     }
     /// «Громкость:» (LMEdiaVolume), 0…1.
     @Published var volume: Double = 1 {
         didSet {
-            player.volume = Float(min(1, max(0, volume)))
-            youTube?.setVolume(volume)
-            networkGain = isMuted ? 0 : Float(min(1, max(0, volume)))
+            player.volume = Self.gain(volume)
+            youTube?.setVolume(Double(Self.gain(volume)))
+            networkGain = isMuted ? 0 : Self.gain(volume)
         }
+    }
+
+    /// Положення повзунка → підсилення.
+    ///
+    /// Пряма лінія — не для вуха: половина повзунка давала лише −6 дБ, і
+    /// власник чув «дуже гучно, тихішає тільки біля нуля». Квадрат дає на
+    /// половині −12 дБ, на чверті −24 — повзунок стає корисним на всій довжині.
+    static func gain(_ position: Double) -> Float {
+        let clamped = min(1, max(0, position))
+        return Float(clamped * clamped)
     }
     /// Громкость плеера для звука, что идёт в сеть через отвод.
     ///
@@ -555,7 +565,7 @@ final class MediaPlayerModel: ObservableObject {
     ///   ссылок, а не чужие настройки, и лишний поход на диск ни к чему.
     init(autoConfigure: Bool = true) {
         player.actionAtItemEnd = .pause
-        player.volume = Float(volume)
+        player.volume = Self.gain(volume)
         observeRate()
         reloadAudioDevices()
         if autoConfigure { reloadSettingsFromDisk() }
@@ -790,7 +800,7 @@ final class MediaPlayerModel: ObservableObject {
         self.videoOutput = output
         player.replaceCurrentItem(with: item)
         player.isMuted = isMuted
-        player.volume = Float(volume)
+        player.volume = Self.gain(volume)
         player.audioOutputDeviceUniqueID = audioDeviceUID
 
         observe(item)
@@ -1606,7 +1616,7 @@ final class MediaPlayerModel: ObservableObject {
         youTube = engine
         engine.onReady = { [weak self] in
             guard let self, self.youTube === engine else { return }
-            engine.setVolume(self.volume)
+            engine.setVolume(Double(Self.gain(self.volume)))
             engine.setMuted(self.isMuted)
             // У ролика YouTube картинка есть всегда — это не звуковой поток.
             self.hasVideo = true

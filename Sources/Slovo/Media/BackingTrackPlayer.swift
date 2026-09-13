@@ -26,7 +26,7 @@ final class BackingTrackPlayer: ObservableObject {
     /// пение часто пускают по кругу.
     @Published var loops = false
     @Published var volume: Float = 0.8 {
-        didSet { node.volume = volume }
+        didSet { node.volume = MediaPlayerModel.gain(Double(volume)) }
     }
 
     /// Звук — в трансляцию: зовётся из звукового потока двигателя.
@@ -54,7 +54,7 @@ final class BackingTrackPlayer: ObservableObject {
 
     init() {
         engine.attach(node)
-        node.volume = volume
+        node.volume = MediaPlayerModel.gain(Double(volume))
     }
 
     // MARK: - Файл

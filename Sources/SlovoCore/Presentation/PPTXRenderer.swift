@@ -57,7 +57,7 @@ public enum PPTXRenderer {
             }
             draw(shape: shape, in: rect, document: document, context: context, size: size)
             draw(paragraphs: shape.paragraphs, in: rect, context: context, size: size,
-                 anchor: shape.anchor, fontScale: shape.fontScale)
+                 anchor: shape.anchor, fontScale: shape.fontScale, shadow: shape.textShadow)
             context.restoreGState()
         }
         return context.makeImage()
@@ -85,6 +85,14 @@ public enum PPTXRenderer {
             path = CGPath(rect: rect, transform: nil)
         }
 
+        // Тінь під фігурою чи картинкою. Зсув — у базовому просторі полотна
+        // (у CoreGraphics вісь Y іде вгору), тому «вниз» слайда — це мінус.
+        context.saveGState()
+        if let shadow = shape.shadow {
+            context.setShadow(offset: CGSize(width: shadow.offset.width * size.height,
+                                             height: -shadow.offset.height * size.height),
+                              blur: shadow.blur * size.height, color: shadow.color)
+        }
         if case .picture(let part) = shape.fill {
             draw(picture: part, crop: shape.crop, in: rect, document: document, context: context)
         } else if case .solid(let color) = shape.fill {
@@ -94,6 +102,7 @@ public enum PPTXRenderer {
             context.fillPath()
             context.restoreGState()
         }
+        context.restoreGState()
 
         if let stroke = shape.strokeColor, shape.strokeWidth > 0 {
             context.saveGState()
@@ -135,11 +144,12 @@ public enum PPTXRenderer {
                              height: height * (1 - crop.top - crop.bottom))
             if box.width > 1, box.height > 1, let cut = image.cropping(to: box) { image = cut }
         }
-        // Уписуємо цілком: розтягнуте обличчя на стіні видно всім.
-        let scale = min(rect.width / Double(image.width), rect.height / Double(image.height))
-        let drawn = CGSize(width: Double(image.width) * scale, height: Double(image.height) * scale)
-        let place = CGRect(x: rect.midX - drawn.width / 2, y: rect.midY - drawn.height / 2,
-                           width: drawn.width, height: drawn.height)
+        // Розтягуємо в рамку, як PowerPoint: рамка — це те, що людина бачила,
+        // коли ставила картинку, і саме такою вона хоче її на стіні.
+        // Раніше картинка вписувалася цілком, і з боків лишалися білі поля з
+        // чорною обвідкою — власник: «частини інформації немає, елементи
+        // спотворені».
+        let place = rect
         context.saveGState()
         // Кадр малюємо в неперевернутих координатах: `CGContext.draw` кладе
         // картинку знизу вгору, а ми перевернули полотно.
@@ -153,7 +163,7 @@ public enum PPTXRenderer {
 
     private static func draw(paragraphs: [PPTXDocument.Paragraph], in rect: CGRect,
                              context: CGContext, size: CGSize,
-                             anchor: String, fontScale: Double) {
+                             anchor: String, fontScale: Double, shadow: PPTXDocument.Shadow? = nil) {
         guard !paragraphs.isEmpty else { return }
         let text = attributed(paragraphs, canvasHeight: size.height, scale: fontScale)
         guard text.length > 0 else { return }
@@ -196,6 +206,11 @@ public enum PPTXRenderer {
         let box = CGRect(x: padded.minX, y: top, width: padded.width, height: visible)
 
         context.saveGState()
+        if let shadow {
+            context.setShadow(offset: CGSize(width: shadow.offset.width * size.height,
+                                             height: -shadow.offset.height * size.height),
+                              blur: shadow.blur * size.height, color: shadow.color)
+        }
         // Рядки CoreText ідуть знизу вгору — на перевернутому полотні це
         // означає ще один переворот, інакше абзаци стануть задом наперед.
         context.translateBy(x: 0, y: box.midY * 2)
@@ -226,6 +241,11 @@ public enum PPTXRenderer {
             style.lineBreakMode = .byWordWrapping
             style.firstLineHeadIndent = paragraph.indent * canvasHeight
             style.headIndent = style.firstLineHeadIndent
+            // Табуляція в PowerPoint — дюйм (`defTabSz` 914400 EMU); CoreText за
+            // умовчанням ставить її куди дрібніше, і адреса, яку автор відсунув
+            // табуляціями до правого краю, у нас стояла посеред рядка.
+            style.tabStops = []
+            style.defaultTabInterval = 72 * pointsPerCanvas
 
             if let bullet = paragraph.bullet, !paragraph.runs.isEmpty {
                 result.append(NSAttributedString(string: bullet + " ",

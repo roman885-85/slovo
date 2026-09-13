@@ -159,7 +159,19 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
     /// Дождаться библиотеки и базы нумерации, потом сделать дело — с таймера.
     private func whenLibraryIsReady(_ finish: @escaping @MainActor () -> Void) {
         func attempt(_ left: Int) {
-            guard left > 0 else { finish(); return }
+            guard left > 0 else {
+                // Не дочекалися — все одно з таймера, а не з блоку черги: з
+                // блоку вкладене очікування в перевірках не бачить відповідей
+                // фонових читань (бібліотека, розділи, фільм) — і справні
+                // розділи червоніли. Так було, коли база нумерації порожня:
+                // сорок спроб минали, і звіт знімався з `asyncAfter`.
+                NativeTrace.say("перевірка: бібліотеку не дочекалися (читається \(state.isLoadingLibrary),"
+                    + " модулів \(state.allModules.count), правил нумерації \(state.numbering.rules.count)) — починаю")
+                Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
+                    MainActor.assumeIsolated { finish() }
+                }
+                return
+            }
             // База несоответствий нумерации читается в фоне и приходит позже
             // модулей. Пока её ждали наравне со всем прочим, на загруженной
             // машине отчёт успевал сняться раньше — и «Стандарт доходит до

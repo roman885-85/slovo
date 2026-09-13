@@ -264,6 +264,10 @@ final class NativeMediaPanel: NSView {
 
     /// Утопленная кнопка — так переключатели нарисованы у автора.
     private func mark(_ button: NSButton, on: Bool) {
+        // Кнопка з двома положеннями: увімкнена малюється натиснутою, а не
+        // лише підфарбовує значок — власник: «кнопка повтору спрацьовує, але
+        // не міняє колір, незрозуміло, чи вона активна».
+        button.setButtonType(.pushOnPushOff)
         button.state = on ? .on : .off
         button.bezelStyle = .rounded
         button.contentTintColor = on ? .controlAccentColor : nil

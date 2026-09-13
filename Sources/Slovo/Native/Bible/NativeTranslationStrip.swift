@@ -198,10 +198,12 @@ final class NativeTranslationStripView: NSView {
             guard focused, let state = self?.state else { return }
             DeskModel.shared.prepareSearch(state: state)
         }
+        searchField.placeholder = OurWords.t("Слова для поиска…")
         searchField.toolTip = state.hint("ESearch", default: "Поиск")
 
         addressField.onChange = { [weak self] text in self?.addressTyped(text) }
         addressField.onSubmit = { [weak self] text in self?.addressSubmitted(text) }
+        addressField.placeholder = OurWords.t("Адрес: Ин 3:16")
         addressField.toolTip = state.hint("EFastInput",
                                           default: "Быстрый выбор вводом в формате:\n[номер Книги] Книга Глава Стих [Стих_по] (имя книги можно сокращать)")
             .replacingOccurrences(of: "\\n", with: "\n")

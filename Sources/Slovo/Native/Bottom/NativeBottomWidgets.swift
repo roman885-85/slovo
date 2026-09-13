@@ -190,14 +190,22 @@ final class NativeBottomLabelButton: NSButton {
 
     private let handler: () -> Void
 
+    /// `compact` — дрібна кнопка переходу: менший кегль і значок, щоб три
+    /// стали в ряд панелі «Керування».
     init(symbol: String, title: String, hint: String,
-         prominent: Bool, action: @escaping () -> Void) {
+         prominent: Bool, compact: Bool = false, action: @escaping () -> Void) {
         handler = action
         super.init(frame: .zero)
         self.title = title
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        let configuration = NSImage.SymbolConfiguration(pointSize: compact ? 9 : 12, weight: .regular)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
+            .withSymbolConfiguration(configuration)
         imagePosition = .imageLeading
         bezelStyle = .rounded
+        if compact {
+            controlSize = .small
+            font = .systemFont(ofSize: 10)
+        }
         toolTip = hint
         if prominent {
             // «Показати» в автора виділено кольором: це єдина кнопка,

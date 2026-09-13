@@ -59,6 +59,9 @@ final class NativeSongsWorkspace {
     let partStrip = NativeSongToolStrip()
     private var songQuick: NativeSongQuickRow!
     private var partQuick: NativeSongQuickRow!
+    /// Поля швидкого вибору — самоперевірці: вона друкує в них по літері.
+    var songQuickField: NativeQuickField? { songQuick?.field }
+    var partQuickField: NativeQuickField? { partQuick?.field }
     var mainButtons: [NativeSongButton] = []
     var saveButton: NativeSongButton?
     var groupButtons: [String: NativeSongButton] = [:]
@@ -356,6 +359,8 @@ final class NativeSongsWorkspace {
         groupTitle.text = caption("Label1", "Группа:")
         songTitle.text = caption("Label2", "Песня:")
         partTitle.text = caption("Label3", "Текст:")
+        songQuick.field.placeholder = OurWords.t("Номер или название песни…")
+        partQuick.field.placeholder = OurWords.t("Слова из текста песни…")
         songQuick.field.toolTip = hint("ENameFastInput",
                                        "Быстрый выбор Песни вводом её номера или названия")
         partQuick.field.toolTip = hint("ETextFastInput",
@@ -744,6 +749,8 @@ final class NativeSongsWorkspace {
     /// Фокус полів доганяє `DeskModel`: F7 і F9 ловить спільний монітор, який
     /// нічого не знає про наші поля.
     private func applyQuickFocus() {
+        // Позначка фокуса спільна з Біблією — діємо лише на своїй вкладці.
+        guard state?.mode == .songs else { return }
         let wanted = DeskModel.shared.quickFocus
         guard wanted != lastQuickFocus else { return }
         lastQuickFocus = wanted

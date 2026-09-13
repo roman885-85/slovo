@@ -60,6 +60,7 @@ final class NativeVerseColumn: NSView {
             self?.chose(index, selection: IndexSet(integer: index), cause: .doubleClick, live: true)
         }
 
+        quick.placeholder = OurWords.t("№ стиха или слова из текста")
         quick.toolTip = state.hint("EVersFastInput",
                                    default: "Быстрый выбор Стиха вводом его номера или части текста")
         quick.onChange = { [weak self] text in

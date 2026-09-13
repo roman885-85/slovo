@@ -37,6 +37,10 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     private let bottomNote = NSTextField(labelWithString: "")
     private let delayLabel = NSTextField(labelWithString: "")
     private var templateButton: NSPopUpButton!
+    /// Кому призначати шаблон: усьому (Біблія, текст) чи лише пісням.
+    private var scopeButton: NSPopUpButton!
+    private static let scopeKey = "constructorForSongs"
+    private var forSongs: Bool { scopeButton?.indexOfSelectedItem == 1 }
     private var backgroundButton: NSPopUpButton!
     private var transitionButton: NSPopUpButton!
     private var sceneTabs: NSSegmentedControl!
@@ -110,6 +114,18 @@ final class NativeSlideConstructor: NSView, NativeListSource {
                 self?.run(button)
             })
         }
+        // Для кого шаблон. Власник: «конструктор окремо для Біблії й окремо
+        // для пісень — у них по-різному має бути організований вивід».
+        // Вибір пам'ятається; уперше — за відкритою вкладкою.
+        topBar.addArrangedSubview(NativeForm.label(OurWords.t("Для:"), secondary: false))
+        scopeButton = NSPopUpButton(frame: .zero, pullsDown: false)
+        scopeButton.addItems(withTitles: [OurWords.t("Библии и всего"), OurWords.t("Песен")])
+        let remembered = UserDefaults.standard.object(forKey: Self.scopeKey) as? Bool
+        scopeButton.selectItem(at: (remembered ?? (state.mode == .songs)) ? 1 : 0)
+        scopeButton.target = self
+        scopeButton.action = #selector(scopeChosen)
+        scopeButton.toolTip = OurWords.t("Сохранённый шаблон станет шаблоном для всех слайдов или только для песен")
+        topBar.addArrangedSubview(scopeButton)
         topBar.addArrangedSubview(NativeForm.label(text("Label14", "Шаблон:"), secondary: false))
         templateButton = NSPopUpButton(frame: .zero, pullsDown: false)
         templateButton.target = self
@@ -268,6 +284,10 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         refresh()
     }
 
+    @objc private func scopeChosen() {
+        UserDefaults.standard.set(forSongs, forKey: Self.scopeKey)
+    }
+
     @objc private func sceneChanged() {
         model.scene = sceneTabs.selectedSegment == 1 ? .dual : .single
         canvas.needsDisplay = true
@@ -410,7 +430,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     /// Конструктор и приходят.
     private func applyToOutputs() {
         state.reloadPresets()
-        state.applyPreset(model.preset)
+        state.applyPreset(model.preset, forSongs: forSongs)
     }
 
     // MARK: - Обновление

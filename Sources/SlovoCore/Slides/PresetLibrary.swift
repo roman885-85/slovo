@@ -11,15 +11,22 @@ public final class PresetLibrary {
     public private(set) var presets: [SlidePreset]
     /// Какая преднастройка назначена каждому выводу.
     public private(set) var assignments: [OutputKind: UUID]
+    /// Те саме, але для пісень: у них свій шаблон, коли його призначено.
+    /// Власник: «конструктор слайдів окремо для Біблії й окремо для пісень —
+    /// у них по-різному має бути організований вивід».
+    public private(set) var songAssignments: [OutputKind: UUID]
 
     private let folder: URL
     private let assignmentsFile: URL
+    private let songAssignmentsFile: URL
 
     public init(folder: URL) {
         self.folder = folder
         self.assignmentsFile = folder.appendingPathComponent("assignments.json")
+        self.songAssignmentsFile = folder.appendingPathComponent("assignments-songs.json")
         self.presets = []
         self.assignments = [:]
+        self.songAssignments = [:]
 
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         reload()
@@ -39,7 +46,7 @@ public final class PresetLibrary {
                                                                   options: [.skipsHiddenFiles])) ?? []
         let decoder = JSONDecoder()
         presets = files
-            .filter { $0.pathExtension.lowercased() == "json" && $0.lastPathComponent != "assignments.json" }
+            .filter { $0.pathExtension.lowercased() == "json" && !$0.lastPathComponent.hasPrefix("assignments") }
             .compactMap { url -> SlidePreset? in
                 guard let data = try? Data(contentsOf: url) else { return nil }
                 // Битый файл не должен ронять запуск: пропускаем и работаем дальше.
@@ -47,13 +54,16 @@ public final class PresetLibrary {
             }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
-        if let data = try? Data(contentsOf: assignmentsFile),
-           let raw = try? decoder.decode([String: UUID].self, from: data) {
-            assignments = raw.reduce(into: [:]) { result, pair in
+        func read(_ file: URL) -> [OutputKind: UUID] {
+            guard let data = try? Data(contentsOf: file),
+                  let raw = try? decoder.decode([String: UUID].self, from: data) else { return [:] }
+            return raw.reduce(into: [:]) { result, pair in
                 guard let kind = OutputKind(rawValue: pair.key) else { return }
                 result[kind] = pair.value
             }
         }
+        assignments = read(assignmentsFile)
+        songAssignments = read(songAssignmentsFile)
     }
 
     @discardableResult
@@ -80,6 +90,7 @@ public final class PresetLibrary {
         try? FileManager.default.removeItem(at: url)
         presets.removeAll { $0.id == preset.id }
         for (kind, id) in assignments where id == preset.id { assignments[kind] = nil }
+        for (kind, id) in songAssignments where id == preset.id { songAssignments[kind] = nil }
         persistAssignments()
         return true
     }
@@ -98,29 +109,39 @@ public final class PresetLibrary {
 
     // MARK: - Привязка к выводам
 
-    public func preset(for kind: OutputKind) -> SlidePreset? {
-        guard let id = assignments[kind] else { return nil }
+    /// Шаблон виводу; `songs` — той, що призначено пісням (або `nil`, якщо
+    /// пісні йдуть за спільним).
+    public func preset(for kind: OutputKind, songs: Bool = false) -> SlidePreset? {
+        guard let id = (songs ? songAssignments : assignments)[kind] else { return nil }
         return presets.first { $0.id == id }
     }
 
-    public func assign(_ preset: SlidePreset, to kind: OutputKind) {
-        assignments[kind] = preset.id
+    public func assign(_ preset: SlidePreset, to kind: OutputKind, songs: Bool = false) {
+        if songs { songAssignments[kind] = preset.id } else { assignments[kind] = preset.id }
         persistAssignments()
     }
 
-    /// Снять свой шаблон с вывода: он вернётся к авторскому.
-    public func unassign(_ kind: OutputKind) {
-        guard assignments[kind] != nil else { return }
-        assignments[kind] = nil
+    /// Снять свой шаблон с вывода: он вернётся к авторскому (а пісні — до
+    /// спільного шаблону).
+    public func unassign(_ kind: OutputKind, songs: Bool = false) {
+        if songs {
+            guard songAssignments[kind] != nil else { return }
+            songAssignments[kind] = nil
+        } else {
+            guard assignments[kind] != nil else { return }
+            assignments[kind] = nil
+        }
         persistAssignments()
     }
 
     private func persistAssignments() {
-        let raw = assignments.reduce(into: [String: UUID]()) { $0[$1.key.rawValue] = $1.value }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(raw) else { return }
-        try? data.write(to: assignmentsFile, options: .atomic)
+        for (table, file) in [(assignments, assignmentsFile), (songAssignments, songAssignmentsFile)] {
+            let raw = table.reduce(into: [String: UUID]()) { $0[$1.key.rawValue] = $1.value }
+            guard let data = try? encoder.encode(raw) else { continue }
+            try? data.write(to: file, options: .atomic)
+        }
     }
 
     // MARK: - Первый запуск

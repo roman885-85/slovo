@@ -28,7 +28,38 @@ extension Diagnostics {
         checks.append(transferCheck(area: area, store: store))
         checks.append(shadowAngleCheck(area: area))
         checks.append(returnKeyCheck(area: area))
+        checks.append(songTemplateCheck(area: area, state: state))
         return checks
+    }
+
+    /// Шаблон пісень окремий від шаблону Біблії.
+    private static func songTemplateCheck(area: String, state: AppState) -> Check {
+        let name = "Пісні беруть свій шаблон, Біблія — спільний"
+        guard let own = state.presets.presets.first else {
+            return Check(area: area, name: name, status: .skipped, detail: "своїх шаблонів немає")
+        }
+        let wasMode = state.mode
+        let wasSongs = state.presets.preset(for: .screen, songs: true)
+        defer {
+            state.applyPreset(wasSongs, forSongs: true)
+            state.mode = wasMode
+        }
+        let common = state.presets.preset(for: .screen)?.name ?? "авторський"
+        state.applyPreset(own, forSongs: true)
+        state.mode = .songs
+        let onSongs = state.slidePreset?.id
+        state.mode = .bible
+        let onBible = state.slidePreset?.id
+        state.applyPreset(nil, forSongs: true)
+        state.mode = .songs
+        let afterReset = state.slidePreset?.id
+        let detail = "призначили пісням «\(own.name)»; на піснях: \(onSongs == own.id ? "він" : "інший"),"
+            + " на Біблії: \(onBible == own.id && state.presets.preset(for: .screen)?.id != own.id ? "теж він (зайве)" : "спільний (\(common))"),"
+            + " після «як для Біблії»: \(afterReset == state.presets.preset(for: .screen)?.id ? "спільний" : "інший")"
+        let ok = onSongs == own.id
+            && (onBible == state.presets.preset(for: .screen)?.id)
+            && afterReset == state.presets.preset(for: .screen)?.id
+        return Check(area: area, name: name, status: ok ? .ok : .failed, detail: detail)
     }
 
     /// Поділ списку на переклади й пісенники.

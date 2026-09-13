@@ -249,7 +249,7 @@ extension RemoteControlServer {
             guard let index, records.indices.contains(index) else {
                 return .failed(404, OurWords.t("нет такого пункта"))
             }
-            desk.activate(records[index], state: state)
+            desk.activate(records[index], state: state, show: true)
         case "history-remove":
             let records = desk.history.records
             guard let index, records.indices.contains(index) else {

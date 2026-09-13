@@ -80,6 +80,15 @@ final class NativePlanPane: NSView, NativeListSource {
             guard let self, let item = self.desk.plan[index] else { return }
             self.desk.activate(item, state: self.state)
         }
+        // Одинарне клацання теж відкриває пункт — як на планшеті, у пульті й
+        // в оригіналі. Доти потрібне було подвійне, і власник бачив «план не
+        // завжди спрацьовує»: спрацьовував, коли випадково клацали двічі.
+        // Протяжка (переставити пункт) і клацання з клавішами (вибрати
+        // кілька) пункт не відкривають.
+        list.onClick = { [weak self] index in
+            guard let self, let item = self.desk.plan[index] else { return }
+            self.desk.activate(item, state: self.state)
+        }
         reorder = NativeListReorder(list: list)
         reorder.onMove = { [weak self] from, to in
             self?.desk.movePlan(fromOffsets: IndexSet(integer: from), toOffset: to)

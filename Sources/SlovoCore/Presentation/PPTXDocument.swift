@@ -43,6 +43,17 @@ public final class PPTXDocument {
         case rectangle, roundedRectangle, ellipse, line
     }
 
+    /// Тінь — `<a:outerShdw>`: зсув і розмиття в частках висоти полотна,
+    /// колір із прозорістю. Буває у фігури й картинки (своя або зі стилю
+    /// теми через `effectRef`) і в тексту (своя в `rPr` або успадкована зі
+    /// стилів заповнювача в розмітці чи зразку). Власник: «відсутні ефекти
+    /// (немає тіней)».
+    public struct Shadow {
+        public var offset: CGSize
+        public var blur: Double
+        public var color: CGColor
+    }
+
     /// Обрізка картинки частками її власного розміру — `<a:srcRect>`.
     /// У презентаціях так вставляють шматок фотографії, і без обрізки на слайд
     /// потрапляє вся картинка цілком, а потрібен був куток.
@@ -77,6 +88,10 @@ public final class PPTXDocument {
         /// Він уже порахував це при верстці — рахувати заново означає розійтися
         /// з тим, що людина бачила, коли робила слайд.
         public var fontScale: Double
+        /// Тінь самої фігури або картинки.
+        public var shadow: Shadow?
+        /// Тінь тексту в ній.
+        public var textShadow: Shadow?
     }
 
     public struct Paragraph {
@@ -159,11 +174,15 @@ public final class PPTXDocument {
         guard !parts.isEmpty else { throw Failure(OurWords.t("в презентации нет ни одного слайда")) }
 
         theme = Self.readTheme(archive)
+        themeEffects = Self.readThemeEffects(archive, theme: theme)
         slides = parts.map { read(slide: $0) }
     }
 
     /// Кольори теми: `schemeClr` посилається на них за іменем.
     private var theme: [String: CGColor] = [:]
+    /// Стилі ефектів теми — на них фігура посилається через `effectRef idx`
+    /// (1…3; 0 — без ефекту).
+    private var themeEffects: [Shadow?] = []
 
     /// Картинка частини архіву — її просить малювання.
     public func image(part: String) -> CGImage? {
@@ -209,6 +228,19 @@ public final class PPTXDocument {
             ?? .none
 
         var shapes: [Shape] = []
+        // Прикраси зразка й розмітки — лінії, орнаменти, емблеми — стоять під
+        // усім, що на слайді. Заповнювачі звідти не малюються: це лише місця
+        // для тексту слайда. Слайд може вимкнути їх (`showMasterSp="0"`).
+        let showsMaster = root.attribute(forName: "showMasterSp")?.stringValue != "0"
+        if showsMaster {
+            for source in [master, layout] {
+                guard let source,
+                      let tree = (try? source.0.nodes(forXPath: ".//*[local-name()='spTree']"))?.first as? XMLElement
+                else { continue }
+                collect(from: tree, into: &shapes, relations: source.1, part: source.2,
+                        layout: nil, master: nil, transform: nil, decorationsOnly: true)
+            }
+        }
         if let tree = (try? root.nodes(forXPath: ".//*[local-name()='spTree']"))?.first as? XMLElement {
             collect(from: tree, into: &shapes, relations: relations, part: part,
                     layout: layout?.0, master: master?.0, transform: nil)
@@ -238,15 +270,20 @@ public final class PPTXDocument {
         }
     }
 
+    /// `decorationsOnly` — зі зразка чи розмітки: беремо лише те, що не є
+    /// заповнювачем.
     private func collect(from tree: XMLElement, into shapes: inout [Shape],
                          relations: [String: String], part: String,
                          layout: XMLElement?, master: XMLElement?,
-                         transform: GroupTransform?) {
+                         transform: GroupTransform?, decorationsOnly: Bool = false) {
         for child in tree.children ?? [] {
             guard let element = child as? XMLElement, let name = element.name else { continue }
             let local = name.contains(":") ? String(name.split(separator: ":").last!) : name
+            // Схована фігура (`<p:cNvPr hidden="1"/>`) у PowerPoint не показується.
+            if Self.attribute(element, path: ".//*[local-name()='cNvPr']", name: "hidden") == "1" { continue }
+            if decorationsOnly, local != "grpSp", Self.placeholder(of: element) != nil { continue }
             switch local {
-            case "sp", "pic":
+            case "sp", "pic", "cxnSp":
                 if var shape = read(shape: element, relations: relations, part: part,
                                     layout: layout, master: master) {
                     if let transform {
@@ -285,7 +322,7 @@ public final class PPTXDocument {
                         placedSize: placed.size)
                 }
                 collect(from: element, into: &shapes, relations: relations, part: part,
-                        layout: layout, master: master, transform: inner)
+                        layout: layout, master: master, transform: inner, decorationsOnly: decorationsOnly)
             default:
                 continue
             }
@@ -374,6 +411,15 @@ public final class PPTXDocument {
         let scale = Double(autofit?.attribute(forName: "fontScale")?.stringValue ?? "")
             .map { $0 / 100_000 } ?? 1
 
+        // Тінь фігури: своя в `spPr/effectLst`, інакше зі стилю теми.
+        var shadow: Shadow?
+        if let properties, let own = (try? properties.nodes(forXPath: "./*[local-name()='effectLst']"))?.first as? XMLElement {
+            shadow = Self.shadow(in: own, theme: theme)
+        } else if let index = Self.attribute(element, path: "./*[local-name()='style']/*[local-name()='effectRef']", name: "idx")
+                    .flatMap(Int.init), index >= 1, themeEffects.indices.contains(index - 1) {
+            shadow = themeEffects[index - 1]
+        }
+
         return Shape(frame: rect, fill: shapeFill,
                      strokeColor: strokeColor, strokeWidth: strokeWidth,
                      outline: shape,
@@ -381,7 +427,103 @@ public final class PPTXDocument {
                      rotation: rotation,
                      flipH: flipH, flipV: flipV,
                      crop: crop, anchor: anchor,
-                     fontScale: max(0.1, min(1, scale)))
+                     fontScale: max(0.1, min(1, scale)),
+                     shadow: shadow,
+                     textShadow: textShadow(of: element, layout: layout, master: master))
+    }
+
+    // MARK: - Тіні
+
+    /// Тінь тексту фігури.
+    ///
+    /// Своя — у `rPr` будь-якого шматка або в `defRPr` абзацу чи `lstStyle`
+    /// напису. Далі — успадкована: заповнювач розмітки з тим самим типом чи
+    /// номером, заповнювач зразка, і нарешті загальні стилі тексту зразка
+    /// (`titleStyle`, `bodyStyle`). Саме там у більшості шаблонів і лежить
+    /// тінь заголовка.
+    private func textShadow(of element: XMLElement, layout: XMLElement?, master: XMLElement?) -> Shadow? {
+        if let body = (try? element.nodes(forXPath: "./*[local-name()='txBody']"))?.first as? XMLElement,
+           let found = Self.firstShadow(under: body, theme: theme) {
+            return found
+        }
+        guard let wanted = Self.placeholder(of: element) else { return nil }
+        for root in [layout, master] {
+            guard let root, let twin = Self.placeholderElement(wanted, in: root),
+                  let body = (try? twin.nodes(forXPath: "./*[local-name()='txBody']"))?.first as? XMLElement
+            else { continue }
+            if let found = Self.firstShadow(under: body, theme: theme) { return found }
+        }
+        guard let master else { return nil }
+        let styleName: String
+        switch wanted.type {
+        case "title", "ctrTitle": styleName = "titleStyle"
+        case "body", "subTitle", "obj": styleName = "bodyStyle"
+        default: styleName = "otherStyle"
+        }
+        if let styles = (try? master.nodes(forXPath: ".//*[local-name()='txStyles']/*[local-name()='\(styleName)']"))?
+            .first as? XMLElement {
+            return Self.firstShadow(under: styles, theme: theme)
+        }
+        return nil
+    }
+
+    private static func firstShadow(under root: XMLElement, theme: [String: CGColor]) -> Shadow? {
+        guard let list = (try? root.nodes(forXPath: ".//*[local-name()='effectLst']"))?.first as? XMLElement
+        else { return nil }
+        return shadow(in: list, theme: theme)
+    }
+
+    /// Заповнювач розмітки або зразка з тим самим номером чи типом.
+    private static func placeholderElement(_ wanted: (type: String, index: String),
+                                           in root: XMLElement) -> XMLElement? {
+        var byType: XMLElement?
+        for node in (try? root.nodes(forXPath: ".//*[local-name()='sp']")) ?? [] {
+            guard let shape = node as? XMLElement, let found = placeholder(of: shape) else { continue }
+            if !wanted.index.isEmpty, found.index == wanted.index { return shape }
+            if byType == nil, found.type == wanted.type { byType = shape }
+        }
+        return byType
+    }
+
+    /// `<a:effectLst>` → тінь, якщо в ньому є `<a:outerShdw>`.
+    private static func shadow(in list: XMLElement, theme: [String: CGColor]) -> Shadow? {
+        guard let outer = (try? list.nodes(forXPath: "./*[local-name()='outerShdw']"))?.first as? XMLElement
+        else { return nil }
+        func number(_ name: String, _ fallback: Double) -> Double {
+            Double(outer.attribute(forName: name)?.stringValue ?? "") ?? fallback
+        }
+        // Відстань і розмиття — в EMU; кут — у 60 000-х градуса, за стрілкою
+        // годинника від напрямку «вправо» (90° — униз).
+        let distance = number("dist", 0), blur = number("blurRad", 0)
+        let angle = number("dir", 5_400_000) / 60_000 * Double.pi / 180
+        // Висота полотна в EMU: слайд PowerPoint — 6 858 000 EMU (7,5 дюйма).
+        let unit = 6_858_000.0
+        var color = CGColor(red: 0, green: 0, blue: 0, alpha: 0.5)
+        if let base = self.color(of: outer, theme: theme) {
+            var alpha = 1.0
+            if let node = (try? outer.nodes(forXPath: ".//*[local-name()='alpha']"))?.first as? XMLElement,
+               let value = Double(node.attribute(forName: "val")?.stringValue ?? "") {
+                alpha = value / 100_000
+            }
+            color = base.copy(alpha: alpha) ?? base
+        }
+        return Shadow(offset: CGSize(width: cos(angle) * distance / unit, height: sin(angle) * distance / unit),
+                      blur: blur / unit, color: color)
+    }
+
+    private static func readThemeEffects(_ archive: ZipArchive.Reader, theme: [String: CGColor]) -> [Shadow?] {
+        guard let part = archive.names.first(where: { $0.hasPrefix("ppt/theme/") && $0.hasSuffix(".xml") }),
+              let xml = try? archive.text(part),
+              let document = try? XMLDocument(xmlString: xml, options: xmlOptions),
+              let root = document.rootElement(),
+              let list = (try? root.nodes(forXPath: ".//*[local-name()='effectStyleLst']"))?.first as? XMLElement
+        else { return [] }
+        return ((try? list.nodes(forXPath: "./*[local-name()='effectStyle']")) ?? []).map { node in
+            guard let style = node as? XMLElement,
+                  let effects = (try? style.nodes(forXPath: "./*[local-name()='effectLst']"))?.first as? XMLElement
+            else { return nil }
+            return shadow(in: effects, theme: theme)
+        }
     }
 
     private func paragraphs(in element: XMLElement) -> [Paragraph] {
@@ -403,11 +545,20 @@ public final class PPTXDocument {
                 .attribute(forName: "char")?.stringValue
 
             var runs: [Run] = []
-            for item in (try? paragraph.nodes(forXPath: "./*[local-name()='r']")) ?? [] {
-                guard let run = item as? XMLElement,
-                      let node = (try? run.nodes(forXPath: "./*[local-name()='t']"))?
+            // Діти абзацу по порядку: шматки тексту `r`, поля `fld` (номер слайда,
+            // дата) і розриви рядка `br`. Доти бралися лише `r`: поле пропадало,
+            // а текст після розриву приклеювався до попереднього рядка.
+            for item in (try? paragraph.nodes(forXPath: "./*[local-name()='r' or local-name()='fld' or local-name()='br']")) ?? [] {
+                guard let run = item as? XMLElement else { continue }
+                let local = (run.name ?? "").split(separator: ":").last.map(String.init) ?? ""
+                let text: String
+                if local == "br" {
+                    text = "\n"
+                } else {
+                    guard let node = (try? run.nodes(forXPath: "./*[local-name()='t']"))?
                         .first as? XMLElement else { continue }
-                let text = Self.text(of: node)
+                    text = Self.text(of: node)
+                }
                 let style = (try? run.nodes(forXPath: "./*[local-name()='rPr']"))?.first as? XMLElement
                 let size = Double(style?.attribute(forName: "sz")?.stringValue ?? "") ?? 1800
                 runs.append(Run(text: text,
@@ -631,6 +782,15 @@ public final class PPTXDocument {
             return .picture(Self.resolve(target, from: part))
         }
         if let solid = Self.solidColor(in: background, theme: theme) { return .solid(solid) }
+        // `<p:bgRef idx="1002"><a:schemeClr val="bg2"/>` — посилання на стиль фону
+        // теми з кольором, який у той стиль підставляється. Стилі теми — це
+        // здебільшого той самий колір із ледь помітним відтінком, тому беремо
+        // колір як є. Доти такий фон лишався білим, хоч у PowerPoint слайд
+        // кремовий.
+        if let reference = (try? background.nodes(forXPath: "./*[local-name()='bgRef']"))?.first as? XMLElement,
+           let solid = Self.color(of: reference, theme: theme) {
+            return .solid(solid)
+        }
         return nil
     }
 }

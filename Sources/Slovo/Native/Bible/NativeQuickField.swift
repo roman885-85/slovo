@@ -38,6 +38,13 @@ final class NativeQuickField: NSView, NSTextFieldDelegate {
     /// Правка йде від нас, а не від людини, — зворотний виклик не потрібен.
     private var isSettingText = false
 
+    /// Сірий підказ у порожньому полі: що сюди набирати. Власник:
+    /// «незрозуміле призначення і робота пункту — швидкий вибір».
+    var placeholder: String {
+        get { field.placeholderString ?? "" }
+        set { field.placeholderString = newValue }
+    }
+
     var text: String {
         get { field.stringValue }
         set {
@@ -68,13 +75,24 @@ final class NativeQuickField: NSView, NSTextFieldDelegate {
 
     override var isFlipped: Bool { true }
 
+    /// Поле вводу всередині — самоперевірці: колір курсора й висота рядка.
+    var editorField: NSTextField { field }
+
     var isFocused: Bool {
         guard let window, let responder = window.firstResponder as? NSTextView else { return false }
         return responder.delegate === field || window.fieldEditor(false, for: field) === responder
     }
 
+    /// Поставити курсор у поле.
+    ///
+    /// Нічого не робимо, коли курсор уже тут або поле сховане. Повторне
+    /// `makeFirstResponder` посеред набору починає правку заново й виділяє
+    /// весь текст — наступна літера його затирала («І» → «в»); а сховане поле
+    /// (Біблія, поки відкрито пісні) забирало курсор у видимого, і далі
+    /// набиралося вже туди. Власник: «вводиться тільки перший символ».
     func focus() {
-        window?.makeFirstResponder(field)
+        guard let window, !isFocused, !isHiddenOrHasHiddenAncestor else { return }
+        window.makeFirstResponder(field)
         needsDisplay = true
     }
 
@@ -100,8 +118,18 @@ final class NativeQuickField: NSView, NSTextFieldDelegate {
             shape.lineWidth = 1
         }
         shape.stroke()
-        field.textColor = focused ? activeText : .labelColor
+        drawCount += 1
+        // Колір тексту ставимо лише тоді, коли він справді інший. Доти він
+        // ставився на кожному перемалюванні — а головне вікно перемальовує
+        // смугу часто. Кожне таке призначення скидає редактору поля його
+        // атрибути, і курсор, що саме проявлявся, починав з нуля: очима його
+        // не було видно взагалі. Власник: «курсор у всіх полях відсутній».
+        let wanted = focused ? activeText : NSColor.labelColor
+        if field.textColor != wanted { field.textColor = wanted }
     }
+
+    /// Скільки разів поле перемалювалося — самоперевірці.
+    private(set) var drawCount = 0
 
     // MARK: - Ввід
 

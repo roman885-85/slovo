@@ -407,11 +407,27 @@ final class NativeList: NSView, NativeListChecking {
 
     // MARK: - Мышь и клавиши
 
+    /// Одинарне клацання по рядку — миша піднялася там, де опустилася, без
+    /// протяжки й без клавіш. На відміну від `onSelect`, не спрацьовує, коли
+    /// рядок лише тягнуть (переставляють пункт плану) чи розтягують
+    /// виділення: План відкриває пункт саме звідси.
+    var onClick: ((Int) -> Void)?
+    private var pressedItem: Int?
+    private var pressedAt: NSPoint = .zero
+    private var pressedMoved = false
+
     fileprivate func handleMouseDown(_ event: NSEvent) {
         window?.makeFirstResponder(table)
         dragOrigin = nil
         dragLast = nil
+        pressedItem = nil
+        pressedMoved = false
         guard let index = item(at: event) else { return }
+        let plain = event.modifierFlags.intersection([.shift, .command, .control, .option]).isEmpty
+        if plain, event.clickCount == 1 {
+            pressedItem = index
+            pressedAt = event.locationInWindow
+        }
         if let onLeadClick, columnsPerRow == 1, metrics.leadWidth > 0 {
             let x = table.convert(event.locationInWindow, from: nil).x
             if x <= metrics.leadWidth + metrics.padding.left + 6 {
@@ -435,6 +451,10 @@ final class NativeList: NSView, NativeListChecking {
     /// Раньше отрезок набирался только Ctrl-щелчками по каждому стиху
     /// (владелец просил «выбор нескольких стихов одним движением мышки»).
     fileprivate func handleMouseDragged(_ event: NSEvent) {
+        if pressedItem != nil, !pressedMoved {
+            let shift = hypot(event.locationInWindow.x - pressedAt.x, event.locationInWindow.y - pressedAt.y)
+            if shift > 4 { pressedMoved = true }
+        }
         guard let origin = dragOrigin else { return }
         table.autoscroll(with: event)
         guard let index = item(at: event), index != dragLast else { return }
@@ -446,6 +466,10 @@ final class NativeList: NSView, NativeListChecking {
     fileprivate func handleMouseUp(_ event: NSEvent) {
         dragOrigin = nil
         dragLast = nil
+        defer { pressedItem = nil }
+        guard let pressed = pressedItem, !pressedMoved, event.clickCount == 1,
+              item(at: event) == pressed else { return }
+        onClick?(pressed)
     }
 
     /// Щелчок по строке. Вынесен из разбора события нарочно: так его можно
@@ -520,7 +544,16 @@ final class NativeList: NSView, NativeListChecking {
     }
 
     private func item(at event: NSEvent) -> Int? {
-        let point = table.convert(event.locationInWindow, from: nil)
+        item(atTablePoint: table.convert(event.locationInWindow, from: nil))
+    }
+
+    /// Елемент під точкою списку — самоперевірці: той самий розрахунок, що й у
+    /// миші, з плитками включно.
+    func item(atListPoint point: NSPoint) -> Int? {
+        item(atTablePoint: table.convert(point, from: self))
+    }
+
+    private func item(atTablePoint point: NSPoint) -> Int? {
         let row = table.row(at: point)
         guard row >= 0 else { return nil }
         guard columnsPerRow > 1 else { return row < itemCount ? row : nil }
@@ -709,6 +742,22 @@ final class NativeList: NSView, NativeListChecking {
 
     /// Скільки рядків у списку — самоперевірці.
     var rowsNow: Int { source?.rowCount ?? 0 }
+
+    /// Де на списку лежить елемент (у координатах самого списку) — самоперевірці:
+    /// вона клацає в середину і дивиться, чи туди влучила.
+    func frameOfItem(_ index: Int) -> NSRect? {
+        guard index >= 0, index < itemCount else { return nil }
+        let row = tableRow(ofItem: index)
+        guard row >= 0, row < table.numberOfRows else { return nil }
+        var rect = table.rect(ofRow: row)
+        if columnsPerRow > 1, case .tiles(_, _, let gap) = mode {
+            let step = tileStep(width: contentWidth)
+            let column = index - row * columnsPerRow
+            rect = NSRect(x: rect.minX + CGFloat(column) * step, y: rect.minY,
+                          width: max(1, step - gap), height: rect.height)
+        }
+        return convert(rect, from: table)
+    }
 
     // MARK: - Плитка
 
