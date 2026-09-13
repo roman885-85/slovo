@@ -227,6 +227,14 @@ public final class TabletActivity extends Activity {
     // Зал.
     private Bitmap hallBitmap;
     private String shownCrop = "";
+
+    /// Показане вікно наближення {ліво, верх, сторона}: їде до цілі плавно
+    /// за 280 мс, а не стрибає. Власник: «переход в исходное состояние не
+    /// резко, а плавно… подтягивание слайда — пусть это будет тоже плавно».
+    /// Під щипком і з новою картинкою — одразу.
+    private double[] shownWindow = {0, 0, 1};
+    private android.animation.ValueAnimator windowRide;
+    private int shownBitmapId;
     private volatile boolean hallBusy;
     private volatile boolean hallPending;
     private long hallSeq = -1;
@@ -928,12 +936,40 @@ public final class TabletActivity extends Activity {
         if (full == null) return;
         if (!zooming) zoomNow = state.zoomOn ? state.zoom : 1;
         if (zoomBack != null) zoomBack.setVisibility(state.zoomOn && state.zoom > 1.001 ? View.VISIBLE : View.GONE);
-        double[] window = zoomWindow();
+        double[] target = zoomWindow();
+        boolean fresh = System.identityHashCode(full) != shownBitmapId;
+        shownBitmapId = System.identityHashCode(full);
+        boolean same = Math.abs(target[0] - shownWindow[0]) + Math.abs(target[1] - shownWindow[1])
+            + Math.abs(target[2] - shownWindow[2]) < 1e-4;
+        if (windowRide != null) { windowRide.cancel(); windowRide = null; }
+        if (fresh || zooming || same) {
+            shownWindow = target;
+            drawWindow(full, target);
+            return;
+        }
+        final double[] from = shownWindow.clone();
+        android.animation.ValueAnimator ride = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        ride.setDuration(280);
+        ride.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        ride.addUpdateListener(a -> {
+            float e = (float) a.getAnimatedValue();
+            shownWindow = new double[] { from[0] + (target[0] - from[0]) * e,
+                                        from[1] + (target[1] - from[1]) * e,
+                                        from[2] + (target[2] - from[2]) * e };
+            Bitmap now = hallBitmap;
+            if (now != null) drawWindow(now, shownWindow);
+        });
+        windowRide = ride;
+        ride.start();
+    }
+
+    /// Вирізати вікно з картинки й поставити у вид.
+    private void drawWindow(Bitmap full, double[] window) {
         String signature = window[0] + ":" + window[1] + ":" + window[2] + ":" + System.identityHashCode(full);
         if (signature.equals(shownCrop)) return;
         shownCrop = signature;
         Bitmap shown = full;
-        if (window[2] < 1) {
+        if (window[2] < 0.999) {
             int x = (int) Math.round(window[0] * full.getWidth());
             int y = (int) Math.round(window[1] * full.getHeight());
             int w = Math.min(Math.max(2, (int) Math.round(window[2] * full.getWidth())), full.getWidth() - x);

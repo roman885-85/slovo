@@ -107,6 +107,12 @@ public final class PresetLibrary {
         return "\(stem)-\(preset.id.uuidString.prefix(8)).json"
     }
 
+    /// Шаблони одного редактора: пісень або Біблії. Списки двох редакторів
+    /// не перетинаються — так просив власник.
+    public func presets(forSongs: Bool) -> [SlidePreset] {
+        presets.filter { $0.forSongs == forSongs }
+    }
+
     // MARK: - Привязка к выводам
 
     /// Шаблон виводу; `songs` — той, що призначено пісням (або `nil`, якщо

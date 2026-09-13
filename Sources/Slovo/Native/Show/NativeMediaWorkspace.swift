@@ -25,6 +25,9 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
                                   metrics: NativeListMetrics(leadWidth: 30, detailWidth: 0),
                                   heights: .uniform(26))
     private let toolbar = NSStackView()
+    /// Роздільник між списком і плеєром: ширина списку тягнеться й пам'ятається.
+    private let grip = NativeWidthGrip()
+    private static let listWidthKey = "mediaListWidth"
     /// Фонограма — під списком файлів: своя, окрема від плеєра.
     private var backingBar: NativeBackingTrackBar?
 
@@ -88,6 +91,14 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         toolbar.alignment = .centerY
         addSubview(list)
         addSubview(toolbar)
+        addSubview(grip)
+        grip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(Self.listWidthKey, self.list.frame.width + delta, min: 150, max: self.bounds.width * 0.6)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        grip.onReset = { [weak self] in NativeWidths.reset(Self.listWidthKey); self?.needsLayout = true }
 
         func button(_ symbol: String, _ action: Selector) -> NSButton {
             let item = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
@@ -113,7 +124,8 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
     override func layout() {
         super.layout()
         let gap: CGFloat = 8
-        let listWidth = max(180, min(320, bounds.width * 0.26))
+        let listWidth = NativeWidths.value(Self.listWidthKey, auto: max(180, min(320, bounds.width * 0.26)),
+                                           min: 150, max: bounds.width * 0.6)
         let toolbarHeight: CGFloat = 28
         toolbar.frame = NSRect(x: gap, y: gap, width: listWidth, height: toolbarHeight)
         let top = toolbar.frame.maxY + gap
@@ -122,8 +134,11 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
                             height: max(0, bounds.height - top - gap - barHeight))
         backingBar?.frame = NSRect(x: gap, y: bounds.height - gap - NativeBackingTrackBar.height,
                                    width: listWidth, height: NativeBackingTrackBar.height)
-        host?.frame = NSRect(x: listWidth + gap * 2, y: gap,
-                             width: max(0, bounds.width - listWidth - gap * 3),
+        grip.frame = NSRect(x: list.frame.maxX, y: gap, width: NativeWidths.grip,
+                            height: max(0, bounds.height - gap * 2))
+        let hostX = grip.frame.maxX + gap
+        host?.frame = NSRect(x: hostX, y: gap,
+                             width: max(0, bounds.width - hostX - gap),
                              height: max(0, bounds.height - gap * 2))
     }
 

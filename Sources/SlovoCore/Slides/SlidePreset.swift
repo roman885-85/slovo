@@ -70,6 +70,31 @@ public struct SlidePreset: Codable, Hashable, Sendable, Identifiable {
     public var transition: SlideStyle.Transition
     public var transitionDuration: Double
     public var transitionEasing: SlideStyle.Easing?
+    /// Шаблон пісень, а не Біблії. Власник: «у редакторі слайдів потрібен
+    /// окремий редактор для Біблії й окремий для пісень — інакше губиться
+    /// весь сенс двох розділів». Тому кожен шаблон належить одному з двох
+    /// редакторів, і списки в них не перетинаються. Старі файли без цього
+    /// поля — Біблії.
+    public var forSongs: Bool = false
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, canvasWidth, canvasHeight, background, objects
+        case transition, transitionDuration, transitionEasing, forSongs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        id = try box.decode(UUID.self, forKey: .id)
+        name = try box.decode(String.self, forKey: .name)
+        canvasWidth = try box.decode(Int.self, forKey: .canvasWidth)
+        canvasHeight = try box.decode(Int.self, forKey: .canvasHeight)
+        background = try box.decode(Background.self, forKey: .background)
+        objects = try box.decode([SlideObject].self, forKey: .objects)
+        transition = try box.decode(SlideStyle.Transition.self, forKey: .transition)
+        transitionDuration = try box.decode(Double.self, forKey: .transitionDuration)
+        transitionEasing = try box.decodeIfPresent(SlideStyle.Easing.self, forKey: .transitionEasing)
+        forSongs = try box.decodeIfPresent(Bool.self, forKey: .forSongs) ?? false
+    }
 
     public init(name: String,
                 canvasWidth: Int = 1920,
@@ -136,6 +161,33 @@ public extension SlidePreset {
                            objects: [quote, second, reference],
                            transition: style.transition,
                            transitionDuration: style.transitionDuration)
+    }
+
+    /// Розкладка пісні: куплет на все полотно, під ним підпис частини —
+    /// «Куплет», «Приспів» — той самий об'єкт адреси, що на слайді пісні
+    /// показує частину (так було й у VisioBible). Другого перекладу в пісні
+    /// нема; назву пісні додають окремим об'єктом, коли вона потрібна.
+    static func song(name: String, style: SlideStyle) -> SlidePreset {
+        var quote = SlideObject(kind: .quote, text: style.main)
+        quote.frame = ObjectFrame(x: 0, y: -0.04, width: 0.9, height: 0.7,
+                                  anchorX: .center, anchorY: .middle)
+
+        var title = SlideObject(kind: .reference, name: OurWords.t("Часть песни"), text: style.reference)
+        title.frame = ObjectFrame(x: 0, y: 0.05, width: 0.9, height: 0.1,
+                                  anchorX: .center, anchorY: .bottom)
+
+        var background = Background(color: style.backgroundColor,
+                                    imagePath: style.backgroundImagePath,
+                                    dim: style.dimBackground)
+        background.blurRadius = 0
+
+        var preset = SlidePreset(name: name,
+                                 background: background,
+                                 objects: [quote, title],
+                                 transition: style.transition,
+                                 transitionDuration: style.transitionDuration)
+        preset.forSongs = true
+        return preset
     }
 
     /// Розкладка для NDI: те саме, але без підкладки — картинку під текст

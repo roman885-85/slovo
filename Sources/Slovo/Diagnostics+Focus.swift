@@ -6,6 +6,7 @@ import SlovoCore
 extension Diagnostics {
 
     static func focusSection(state: AppState) -> [Check] {
+        rideSection(state: state) +
         pointSection(state: state) + wheelSection(state: state)
     }
 
@@ -90,6 +91,72 @@ extension Diagnostics {
         return [Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
                       detail: (faults.isEmpty ? "" : faults.joined(separator: "; ") + ". ")
                         + lines.joined(separator: "; "))]
+    }
+
+    /// Показане вікно їде до цілі плавно, а ціль міняється одразу.
+    /// Власник: «переход в исходное состояние не резко, а плавно;
+    /// подтягивание слайда — пусть тоже плавно».
+    private static func rideSection(state: AppState) -> [Check] {
+        let area = "Фокус"
+        let name = "Наближення знімається і переїжджає плавно"
+        let focus = SlideFocus.shared
+        let wasDuration = SlideFocus.animationDuration
+        let wasOn = focus.isOn, wasZoom = focus.look.zoom
+        defer {
+            SlideFocus.animationDuration = 0
+            focus.reset()
+            focus.setOn(wasOn)
+            focus.setZoom(wasZoom)
+            SlideFocus.animationDuration = wasDuration
+        }
+        func settle(_ seconds: Double) { wait(untilTrue: { false }, seconds: seconds) }
+
+        SlideFocus.animationDuration = 0.28
+        focus.reset()
+        settle(0.4)
+        focus.setZoom(3)
+        focus.setOn(true)
+        settle(0.5)
+        var faults: [String] = []
+        var lines: [String] = []
+        let zoomed = focus.shownRect.width
+        lines.append(String(format: "×3 доїхало: сторона %.3f за %d кадрів", zoomed, focus.rideFrames))
+        if abs(zoomed - 1.0 / 3) > 0.01 { faults.append(String(format: "після ×3 показана сторона %.3f, а не 0.333", zoomed)) }
+        if focus.rideFrames < 8 { faults.append("переїзд до ×3 зайняв \(focus.rideFrames) кадрів — це стрибок, а не рух") }
+
+        // Скидання: ціль — уся сторінка одразу, показане — поступово.
+        focus.reset()
+        let targetNow = focus.rect
+        if targetNow.width < 0.999 { faults.append("після скидання ціль не стала цілою сторінкою одразу") }
+        settle(0.1)
+        let early = focus.shownRect.width
+        settle(0.1)
+        let middle = focus.shownRect.width
+        settle(0.35)
+        let late = focus.shownRect.width
+        lines.append(String(format: "скидання: сторона через 0.1 с %.3f, через 0.2 с %.3f, наприкінці %.3f, кадрів %d",
+                            early, middle, late, focus.rideFrames))
+        if !(early > 1.0 / 3 + 0.02 && early < 0.98) { faults.append("через 0.1 с після скидання вікно не посередині дороги") }
+        if !(middle > early) { faults.append("вікно не росте з часом") }
+        if abs(late - 1) > 0.001 { faults.append("наприкінці переїзду сторінка не ціла") }
+        if focus.rideFrames < 8 { faults.append("скидання зайняло \(focus.rideFrames) кадрів — стрибок") }
+
+        // Підтягування: натиснули в куток при ×3 — вікно поїхало туди, а не стрибнуло.
+        focus.setZoom(3)
+        focus.setOn(true)
+        settle(0.5)
+        let before = focus.shownRect
+        focus.move(toShown: 0.02, 0.02)
+        settle(0.1)
+        let ridden = focus.shownRect
+        settle(0.4)
+        let arrived = focus.shownRect
+        lines.append(String(format: "підтягування в куток: з %.3f через %.3f до %.3f", before.minX, ridden.minX, arrived.minX))
+        if !(ridden.minX < before.minX && ridden.minX > arrived.minX + 0.005) { faults.append("підтягування в куток стрибнуло, а не поїхало") }
+        if abs(arrived.minX - focus.rect.minX) > 0.001 { faults.append("вікно не доїхало до цілі") }
+
+        return [Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
+                      detail: (faults.isEmpty ? "" : faults.joined(separator: "; ") + ". ") + lines.joined(separator: "; "))]
     }
 
     private static func pointSection(state: AppState) -> [Check] {

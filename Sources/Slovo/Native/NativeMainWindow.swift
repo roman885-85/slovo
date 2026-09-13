@@ -222,6 +222,19 @@ final class NativeBottomHeightGrip: NSView {
         addCursorRect(bounds, cursor: .resizeUpDown)
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        // Три крапки посередині, як на роздільниках ширини: смужку у вісім
+        // точок без них не видно, і власник просив тягнути «по вертикалі»,
+        // не знаючи, що вже можна.
+        NSColor.separatorColor.setFill()
+        let dot: CGFloat = 2
+        var x = bounds.midX - dot * 4
+        for _ in 0..<3 {
+            NSBezierPath(ovalIn: NSRect(x: x, y: bounds.midY - dot / 2, width: dot, height: dot)).fill()
+            x += dot * 3
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         last = convert(event.locationInWindow, from: nil).y
     }

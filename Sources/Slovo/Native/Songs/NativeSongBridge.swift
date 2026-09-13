@@ -99,6 +99,9 @@ final class NativeSongBridge {
         var isModified = false
         var groupIndex = -1
         var songIndex = -1
+        /// Пісня в `AppState`: її ставлять План та «Історія», нічого не
+        /// знаючи про вікно, — і вкладка зобов'язана піти за нею.
+        var stateSong = -1
         var partIndex = -1
         var statePart = -1
         var songQuery = ""
@@ -122,6 +125,7 @@ final class NativeSongBridge {
             isModified = model.isModified
             groupIndex = model.groupIndex ?? -1
             songIndex = model.songIndex ?? -1
+            stateSong = state.songIndex ?? -1
             partIndex = model.partIndex ?? -1
             statePart = state.songPartIndex ?? -1
             songQuery = model.songQuery
@@ -150,7 +154,11 @@ final class NativeSongBridge {
                 || titleFormat != old.titleFormat {
                 kinds.append(.songFilter)
             }
-            if songIndex != old.songIndex { kinds.append(.songSelection) }
+            // Пісню міняє не лише список: пункт Плану пише в `AppState`, і
+            // доти вкладка цього не помічала — список стояв на старій пісні,
+            // а стрілка потім листала її, а не ту, що в залі (скрин власника:
+            // «в плане выбрана одна песня, а в окне программы не та»).
+            if songIndex != old.songIndex || stateSong != old.stateSong { kinds.append(.songSelection) }
             if partIndex != old.partIndex || statePart != old.statePart {
                 kinds.append(.songPart)
             }

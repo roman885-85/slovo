@@ -193,6 +193,11 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
         // один рядок тексту; не вміщається й він із відступами (щільні списки
         // Плану й Історії навмисно нижчі) — той самий рядок, але по центру.
         var singleLine = row.singleLine
+        // Кегль тексту під ширину не підганяємо ніде: у Плані й Історії
+        // довгі рядки виходили дрібнішими за сусідні короткі — власник:
+        // «проблема з розмірами тексту місцями». Що не влазить — ріжуть три
+        // крапки, а кегль у всіх рядків один. Підганяється лише коротка
+        // мітка зліва і приписка справа: номер чи «Стар.Заповіт», не текст.
         var leadRect = layout.leadRect
         var textRect = layout.textRect
         var detailRect = layout.detailRect
@@ -224,7 +229,7 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
         let textColor = selected ? m.selectedTextColor : (row.textColor ?? m.textColor)
         let textFont = row.bold ? style.boldTextFont : style.textFont
         draw(row.text, in: textRect.offsetBy(dx: rect.minX, dy: rect.minY),
-             font: singleLine ? Self.fitted(textFont, to: row.text, width: textRect.width) : textFont,
+             font: textFont,
              color: textColor,
              paragraph: singleLine ? style.clipping : style.wrapping)
 

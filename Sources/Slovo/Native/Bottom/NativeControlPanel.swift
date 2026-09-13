@@ -287,11 +287,14 @@ final class NativeControlPanel: NSView {
         // Свої шаблони перечитуємо при кожному відкритті списку: Конструктор
         // пише їх файлами, і щойно збережений зобов'язаний бути тут.
         state.reloadPresets()
-        let mine = state.presets.presets
+        // На вкладці пісень вибір стосується шаблону пісень; на решті — спільного.
+        // І список — лише свого редактора: шаблони Біблії піснями не
+        // пропонуються, і навпаки (власник: «окремий редактор для Біблії й
+        // окремий для пісень»).
+        let songs = state.mode == .songs
+        let mine = state.presets.presets(forSongs: songs)
         guard !templates.isEmpty || !mine.isEmpty else { return }
 
-        // На вкладці пісень вибір стосується шаблону пісень; на решті — спільного.
-        let songs = state.mode == .songs
         let menu = NSMenu()
         menu.addItem(withTitle: songs ? OurWords.t("Шаблон для песен:") : state.text("Label3D10", default: "Шаблон:"),
                      action: nil, keyEquivalent: "")

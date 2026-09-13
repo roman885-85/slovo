@@ -31,6 +31,7 @@ extension Diagnostics {
         host.displayIfNeeded()
 
         checks.append(contentsOf: bottomLayout(row))
+        checks.append(contentsOf: bottomGrips(row))
         checks.append(contentsOf: bottomPreview(row, state, host))
         checks.append(contentsOf: bottomPlan(row, host))
         checks.append(contentsOf: bottomHistory(row))
@@ -98,9 +99,10 @@ extension Diagnostics {
         let roomy = widths(at: 1588 + live)
         let grown = abs(roomy.plan - NativeBottomMetrics.planMaxWidth) < 1
             && abs(roomy.history - NativeBottomMetrics.historyMaxWidth) < 1
+        let custom = NativeBottomMetrics.planWidthIsCustom || NativeBottomMetrics.historyWidthIsCustom
         checks.append(Check(area: "Нижній ряд", name: "У широкому вікні простір дістається спискам",
-                            status: grown ? .ok : .failed,
-                            detail: grown
+                            status: custom ? .skipped : grown ? .ok : .failed,
+                            detail: custom ? "ширину списків поставив оператор — вони не ростуть навмисно" : grown
                                 ? "План \(Int(roomy.plan)) та Історія \(Int(roomy.history)) "
                                     + "доросли до своїх меж (живий екран \(Int(live)))"
                                 : "списки лишилися \(Int(roomy.plan)) і \(Int(roomy.history)) — "
@@ -125,6 +127,72 @@ extension Diagnostics {
                             detail: floors.joined(separator: "; ") + " (не менше 150, 160 і 280)"))
         row.frame = wide
         row.layoutSubtreeIfNeeded()
+        return checks
+    }
+
+    // MARK: - Роздільники
+
+    /// Роздільники за Планом і за Історією: тягнуть, пам'ятають між
+    /// запусками, не з'їдають передпоказ, подвійним клацанням повертаються.
+    /// Власник: «хочу, щоб розміри плану, історії й передпоказу мінялися
+    /// перетягуванням».
+    private static func bottomGrips(_ row: NativeBottomRow) -> [Check] {
+        var checks: [Check] = []
+        let area = "Нижній ряд"
+        let defaults = UserDefaults.standard
+        let savedPlan = defaults.object(forKey: NativeBottomMetrics.planWidthKey)
+        let savedHistory = defaults.object(forKey: NativeBottomMetrics.historyWidthKey)
+        defer {
+            defaults.set(savedPlan, forKey: NativeBottomMetrics.planWidthKey)
+            defaults.set(savedHistory, forKey: NativeBottomMetrics.historyWidthKey)
+            row.needsLayout = true
+            row.layoutSubtreeIfNeeded()
+        }
+        NativeBottomMetrics.resetPlanWidth()
+        NativeBottomMetrics.resetHistoryWidth()
+        row.needsLayout = true
+        row.layoutSubtreeIfNeeded()
+        let planBefore = row.plan.frame.width
+        let historyBefore = row.history.frame.width
+        // Знімок ряду з роздільниками — щоб на око звірити, що крапки видно.
+        let picture = snapshot(row, to: "slovo-низ-роздільники.png") ? "; знімок ~/Library/Logs/slovo-низ-роздільники.png" : ""
+
+        // Як рукою: роздільник повідомляє зсув, ряд перекладається одразу.
+        row.planDivider.onDrag?(60)
+        let planAfter = row.plan.frame.width
+        let historyAfterPlan = row.history.frame.width
+        row.historyDivider.onDrag?(-40)
+        let historyAfter = row.history.frame.width
+        let remembered = NativeBottomMetrics.planWidthIsCustom && NativeBottomMetrics.historyWidthIsCustom
+        let inOrder = row.plan.frame.maxX <= row.planDivider.frame.minX + 0.5
+            && row.planDivider.frame.maxX <= row.history.frame.minX + 0.5
+            && row.history.frame.maxX <= row.historyDivider.frame.minX + 0.5
+            && row.historyDivider.frame.maxX <= row.preview.frame.minX + 0.5
+        let dragged = abs(planAfter - (planBefore + 60)) < 1 && abs(historyAfter - (historyAfterPlan - 40)) < 1
+        checks.append(Check(area: area, name: "План та Історію тягнуть роздільниками",
+                            status: dragged && remembered && inOrder ? .ok : .failed,
+                            detail: "План \(Int(planBefore)) → +60 → \(Int(planAfter)); "
+                                + "Історія \(Int(historyAfterPlan)) → −40 → \(Int(historyAfter)); "
+                                + (remembered ? "обидві ширини записано" : "ширини НЕ записано")
+                                + (inOrder ? "; роздільники стоять між панелями" : "; роздільники не на місці") + picture))
+
+        // Далі за найменший передпоказ список не пускають.
+        row.planDivider.onDrag?(5000)
+        let kept = row.lastPreviewWidth >= NativeBottomMetrics.previewMinWidth - 0.5
+        checks.append(Check(area: area, name: "Списки не з'їдають передпоказ",
+                            status: kept ? .ok : .failed,
+                            detail: "потягнули План на 5000: План \(Int(row.plan.frame.width)), "
+                                + "передпоказ \(Int(row.lastPreviewWidth)) (не менше \(Int(NativeBottomMetrics.previewMinWidth)))"))
+
+        // Подвійне клацання — усе як було.
+        row.planDivider.onReset?()
+        row.historyDivider.onReset?()
+        let back = abs(row.plan.frame.width - planBefore) < 1 && abs(row.history.frame.width - historyBefore) < 1
+            && !NativeBottomMetrics.planWidthIsCustom && !NativeBottomMetrics.historyWidthIsCustom
+        checks.append(Check(area: area, name: "Подвійне клацання по роздільнику повертає автоматичну ширину",
+                            status: back ? .ok : .failed,
+                            detail: "План \(Int(row.plan.frame.width)) (було \(Int(planBefore))), "
+                                + "Історія \(Int(row.history.frame.width)) (було \(Int(historyBefore)))"))
         return checks
     }
 

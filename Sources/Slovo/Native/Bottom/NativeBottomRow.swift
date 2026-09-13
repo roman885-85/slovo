@@ -29,7 +29,14 @@ final class NativeBottomRow: NSView {
     let focusBar = NativeFocusBar()
     private let mirrorWindowButton = NSButton(title: "⤢", target: nil, action: nil)
     /// Роздільник між передпоказом і живим екраном: за нього тягнуть ширину.
-    private let liveDivider = NativeLiveWidthGrip()
+    private let liveDivider = NativeWidthGrip()
+    /// Роздільники за Планом і за Історією: за них тягнуть ширину списків.
+    /// Відкриті для самоперевірки.
+    let planDivider = NativeWidthGrip()
+    let historyDivider = NativeWidthGrip()
+    /// Ширина панелі передпоказу після останньої розкладки: далі за неї
+    /// списки тягнути не дамо — передпоказ має свою найменшу ширину.
+    private(set) var lastPreviewWidth: CGFloat = 0
     private let liveCaption = NativeBottomCaption()
     /// Чи видно живий екран. Ширина нуль — його немає; тягнуть роздільником.
     var showsMirror: Bool { NativeBottomMetrics.liveWidth > 0 }
@@ -75,6 +82,26 @@ final class NativeBottomRow: NSView {
             self.layoutSubtreeIfNeeded()
         }
         addSubview(liveDivider)
+        // Списки: вправо — ширшає, але не далі, ніж дозволяє передпоказ.
+        // Рахуємо від видимої ширини, а не від збереженої: у вузькому вікні
+        // список стоїть вужчим за збережене, і стрибок від тягнення нікому
+        // не потрібен.
+        planDivider.onDrag = { [weak self] delta in
+            guard let self else { return }
+            let room = max(0, self.lastPreviewWidth - NativeBottomMetrics.previewMinWidth)
+            NativeBottomMetrics.planWidth = self.plan.frame.width + min(delta, room)
+            self.relayout()
+        }
+        planDivider.onReset = { [weak self] in NativeBottomMetrics.resetPlanWidth(); self?.relayout() }
+        historyDivider.onDrag = { [weak self] delta in
+            guard let self else { return }
+            let room = max(0, self.lastPreviewWidth - NativeBottomMetrics.previewMinWidth)
+            NativeBottomMetrics.historyWidth = self.history.frame.width + min(delta, room)
+            self.relayout()
+        }
+        historyDivider.onReset = { [weak self] in NativeBottomMetrics.resetHistoryWidth(); self?.relayout() }
+        addSubview(planDivider)
+        addSubview(historyDivider)
         mirrorWindowButton.controlSize = .mini
         mirrorWindowButton.font = .systemFont(ofSize: 11)
         mirrorWindowButton.isBordered = false
@@ -137,13 +164,17 @@ final class NativeBottomRow: NSView {
 
         var planWidth = NativeBottomMetrics.planWidth
         var historyWidth = NativeBottomMetrics.historyWidth
+        let planFixed = NativeBottomMetrics.planWidthIsCustom
+        let historyFixed = NativeBottomMetrics.historyWidthIsCustom
         let controlWidth = NativeBottomMetrics.controlWidth
         // Живий екран стоїть поруч із передпоказом і має свою ширину: її
         // тягне оператор роздільником між ними. Нуль — екрана немає.
         var liveWidth = NativeBottomMetrics.liveWidth
         var dividerWidth = liveWidth > 0 ? NativeBottomMetrics.dividerWidth : 0
+        // За Планом і за Історією — роздільники замість просвітів.
+        let listDividers = NativeBottomMetrics.dividerWidth * 2
         var previewWidth = bounds.width - planWidth - historyWidth - controlWidth
-            - liveWidth - dividerWidth - gap * 3
+            - liveWidth - dividerWidth - listDividers - gap
 
         // Вікну тісно: спершу стискаються списки, і лише до своїх меж.
         // Передпоказ віддає місце передостаннім, живий екран — останнім: по
@@ -171,24 +202,38 @@ final class NativeBottomRow: NSView {
             //
             // Першою добирає Історія: у ній рядки найдовші у вікні
             // («1-я Паралипоменон 7:18- 18 …»), і обривається вона першою.
+            //
+            // Список, який оператор поставив сам, не росте: його ширина —
+            // його вибір, а зайве лишається передпоказу.
             var spare = previewWidth - NativeBottomMetrics.previewMinWidth
-            let toHistory = min(spare, NativeBottomMetrics.historyMaxWidth - historyWidth)
-            historyWidth += toHistory
-            spare -= toHistory
-            planWidth += min(spare, NativeBottomMetrics.planMaxWidth - planWidth)
+            if !historyFixed {
+                let toHistory = min(spare, max(0, NativeBottomMetrics.historyMaxWidth - historyWidth))
+                historyWidth += toHistory
+                spare -= toHistory
+            }
+            if !planFixed {
+                planWidth += min(spare, max(0, NativeBottomMetrics.planMaxWidth - planWidth))
+            }
         }
         previewWidth = max(0, bounds.width - planWidth - historyWidth - controlWidth
-                           - liveWidth - dividerWidth - gap * 3)
+                           - liveWidth - dividerWidth - listDividers - gap)
+        lastPreviewWidth = previewWidth
 
         var x: CGFloat = 0
-        func place(_ caption: NSView, _ content: NSView, width: CGFloat) {
+        func place(_ caption: NSView, _ content: NSView, width: CGFloat, trailing: CGFloat = gap) {
             caption.frame = NSRect(x: x + 6, y: top, width: max(0, width - 6), height: captionHeight)
             content.frame = NSRect(x: x, y: contentY, width: width, height: contentHeight)
-            x += width + gap
+            x += width + trailing
+        }
+        func grip(_ divider: NativeWidthGrip) {
+            divider.frame = NSRect(x: x, y: contentY, width: NativeBottomMetrics.dividerWidth, height: contentHeight)
+            x += NativeBottomMetrics.dividerWidth
         }
 
-        place(planCaption, plan, width: planWidth)
-        place(historyCaption, history, width: historyWidth)
+        place(planCaption, plan, width: planWidth, trailing: 0)
+        grip(planDivider)
+        place(historyCaption, history, width: historyWidth, trailing: 0)
+        grip(historyDivider)
 
         // Слайд тримає сторони 4:3 і притиснутий вліво — так само, як у колишньому вікні.
         previewCaption.frame = NSRect(x: x + 6, y: top, width: max(0, previewWidth - 6),
@@ -235,6 +280,12 @@ final class NativeBottomRow: NSView {
         }
 
         place(controlCaption, control, width: controlWidth)
+    }
+
+    /// Перекласти ряд одразу, під рукою, що тягне роздільник.
+    private func relayout() {
+        needsLayout = true
+        layoutSubtreeIfNeeded()
     }
 
     // MARK: - Оновлення
@@ -359,47 +410,4 @@ final class NativeBottomRow: NSView {
         }
         return false
     }
-}
-
-/// Роздільник між передпоказом і живим екраном: за нього тягнуть ширину.
-///
-/// Власник просив «его можно растягивать по горизонтали и вертикали для
-/// большего удобства работы с указкой»: по горизонталі — цим роздільником,
-/// по вертикалі — смужкою над усім нижнім рядом.
-@MainActor
-final class NativeLiveWidthGrip: NSView {
-
-    /// Скільки пунктів проїхала миша вправо від минулого разу.
-    var onDrag: ((CGFloat) -> Void)?
-    private var last: CGFloat?
-
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .resizeLeftRight)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        // Три крапки посередині: інакше смужку в один піксель не видно і
-        // ніхто не здогадається, що її можна тягнути.
-        NSColor.separatorColor.setFill()
-        let dot: CGFloat = 2
-        var y = bounds.midY - dot * 4
-        for _ in 0..<3 {
-            NSBezierPath(ovalIn: NSRect(x: bounds.midX - dot / 2, y: y, width: dot, height: dot)).fill()
-            y += dot * 3
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        last = convert(event.locationInWindow, from: nil).x
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        let now = convert(event.locationInWindow, from: nil).x
-        guard let was = last else { last = now; return }
-        let delta = now - was
-        guard abs(delta) >= 1 else { return }
-        onDrag?(delta)
-    }
-
-    override func mouseUp(with event: NSEvent) { last = nil }
 }

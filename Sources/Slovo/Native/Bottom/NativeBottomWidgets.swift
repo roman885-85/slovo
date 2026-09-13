@@ -58,11 +58,32 @@ enum NativeBottomMetrics {
     // впирається у висоту ряду, зайва ширина йому все одно не потрібна, а списку
     // понад 280 точок — і поготів.
     static let planMinWidth: CGFloat = 150
-    static let planWidth: CGFloat = 190
+    static let planAutoWidth: CGFloat = 190
     static let planMaxWidth: CGFloat = 240
     static let historyMinWidth: CGFloat = 160
-    static let historyWidth: CGFloat = 210
+    static let historyAutoWidth: CGFloat = 210
     static let historyMaxWidth: CGFloat = 280
+    /// Ширини Плану та Історії. Власник: «хочу, щоб розміри плану, історії
+    /// й передпоказу мінялися перетягуванням». Поки їх не тягнули, ширина
+    /// йде за вікном між найменшою і найбільшою; потягнули — стоїть як
+    /// поставлено (до `planDragMaxWidth`) і пам'ятається між запусками.
+    /// Подвійне клацання по роздільнику повертає автоматичну.
+    static var planWidth: CGFloat {
+        get { NativeWidths.value(planWidthKey, auto: planAutoWidth, min: planMinWidth, max: planDragMaxWidth) }
+        set { NativeWidths.set(planWidthKey, newValue, min: planMinWidth, max: planDragMaxWidth) }
+    }
+    static var historyWidth: CGFloat {
+        get { NativeWidths.value(historyWidthKey, auto: historyAutoWidth, min: historyMinWidth, max: historyDragMaxWidth) }
+        set { NativeWidths.set(historyWidthKey, newValue, min: historyMinWidth, max: historyDragMaxWidth) }
+    }
+    static var planWidthIsCustom: Bool { NativeWidths.isCustom(planWidthKey) }
+    static var historyWidthIsCustom: Bool { NativeWidths.isCustom(historyWidthKey) }
+    static func resetPlanWidth() { NativeWidths.reset(planWidthKey) }
+    static func resetHistoryWidth() { NativeWidths.reset(historyWidthKey) }
+    static let planWidthKey = "bottomPlanWidth"
+    static let historyWidthKey = "bottomHistoryWidth"
+    static let planDragMaxWidth: CGFloat = 700
+    static let historyDragMaxWidth: CGFloat = 800
     static let previewMinWidth: CGFloat = 280
     static let controlWidth: CGFloat = 340
 }

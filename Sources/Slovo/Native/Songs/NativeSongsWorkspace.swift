@@ -691,9 +691,16 @@ final class NativeSongsWorkspace {
         })
         tokens.append(Signals.shared.subscribe(.songSelection) { [weak self] in
             guard let self else { return }
-            self.adoptSongFromState()
+            let fromState = self.adoptSongFromState()
             self.applySongSelection(scroll: true)
             self.reloadParts()
+            // Пісня прийшла з Плану чи «Історії» — разом із частиною: список
+            // частин уже від нової пісні, і виділити треба саме її частину.
+            if fromState, let number = self.state?.songPartIndex {
+                self.lastStatePart = number
+                self.applyPart(number: number)
+                self.applyPartSelection()
+            }
         })
         tokens.append(Signals.shared.subscribe(.songPart) { [weak self] in
             guard let self else { return }
@@ -840,13 +847,30 @@ final class NativeSongsWorkspace {
 
     /// Выбор песни могли сменить со стороны: пункт Плана и запись «Истории»
     /// пишут номер прямо в `AppState`.
-    private func adoptSongFromState() {
-        guard let wanted = state?.songIndex, wanted != lastStateSong else { return }
+    /// Повертає `true`, коли пісню взято з `AppState` (План, «Історія»).
+    @discardableResult
+    private func adoptSongFromState() -> Bool {
+        guard let wanted = state?.songIndex, wanted != lastStateSong else { return false }
         lastStateSong = wanted
         guard wanted != model.songIndex,
-              model.editor?.book.songs.indices.contains(wanted) == true else { return }
+              model.editor?.book.songs.indices.contains(wanted) == true else { return false }
         model.songIndex = wanted
         model.partIndex = nil
+        // Пісня з Плану може бути не з відкритої групи чи не за швидким
+        // вибором — сито знімаємо, як для знайденої пошуком (`reveal`):
+        // показати її треба все одно.
+        if songRows.position(ofSong: wanted) == nil {
+            if model.groupIndex != nil {
+                model.groupIndex = nil
+                groupList.setSelection(IndexSet(integer: 0))
+            }
+            if !model.songQuery.isEmpty {
+                model.songQuery = ""
+                songQuick.field.text = ""
+            }
+            applyFilter(reload: true)
+        }
+        return true
     }
 
     /// То же для части: её листают стрелки, и они меняют только `AppState`.

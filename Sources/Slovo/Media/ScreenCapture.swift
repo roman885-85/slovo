@@ -106,7 +106,7 @@ final class ScreenCaptureModel: NSObject, ObservableObject {
         super.init()
         // Наближення змінилося — перемальовуємо останній кадр, не чекаючи
         // руху на чужому екрані.
-        focusWatch = NotificationCenter.default.addObserver(forName: SlideFocus.changed, object: nil,
+        focusWatch = NotificationCenter.default.addObserver(forName: SlideFocus.shownChanged, object: nil,
                                                             queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.redraw() }
         }
@@ -117,7 +117,7 @@ final class ScreenCaptureModel: NSObject, ObservableObject {
     /// Віддати останній кадр заново — з новим наближенням.
     private func redraw() {
         guard isRunning, let raw = lastRaw else { return }
-        guard let shown = zoomed(raw, crop: SlideFocus.shared.rect) else { return }
+        guard let shown = zoomed(raw, crop: SlideFocus.shared.shownRect) else { return }
         frameCount &+= 1
         onFrame?(shown)
     }
@@ -294,7 +294,7 @@ final class ScreenCaptureModel: NSObject, ObservableObject {
     private func accept(_ buffer: CVPixelBuffer) {
         frameCount &+= 1
         lastRaw = buffer
-        let crop = SlideFocus.shared.rect
+        let crop = SlideFocus.shared.shownRect
         guard let shown = zoomed(buffer, crop: crop) else { return }
         onFrame?(shown)
     }

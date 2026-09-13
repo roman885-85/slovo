@@ -29,7 +29,133 @@ extension Diagnostics {
         checks.append(shadowAngleCheck(area: area))
         checks.append(returnKeyCheck(area: area))
         checks.append(songTemplateCheck(area: area, state: state))
+        checks.append(constructorScopesCheck(area: area, state: state))
         return checks
+    }
+
+    /// Два редактори в Конструкторі: у редакторі пісень — лише шаблони
+    /// пісень, у редакторі Біблії — лише Біблії; новий шаблон у редакторі
+    /// пісень несе прапорець пісень і назву пісні замість адреси; прапорець
+    /// переживає запис у файл, а старий файл без нього читається як Біблія.
+    /// Власник: «потрібен окремий редактор для Біблії й окремий для пісень
+    /// — інакше губиться весь сенс двох розділів».
+    private static func constructorScopesCheck(area: String, state: AppState) -> Check {
+        let name = "Конструктор: редактори Біблії та пісень не діляться шаблонами"
+        let defaults = UserDefaults.standard
+        let wasScope = defaults.object(forKey: "constructorForSongs")
+        defer {
+            defaults.set(wasScope, forKey: "constructorForSongs")
+            state.previewPreset(nil)
+        }
+        // Відкриваємо на Біблії: там шаблони є, і редактор не «брудний».
+        // Вкладка програми — пісні: редактор Біблії все одно має показувати
+        // вірш, а не куплет із «Приспівом» (скрин власника).
+        let wasMode = state.mode
+        defer { state.mode = wasMode }
+        state.mode = .songs
+        defaults.set(false, forKey: "constructorForSongs")
+        let constructor = NativeSlideConstructor(state: state, onClose: {})
+        // У вікні, хоч і не показаному: поза вікном шари полотна й список
+        // об'єктів у знімок не потрапляють.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 720),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = constructor
+        constructor.layoutSubtreeIfNeeded()
+        defer { window.contentView = nil }
+        let model = constructor.modelForCheck
+        let bibles = model.library.presets(forSongs: false).count
+        let songs = model.library.presets(forSongs: true).count
+        let schemes = model.schemes?.templates.count ?? 0
+        var faults: [String] = []
+
+        let onBible = constructor.scopeForCheck
+        if onBible.forSongs { faults.append("відкрився на піснях, а просили Біблію") }
+        if onBible.listed.count != bibles + schemes {
+            faults.append("у редакторі Біблії \(onBible.listed.count) пунктів, а шаблонів Біблії \(bibles) + авторських \(schemes)")
+        }
+        if model.preset.forSongs { faults.append("у редакторі Біблії відкрито шаблон пісень «\(model.preset.name)»") }
+        let bibleSample = constructor.sampleForCheck
+        let songNow = state.slide
+        if state.mode == .songs, !songNow.mainText.isEmpty, bibleSample.mainText == songNow.mainText {
+            faults.append("на полотні редактора Біблії — куплет пісні з вкладки")
+        }
+        if bibleSample.reference.isEmpty
+            || (state.mode == .songs && !songNow.reference.isEmpty && bibleSample.reference == songNow.reference) {
+            faults.append("адреса на полотні редактора Біблії — «\(bibleSample.reference)» (підпис частини пісні)")
+        }
+        constructor.layoutSubtreeIfNeeded()
+        constructor.displayIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.8))
+        constructor.displayIfNeeded()
+        let biblePicture = snapshot(constructor, to: "slovo-конструктор-біблія.png")
+            ? "; знімок Біблії ~/Library/Logs/slovo-конструктор-біблія.png" : ""
+
+        guard !model.asksToSave(before: .switchPreset) else {
+            return Check(area: area, name: name, status: .skipped,
+                         detail: "редактор Біблії відкрився з незбереженими правками — перемикати не можна без вікна")
+        }
+        constructor.chooseScopeForCheck(forSongs: true)
+        let onSongs = constructor.scopeForCheck
+        if !onSongs.forSongs { faults.append("не перемкнувся на пісні") }
+        // Коли шаблонів пісень нема, редактор відкриває новий — він стоїть
+        // у списку першим як «не збережено».
+        let fresh = songs == 0
+        if onSongs.listed.count != songs + schemes + (fresh ? 1 : 0) {
+            faults.append("у редакторі пісень \(onSongs.listed.count) пунктів, а шаблонів пісень \(songs) + авторських \(schemes)"
+                          + (fresh ? " + новий" : ""))
+        }
+        if !model.preset.forSongs { faults.append("у редакторі пісень відкрито шаблон Біблії «\(model.preset.name)»") }
+        // Розкладка пісні: куплет і підпис частини (об'єкт адреси показує
+        // «Куплет»/«Приспів»); другого перекладу нема; назви пісні в
+        // розкладці за умовчанням нема — її додають окремо.
+        if fresh, !model.preset.objects.contains(where: { $0.kind == .reference }) {
+            faults.append("новий шаблон пісень без підпису частини (об'єкта адреси)")
+        }
+        if fresh, model.preset.objects.contains(where: { $0.kind == .secondaryQuote || $0.kind == .songTitle }) {
+            faults.append("новий шаблон пісень з другим перекладом чи назвою пісні замість частини")
+        }
+        let songSample = constructor.sampleForCheck
+        if songSample.reference.isEmpty || songSample.reference == songSample.songTitle {
+            faults.append("підпис частини в редакторі пісень — «\(songSample.reference)» (назва пісні замість куплета)")
+        }
+        if songSample.mainText.isEmpty || songSample.mainText == bibleSample.mainText {
+            faults.append("на полотні редактора пісень не куплет, а вірш")
+        }
+
+        // Прапорець у файлі й назад; файл без прапорця — Біблії.
+        if let data = try? JSONEncoder().encode(model.preset),
+           let back = try? JSONDecoder().decode(SlidePreset.self, from: data) {
+            if !back.forSongs { faults.append("прапорець пісень не пережив запис у JSON") }
+        } else {
+            faults.append("шаблон не записався в JSON")
+        }
+        if var raw = try? JSONSerialization.jsonObject(with: (try? JSONEncoder().encode(model.preset)) ?? Data()) as? [String: Any] {
+            raw["forSongs"] = nil
+            if let data = try? JSONSerialization.data(withJSONObject: raw),
+               let old = try? JSONDecoder().decode(SlidePreset.self, from: data) {
+                if old.forSongs { faults.append("файл без прапорця прочитано як пісенний") }
+            } else {
+                faults.append("файл без прапорця не прочитався")
+            }
+        }
+
+        // Знімок редактора пісень — звірити на око куплет і назву на полотні.
+        // Полотно малює слайд у черзі (`SlideRenderQueue`) і показує готову
+        // картинку наступним кадром — даємо черзі час, інакше на знімку
+        // чорне полотно з однією рамкою.
+        constructor.layoutSubtreeIfNeeded()
+        constructor.displayIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.8))
+        constructor.displayIfNeeded()
+        let picture = snapshot(constructor, to: "slovo-конструктор-пісні.png")
+            ? "; знімок ~/Library/Logs/slovo-конструктор-пісні.png" : ""
+        let detail = "Біблія: \(onBible.listed.count) пунктів (\(bibles) своїх + \(schemes) авторських); "
+            + "пісні: \(onSongs.listed.count) пунктів (\(songs) своїх + \(schemes) авторських)"
+            + (fresh ? "; шаблонів пісень нема — редактор відкрив новий «\(model.preset.name)» з куплетом і підписом частини" : "")
+            + "; Біблія показує «\(bibleSample.reference)», пісні — «\(songSample.reference)»"
+            + biblePicture + picture
+        return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty ? detail : faults.joined(separator: "; ") + ". " + detail)
     }
 
     /// Шаблон пісень окремий від шаблону Біблії.

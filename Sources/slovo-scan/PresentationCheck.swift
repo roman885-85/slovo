@@ -52,6 +52,7 @@ func runPresentationCheck(args: [String]) -> Int32 {
         case .none: background = "нет"
         case .solid: background = "цвет"
         case .picture(let part): background = "картинка \((part as NSString).lastPathComponent)"
+        case .texture(let part, _, _): background = "текстура теми \((part as NSString).lastPathComponent)"
         }
         print("  \(index + 1): фигур \(slide.shapes.count), картинок \(pictures.count), "
               + "фон \(background); текст: "

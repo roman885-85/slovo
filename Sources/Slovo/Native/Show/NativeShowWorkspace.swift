@@ -34,6 +34,13 @@ final class NativeShowWorkspace: NSView, NativeListSource {
     private let preview = NSImageView()
     private let caption = NSTextField(labelWithString: "")
     private let toolbar = NSStackView()
+    /// Роздільники: за файлами (презентації) чи списком (зображення) і за
+    /// сторінками. Ширини тягнуться мишею й пам'ятаються; подвійне
+    /// клацання повертає автоматичну.
+    private let firstGrip = NativeWidthGrip()
+    private let secondGrip = NativeWidthGrip()
+    private var firstKey: String { model.kind == .presentation ? "presentationFilesWidth" : "picturesListWidth" }
+    private let secondKey = "presentationPagesWidth"
     private var showButton: NSButton!
     private var hideButton: NSButton!
 
@@ -254,6 +261,31 @@ final class NativeShowWorkspace: NSView, NativeListSource {
         addSubview(preview)
         addSubview(caption)
         addSubview(toolbar)
+        addSubview(firstGrip)
+        addSubview(secondGrip)
+        firstGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            let column = self.model.kind == .presentation ? self.files : self.list
+            NativeWidths.set(self.firstKey, column.frame.width + delta, min: 120, max: self.bounds.width * 0.5)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        firstGrip.onReset = { [weak self] in
+            guard let self else { return }
+            NativeWidths.reset(self.firstKey)
+            self.needsLayout = true
+        }
+        secondGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(self.secondKey, self.list.frame.width + delta, min: 120, max: self.bounds.width * 0.5)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        secondGrip.onReset = { [weak self] in
+            guard let self else { return }
+            NativeWidths.reset(self.secondKey)
+            self.needsLayout = true
+        }
         buildToolbar()
     }
 
@@ -385,15 +417,23 @@ final class NativeShowWorkspace: NSView, NativeListSource {
         // У картинок файл и есть страница — колонка одна.
         let twoColumns = model.kind == .presentation
         files.isHidden = !twoColumns
+        secondGrip.isHidden = !twoColumns
+        let grip = NativeWidths.grip
         var right: CGFloat
         if twoColumns {
-            let column = max(150, min(260, bounds.width * 0.2))
-            files.frame = NSRect(x: gap, y: top, width: column, height: height)
-            list.frame = NSRect(x: gap * 2 + column, y: top, width: column, height: height)
-            right = column * 2 + gap * 3
+            let auto = max(150, min(260, bounds.width * 0.2))
+            let filesWidth = NativeWidths.value(firstKey, auto: auto, min: 120, max: bounds.width * 0.5)
+            let pagesWidth = NativeWidths.value(secondKey, auto: auto, min: 120, max: bounds.width * 0.5)
+            files.frame = NSRect(x: gap, y: top, width: filesWidth, height: height)
+            firstGrip.frame = NSRect(x: files.frame.maxX, y: top, width: grip, height: height)
+            list.frame = NSRect(x: firstGrip.frame.maxX, y: top, width: pagesWidth, height: height)
+            secondGrip.frame = NSRect(x: list.frame.maxX, y: top, width: grip, height: height)
+            right = secondGrip.frame.maxX + gap
         } else {
-            list.frame = NSRect(x: gap, y: top, width: listWidth, height: height)
-            right = listWidth + gap * 2
+            let width = NativeWidths.value(firstKey, auto: listWidth, min: 120, max: bounds.width * 0.5)
+            list.frame = NSRect(x: gap, y: top, width: width, height: height)
+            firstGrip.frame = NSRect(x: list.frame.maxX, y: top, width: grip, height: height)
+            right = firstGrip.frame.maxX + gap
         }
         let captionHeight: CGFloat = 16
         preview.frame = NSRect(x: right, y: top,

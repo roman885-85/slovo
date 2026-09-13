@@ -1331,8 +1331,11 @@ final class AppState: ObservableObject {
         // Наближення до точки фокуса: різати картинку вміє сам плеєр, а що
         // саме вирізати — вирішує `SlideFocus`. Змінилося наближення —
         // перемальовуємо показане, не чіпаючи вихідної сторінки.
-        media.focusCrop = { image in SlideFocus.crop(image, rect: SlideFocus.shared.rect) }
+        // Ріжемо по показаному вікну: воно їде до цілі плавно, і сторінка
+        // в залі пливе разом із ним, а не стрибає.
+        media.focusCrop = { image in SlideFocus.crop(image, rect: SlideFocus.shared.shownRect) }
         SlideFocus.shared.onChange = { [weak self] in self?.applyFocus() }
+        SlideFocus.shared.onShownChange = { [weak self] in self?.media.refreshStill() }
         media.onScreenChanged = { [weak self] in
             guard let self else { return }
             // Экран один: пока на нём кадр плеера или картинка, текста в зале
@@ -2229,6 +2232,8 @@ final class AppState: ObservableObject {
     /// изменение состояния. Пока сборка спрашивала `selectedSong`, программа
     /// вставала колом ровно во время пения.
     private var shownSong: (song: Song, part: SongPart)?
+    /// Пісня на слайді — самоперевірці.
+    var shownSongForCheck: Song? { shownSong?.song }
 
     var selectedSong: Song? {
         guard let index = songIndex, songMatches.indices.contains(index) else { return nil }

@@ -57,7 +57,7 @@ public enum PPTXRenderer {
             }
             draw(shape: shape, in: rect, document: document, context: context, size: size)
             draw(paragraphs: shape.paragraphs, in: rect, context: context, size: size,
-                 anchor: shape.anchor, fontScale: shape.fontScale, shadow: shape.textShadow)
+                 anchor: shape.anchor, fontScale: shape.fontScale, autofit: shape.autofit, shadow: shape.textShadow)
             context.restoreGState()
         }
         return context.makeImage()
@@ -127,8 +127,56 @@ public enum PPTXRenderer {
         case .picture(let part):
             draw(picture: part, crop: PPTXDocument.Crop(left: 0, top: 0, right: 0, bottom: 0),
                  in: rect, document: document, context: context)
+        case .texture(let part, let tileScale, let duotone):
+            draw(texture: part, tileScale: tileScale, duotone: duotone,
+                 in: rect, document: document, context: context)
         }
     }
+
+    /// Текстура фону теми: з дуотоном у колір фону, замощена чи розтягнута.
+    ///
+    /// Дуотон — через CoreImage (`CIFalseColor`): яскравість пікселя → колір
+    /// між темним і світлим. Розмір плитки PowerPoint рахує від розміру
+    /// картинки в дюймах (72 dpi) помножено на масштаб плитки; слайд —
+    /// 10 дюймів завширшки, тож текстура 1440 точок при 60 % — це 12 дюймів,
+    /// трохи ширша за слайд.
+    private static func draw(texture part: String, tileScale: Double?, duotone: PPTXDocument.Duotone?,
+                             in rect: CGRect, document: PPTXDocument, context: CGContext) {
+        guard var image = document.image(part: part) else { return }
+        if let duotone {
+            let filter = CIFilter(name: "CIFalseColor")
+            filter?.setValue(CIImage(cgImage: image), forKey: kCIInputImageKey)
+            filter?.setValue(CIColor(cgColor: duotone.dark), forKey: "inputColor0")
+            filter?.setValue(CIColor(cgColor: duotone.light), forKey: "inputColor1")
+            if let output = filter?.outputImage,
+               let toned = duotoneContext.createCGImage(output, from: CGRect(x: 0, y: 0, width: image.width, height: image.height)) {
+                image = toned
+            }
+        }
+        context.saveGState()
+        context.clip(to: rect)
+        // Полотно перевернуте (початок згори); картинку кладемо як є, без
+        // дзеркала — вона текстура, і низ від верху в ній не відрізнити.
+        if let tileScale {
+            let slideInches = 10.0
+            let tileWidth = Double(image.width) / 72 * tileScale / slideInches * rect.width
+            let tileHeight = tileWidth * Double(image.height) / Double(image.width)
+            var y = rect.minY
+            while y < rect.maxY {
+                var x = rect.minX
+                while x < rect.maxX {
+                    context.draw(image, in: CGRect(x: x, y: y, width: tileWidth, height: tileHeight))
+                    x += tileWidth
+                }
+                y += tileHeight
+            }
+        } else {
+            context.draw(image, in: rect)
+        }
+        context.restoreGState()
+    }
+
+    private static let duotoneContext = CIContext(options: nil)
 
     /// Картинка в рамку, з обрізкою, якщо її задано.
     ///
@@ -163,7 +211,8 @@ public enum PPTXRenderer {
 
     private static func draw(paragraphs: [PPTXDocument.Paragraph], in rect: CGRect,
                              context: CGContext, size: CGSize,
-                             anchor: String, fontScale: Double, shadow: PPTXDocument.Shadow? = nil) {
+                             anchor: String, fontScale: Double, autofit: String = "none",
+                             shadow: PPTXDocument.Shadow? = nil) {
         guard !paragraphs.isEmpty else { return }
         let text = attributed(paragraphs, canvasHeight: size.height, scale: fontScale)
         guard text.length > 0 else { return }
@@ -174,9 +223,12 @@ public enum PPTXRenderer {
         let padded = rect.insetBy(dx: size.width * 0.006, dy: size.height * 0.006)
         guard padded.width > 1, padded.height > 1 else { return }
 
-        // Текст у рамку не вміщається — стискаємо, як це робить і слайд
-        // Писання: обрізати проповідь на середині слова не можна. Починаємо з
-        // того, у скільки стиснув його сам PowerPoint.
+        // Текст у рамку не вміщається — стискаємо лише тоді, коли так робить
+        // сам PowerPoint (`normAutofit`), і починаємо з його числа. При
+        // `noAutofit` і `spAutoFit` PowerPoint не стискає: текст виходить за
+        // рамку, і слайд саме такий люди й бачили. Доти ми стискали завжди,
+        // і текст виходив дрібнішим, а рядки переносилися інакше.
+        let shrinks = autofit == "normal"
         var scale = fontScale
         var line = CTFramesetterCreateWithAttributedString(text)
         var needed = CTFramesetterSuggestFrameSizeWithConstraints(
@@ -184,7 +236,7 @@ public enum PPTXRenderer {
             CGSize(width: padded.width, height: .greatestFiniteMagnitude), nil)
         var shrunk = text
         var guard_ = 0
-        while needed.height > padded.height, scale > 0.3, guard_ < 12 {
+        while shrinks, needed.height > padded.height, scale > 0.3, guard_ < 12 {
             scale -= 0.08
             guard_ += 1
             shrunk = attributed(paragraphs, canvasHeight: size.height, scale: scale)
@@ -196,7 +248,7 @@ public enum PPTXRenderer {
 
         // Куди притиснуто текст. У PowerPoint за умовчанням — верх; притискати все
         // до середини означало б рухати заголовки вниз на кожному слайді.
-        let visible = min(needed.height, padded.height)
+        let visible = shrinks ? min(needed.height, padded.height) : needed.height
         let top: Double
         switch anchor {
         case "center": top = padded.midY - visible / 2
@@ -239,17 +291,36 @@ public enum PPTXRenderer {
             default:        style.alignment = .left
             }
             style.lineBreakMode = .byWordWrapping
-            style.firstLineHeadIndent = paragraph.indent * canvasHeight
-            style.headIndent = style.firstLineHeadIndent
+            // Відступи з `marL`/`indent`; коли їх нема — за рівнем списку.
+            var head = paragraph.marginLeft * pointsPerCanvas
+            var first = (paragraph.marginLeft + paragraph.firstIndent) * pointsPerCanvas
+            if paragraph.marginLeft == 0, paragraph.firstIndent == 0 {
+                head = paragraph.indent * canvasHeight
+                first = head
+                // Маркер без відступів: висячий на чверть дюйма, як у PowerPoint.
+                if paragraph.bullet != nil { head += 18 * pointsPerCanvas }
+            }
+            style.headIndent = head
+            style.firstLineHeadIndent = first
             // Табуляція в PowerPoint — дюйм (`defTabSz` 914400 EMU); CoreText за
             // умовчанням ставить її куди дрібніше, і адреса, яку автор відсунув
             // табуляціями до правого краю, у нас стояла посеред рядка.
             style.tabStops = []
             style.defaultTabInterval = 72 * pointsPerCanvas
 
-            if let bullet = paragraph.bullet, !paragraph.runs.isEmpty {
-                result.append(NSAttributedString(string: bullet + " ",
-                                                 attributes: [.paragraphStyle: style]))
+            if let bullet = paragraph.bullet, let lead = paragraph.runs.first(where: { !$0.text.isEmpty }) {
+                // Маркер: кегль і колір тексту (чи свої), шрифт свій — Wingdings
+                // «ü» це галочка, і малювати її треба саме нею, а не системним
+                // шрифтом у 12 пунктів, як виходило доти (крапка замість галочки).
+                let points = lead.size * pointsPerCanvas * scale * (paragraph.bulletSize ?? 1)
+                let mark = bulletText(bullet, font: paragraph.bulletFont)
+                let font = font(named: mark.font ?? lead.fontName, size: max(4, points), traits: [])
+                // Після маркера — табуляція до лівого відступу тексту.
+                style.tabStops = [NSTextTab(textAlignment: .left, location: head, options: [:])]
+                result.append(NSAttributedString(string: mark.text + "\t",
+                                                 attributes: [.font: font,
+                                                              .foregroundColor: paragraph.bulletColor ?? lead.color,
+                                                              .paragraphStyle: style]))
             }
             for run in paragraph.runs {
                 let points = run.size * pointsPerCanvas * scale
@@ -267,6 +338,26 @@ public enum PPTXRenderer {
             }
         }
         return result
+    }
+
+    /// Знак маркера для малювання. Символьні шрифти (Wingdings, Symbol,
+    /// Webdings) у системі бувають не ті чи не ті кодові точки, тож найчастіші
+    /// знаки переводимо в Unicode і малюємо шрифтом тексту.
+    private static func bulletText(_ char: String, font: String?) -> (text: String, font: String?) {
+        let face = (font ?? "").lowercased()
+        guard face.hasPrefix("wingdings") || face == "symbol" || face.hasPrefix("webdings") else {
+            return (char, font)
+        }
+        let wingdings: [String: String] = [
+            "ü": "✓", "þ": "☑", "ý": "✗", "l": "●", "n": "■", "u": "◆", "w": "◆", "q": "❑",
+            "v": "❖", "Ø": "➢", "§": "▪", "ð": "☞", "J": "☺", "o": "○", "p": "□", "r": "❍",
+            "s": "▲", "t": "▼", "à": "→", "è": "⇒", "ä": "★", "«": "◉", "¨": "▫", "·": "•",
+            "-": "–", "•": "•", "Ú": "✧", "¤": "✦",
+        ]
+        if face == "symbol" {
+            return ([ "·": "•", "-": "–", "¾": "—", "Ø": "➢", "Þ": "✓" ][char] ?? "•", nil)
+        }
+        return (wingdings[char] ?? "•", nil)
     }
 
     private static func font(named name: String?, size: Double, traits: CTFontSymbolicTraits) -> CTFont {

@@ -100,6 +100,14 @@ public final class RemoteActivity extends Activity {
     private Bitmap pageBitmap;
     /// Що зараз стоїть у картинці: щоб не різати те саме вдруге.
     private String shownCrop = "";
+
+    /// Показане вікно наближення {ліво, верх, сторона}: їде до цілі плавно
+    /// за 280 мс, а не стрибає. Власник: «переход в исходное состояние не
+    /// резко, а плавно… подтягивание слайда — пусть это будет тоже плавно».
+    /// Під щипком і з новою картинкою — одразу.
+    private double[] shownWindow = {0, 0, 1};
+    private android.animation.ValueAnimator windowRide;
+    private int shownBitmapId;
     private final ExecutorService images = Executors.newSingleThreadExecutor();
     private final ExecutorService pointerQueue = Executors.newSingleThreadExecutor();
     private volatile boolean pointerBusy;
@@ -525,6 +533,8 @@ public final class RemoteActivity extends Activity {
             shownPage = -1;
             pageBitmap = null;
             shownCrop = "";
+            if (windowRide != null) { windowRide.cancel(); windowRide = null; }
+            shownWindow = new double[] {0, 0, 1};
             pageImage.setImageBitmap(null);
             updateImageRect();
             return;
@@ -564,25 +574,58 @@ public final class RemoteActivity extends Activity {
     private void showPage() {
         Bitmap full = pageBitmap;
         if (full == null) return;
-        boolean on = state.zoomOn && state.zoom > 1.001;
-        String signature = on
-            ? state.zoom + ":" + state.zoomX + ":" + state.zoomY + ":" + System.identityHashCode(full)
-            : "ціла:" + System.identityHashCode(full);
+        double[] target = zoomWindow();
+        boolean fresh = System.identityHashCode(full) != shownBitmapId;
+        shownBitmapId = System.identityHashCode(full);
+        boolean same = Math.abs(target[0] - shownWindow[0]) + Math.abs(target[1] - shownWindow[1])
+            + Math.abs(target[2] - shownWindow[2]) < 1e-4;
+        if (windowRide != null) { windowRide.cancel(); windowRide = null; }
+        if (fresh || zooming || same) {
+            shownWindow = target;
+            drawWindow(full, target);
+            return;
+        }
+        final double[] from = shownWindow.clone();
+        android.animation.ValueAnimator ride = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        ride.setDuration(280);
+        ride.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        ride.addUpdateListener(a -> {
+            float e = (float) a.getAnimatedValue();
+            shownWindow = new double[] { from[0] + (target[0] - from[0]) * e,
+                                        from[1] + (target[1] - from[1]) * e,
+                                        from[2] + (target[2] - from[2]) * e };
+            Bitmap now = pageBitmap;
+            if (now != null) drawWindow(now, shownWindow);
+        });
+        windowRide = ride;
+        ride.start();
+    }
+
+    /// Вирізати вікно з картинки й поставити у вид.
+    private void drawWindow(Bitmap full, double[] window) {
+        String signature = window[0] + ":" + window[1] + ":" + window[2] + ":" + System.identityHashCode(full);
         if (signature.equals(shownCrop)) return;
         shownCrop = signature;
         Bitmap shown = full;
-        if (on) {
-            double side = 1.0 / Math.max(1.0, Math.min(6.0, state.zoom));
-            double left = Math.min(1 - side, Math.max(0, state.zoomX - side / 2));
-            double top = Math.min(1 - side, Math.max(0, state.zoomY - side / 2));
-            int x = (int) Math.round(left * full.getWidth());
-            int y = (int) Math.round(top * full.getHeight());
-            int w = Math.min(Math.max(2, (int) Math.round(side * full.getWidth())), full.getWidth() - x);
-            int h = Math.min(Math.max(2, (int) Math.round(side * full.getHeight())), full.getHeight() - y);
+        if (window[2] < 0.999) {
+            int x = (int) Math.round(window[0] * full.getWidth());
+            int y = (int) Math.round(window[1] * full.getHeight());
+            int w = Math.min(Math.max(2, (int) Math.round(window[2] * full.getWidth())), full.getWidth() - x);
+            int h = Math.min(Math.max(2, (int) Math.round(window[2] * full.getHeight())), full.getHeight() - y);
             if (w > 1 && h > 1) shown = Bitmap.createBitmap(full, x, y, w, h);
         }
         pageImage.setImageBitmap(shown);
         updateImageRect();
+    }
+
+    /// Вікно наближення в частках цілого кадру: {ліво, верх, сторона} —
+    /// те саме правило, що в програмі (`SlideFocus.rect`).
+    private double[] zoomWindow() {
+        if (!state.zoomOn || state.zoom <= 1.001) return new double[] {0, 0, 1};
+        double side = 1.0 / Math.max(1.0, Math.min(6.0, state.zoom));
+        double left = Math.min(1 - side, Math.max(0, state.zoomX - side / 2));
+        double top = Math.min(1 - side, Math.max(0, state.zoomY - side / 2));
+        return new double[] {left, top, side};
     }
 
     /// Де всередині виду намальовано саму картинку: по боках бувають поля.

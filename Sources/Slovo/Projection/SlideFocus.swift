@@ -38,6 +38,26 @@ final class SlideFocus {
     private(set) var look = Look()
     var onChange: (() -> Void)?
 
+    /// Що зараз на екрані. `rect` — куди дивитися, і міняється він одразу;
+    /// а показане вікно їде до нього плавно, кадр за кадром. Власник:
+    /// «переход в исходное состояние не резко, а плавно… подтягивание
+    /// слайда — пусть это будет тоже плавно». Виводи ріжуть картинку по
+    /// `shownRect`; стан для пультів іде з `look` — вони їдуть самі.
+    private(set) var shownRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// Повод «показане вікно зсунулося на кадр» — для виводів.
+    static let shownChanged = Notification.Name("slovo.focusShownChanged")
+    var onShownChange: (() -> Void)?
+    /// Тривалість переїзду. У самоперевірці — нуль: перевірки міряють
+    /// картинку одразу після дії, а плавність перевіряє окрема перевірка,
+    /// яка ставить час сама.
+    static var animationDuration: TimeInterval = CommandLine.arguments
+        .contains { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") } ? 0 : 0.28
+    /// Скільки кадрів проїхав останній переїзд — самоперевірці.
+    private(set) var rideFrames = 0
+    private var ride: Timer?
+    private var rideFrom = CGRect(x: 0, y: 0, width: 1, height: 1)
+    private var rideStart = Date()
+
     /// Прямокутник у частках картинки: що саме піде в зал.
     var rect: CGRect {
         guard isOn else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
@@ -129,7 +149,55 @@ final class SlideFocus {
     private func announce() {
         onChange?()
         NotificationCenter.default.post(name: Self.changed, object: nil)
+        ride(to: rect)
     }
+
+    /// Повезти показане вікно до нового: 60 кадрів на секунду, з розгоном
+    /// і гальмуванням. Нова ціль посеред дороги — їдемо далі з того місця,
+    /// де є, а не стрибаємо на початок.
+    private func ride(to target: CGRect) {
+        ride?.invalidate()
+        ride = nil
+        guard target != shownRect else { return }
+        guard Self.animationDuration > 0 else {
+            shownRect = target
+            announceShown()
+            return
+        }
+        rideFrom = shownRect
+        rideStart = Date()
+        rideFrames = 0
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.step() }
+        }
+        // У звичайному режимі таймер став би, поки тягнуть мишею по
+        // живому екрану, — а саме тоді вікно й їде.
+        RunLoop.main.add(timer, forMode: .common)
+        ride = timer
+    }
+
+    private func step() {
+        let part = min(1, Date().timeIntervalSince(rideStart) / max(0.001, Self.animationDuration))
+        let eased = part < 0.5 ? 2 * part * part : 1 - pow(-2 * part + 2, 2) / 2
+        let to = rect
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * CGFloat(eased) }
+        shownRect = part >= 1 ? to : CGRect(x: mix(rideFrom.minX, to.minX), y: mix(rideFrom.minY, to.minY),
+                                             width: mix(rideFrom.width, to.width), height: mix(rideFrom.height, to.height))
+        rideFrames += 1
+        if part >= 1 {
+            ride?.invalidate()
+            ride = nil
+        }
+        announceShown()
+    }
+
+    private func announceShown() {
+        onShownChange?()
+        NotificationCenter.default.post(name: Self.shownChanged, object: nil)
+    }
+
+    /// Самоперевірці: дочекатися кінця переїзду.
+    var isRiding: Bool { ride != nil }
 
     /// Вирізати шматок картинки. Повертає ту саму картинку, коли наближення
     /// вимкнено або різати нічого.

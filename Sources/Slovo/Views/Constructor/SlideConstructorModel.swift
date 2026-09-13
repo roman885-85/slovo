@@ -84,7 +84,21 @@ final class SlideConstructorModel: ObservableObject {
         // Пустая папка преднастроек означала бы пустой выпадающий список
         // шаблонов — заполняем её тем же стартовым набором, что и обычно.
         library.seedIfEmpty(from: baseStyle)
-        if let first = library.presets.first { load(first) }
+        if let first = library.presets(forSongs: false).first { load(first) }
+    }
+
+    /// Відкрити редактор Біблії або пісень: шаблон, що стоїть у залі для
+    /// цього розділу, інакше перший зі списку розділу, а коли список
+    /// порожній — свіжий шаблон розділу. Списки двох редакторів не
+    /// перетинаються (власник: «інакше губиться весь сенс двох розділів»).
+    func openScope(forSongs: Bool, assigned: SlidePreset?) {
+        if let assigned, assigned.forSongs == forSongs, library.presets.contains(where: { $0.id == assigned.id }) {
+            load(assigned)
+        } else if let first = library.presets(forSongs: forSongs).first {
+            load(first)
+        } else {
+            makeNew(named: OurWords.t(forSongs ? "Песня" : "Новый шаблон"), forSongs: forSongs)
+        }
     }
 
     // MARK: - Выбранный объект
@@ -379,9 +393,12 @@ final class SlideConstructorModel: ObservableObject {
         self.isDirty = false
     }
 
-    /// «Новый шаблон слайда» (SBNewSheme, TextMessages12).
-    func makeNew(named name: String) {
-        var fresh = Self.withOriginalAnchors(SlidePreset.standard(name: name, style: baseStyle))
+    /// «Новый шаблон слайда» (SBNewSheme, TextMessages12). Для пісень —
+    /// розкладка пісні: куплет і назва, без другого перекладу й адреси.
+    func makeNew(named name: String, forSongs: Bool = false) {
+        var fresh = Self.withOriginalAnchors(forSongs
+            ? SlidePreset.song(name: name, style: baseStyle)
+            : SlidePreset.standard(name: name, style: baseStyle))
         fresh.background.imagePath = nil
         self.preset = fresh
         self.sourceFolder = nil
@@ -470,11 +487,14 @@ final class SlideConstructorModel: ObservableObject {
 
     /// «Удалить шаблон» (SBDelSheme, TextMessages13/14).
     func deleteCurrent() {
+        let songs = preset.forSongs
         library.delete(preset)
-        if let next = library.presets.first {
+        // Наступний — з того самого редактора: після видалення шаблону
+        // пісень у редакторі пісень не має з'явитися шаблон Біблії.
+        if let next = library.presets(forSongs: songs).first {
             load(next)
         } else {
-            makeNew(named: OurWords.t("Новый шаблон"))
+            makeNew(named: OurWords.t(songs ? "Песня" : "Новый шаблон"), forSongs: songs)
         }
         objectWillChange.send()
     }

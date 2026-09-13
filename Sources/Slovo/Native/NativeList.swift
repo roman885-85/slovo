@@ -727,7 +727,9 @@ final class NativeList: NSView, NativeListChecking {
         // рядку — ще й по центру, без відступів.
         let one = NativeRowLayout(row: row, width: width, style: style, measure: false)
         let font = row.bold ? style.boldTextFont : style.textFont
-        let cut = fitsCut(row.text, font: font, width: one.textRect.width, minimum: 0.72)
+        // Текст кеглем не підганяється (див. NativeRowCell), тож і «обрізано»
+        // рахуємо за справжнім кеглем.
+        let cut = fitsCut(row.text, font: font, width: one.textRect.width, minimum: 1)
         if one.height <= given + 0.5 { return (one.height, given, cut) }
         return (ceil(style.textLineHeight), given, cut)
     }

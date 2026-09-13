@@ -415,6 +415,9 @@ function applyHall(fresh) {
   // Власник: «в пульт добавить кнопку исходного состояния после зума».
   // Кнопка стоїть над залом лише тоді, коли наближення ввімкнене.
   $("zoomBack").hidden = !(fresh.zoom && fresh.zoom.on) || !!fresh.viewOnly;
+  // Вікно наближення їде до нового плавно; під щипком і колесом — одразу,
+  // інакше картинка відставала б від пальців.
+  rideWindow(zoomWindow(), !!pinchStart || performance.now() - wheelAt < 400);
   if (h.kind === "video" || h.kind === "black") {
     hallImage = null;
     $("hallNote").textContent = h.kind === "video" ? "У залі відео: " + (h.title || "") : "Зал затемнено";
@@ -488,6 +491,28 @@ function zoomWindow() {
 
 let shownRect = null, touchingHall = false;
 
+// Показане вікно наближення: їде до цілі за 280 мс із розгоном і
+// гальмуванням, а не стрибає. Власник: «переход в исходное состояние не
+// резко, а плавно… подтягивание слайда — пусть это будет тоже плавно».
+let shownWin = { left: 0, top: 0, side: 1 }, winRide = null, wheelAt = -10000;
+function rideWindow(target, immediate) {
+  if (winRide) { cancelAnimationFrame(winRide); winRide = null; }
+  const gap = Math.abs(target.left - shownWin.left) + Math.abs(target.top - shownWin.top) + Math.abs(target.side - shownWin.side);
+  if (gap < 1e-4) return;
+  if (immediate) { shownWin = target; return; }
+  const from = shownWin, start = performance.now(), duration = 280;
+  const step = now => {
+    const t = Math.min(1, (now - start) / duration);
+    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    shownWin = { left: from.left + (target.left - from.left) * e,
+                 top: from.top + (target.top - from.top) * e,
+                 side: from.side + (target.side - from.side) * e };
+    drawHall();
+    winRide = t < 1 ? requestAnimationFrame(step) : null;
+  };
+  winRide = requestAnimationFrame(step);
+}
+
 function drawHall() {
   const ratio = window.devicePixelRatio || 1;
   const w = hall.clientWidth, h = hall.clientHeight;
@@ -497,7 +522,7 @@ function drawHall() {
   g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
   shownRect = null;
   if (!hallImage) return;
-  const win = zoomWindow();
+  const win = shownWin;
   const sx = win.left * hallImage.width, sy = win.top * hallImage.height;
   const sw = win.side * hallImage.width, sh = win.side * hallImage.height;
   const scale = Math.min(w / sw, h / sh);
@@ -589,6 +614,7 @@ hall.addEventListener("pointercancel", liftFinger);
 hall.addEventListener("wheel", event => {
   event.preventDefault();
   if (state.viewOnly) return;
+  wheelAt = performance.now();
   const point = shownFraction(event);
   if (!point) return;
   const current = (state.zoom && state.zoom.on) ? state.zoom.zoom : 1;

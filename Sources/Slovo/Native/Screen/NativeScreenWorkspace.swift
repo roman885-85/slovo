@@ -17,6 +17,9 @@ final class NativeScreenWorkspace: NSView {
 
     static let shared = NativeScreenWorkspace()
 
+    /// Роздільник між списком і поясненням: ширина списку тягнеться й пам'ятається.
+    private let grip = NativeWidthGrip()
+    private static let listWidthKey = "screenListWidth"
     private let list = NativeList(mode: .list, metrics: NativeListMetrics.settings(detailWidth: 220),
                                   heights: .uniform(44), fontSize: 13)
     private let title = NSTextField(labelWithString: "")
@@ -50,7 +53,14 @@ final class NativeScreenWorkspace: NSView {
             self?.chosen = row
             self?.showTapped()
         }
-        for view in [title, note, reloadButton, showButton, hideButton, list] as [NSView] { addSubview(view) }
+        for view in [title, note, reloadButton, showButton, hideButton, list, grip] as [NSView] { addSubview(view) }
+        grip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(Self.listWidthKey, self.list.frame.width + delta, min: 200, max: self.bounds.width * 0.7)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        grip.onReset = { [weak self] in NativeWidths.reset(Self.listWidthKey); self?.needsLayout = true }
         applyCaptions()
         tokens.append(Signals.shared.subscribe(.language) { [weak self] in self?.applyCaptions() })
     }
@@ -124,7 +134,8 @@ final class NativeScreenWorkspace: NSView {
         super.layout()
         let padding: CGFloat = 12
         let gap: CGFloat = 10
-        let listWidth = max(240, min(520, bounds.width * 0.45))
+        let listWidth = NativeWidths.value(Self.listWidthKey, auto: max(240, min(520, bounds.width * 0.45)),
+                                           min: 200, max: bounds.width * 0.7)
         let buttonHeight: CGFloat = 26
         title.frame = NSRect(x: padding, y: bounds.maxY - padding - 18,
                              width: max(0, bounds.width - padding * 2), height: 18)
@@ -133,7 +144,8 @@ final class NativeScreenWorkspace: NSView {
         list.frame = NSRect(x: padding, y: padding + buttonHeight + gap,
                             width: listWidth, height: contentHeight)
         reloadButton.frame = NSRect(x: padding, y: padding, width: 170, height: buttonHeight)
-        let rightX = padding + listWidth + gap
+        grip.frame = NSRect(x: list.frame.maxX, y: list.frame.minY, width: NativeWidths.grip, height: contentHeight)
+        let rightX = grip.frame.maxX + gap
         let rightWidth = max(0, bounds.width - rightX - padding)
         note.frame = NSRect(x: rightX, y: padding + buttonHeight + gap,
                             width: rightWidth, height: contentHeight)

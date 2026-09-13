@@ -29,7 +29,8 @@ extension Diagnostics {
             desk.historySelection = wasSelection
             NativeBibleBridge.shared.sync()
         }
-        return [historyCheck(area: area, state: state), planCheck(area: area, state: state)]
+        return [historyCheck(area: area, state: state), planCheck(area: area, state: state),
+                planSongSwitchCheck(area: area, state: state)]
     }
 
     /// Куди дійшла програма після натискання — одним рядком для звіту.
@@ -113,6 +114,84 @@ extension Diagnostics {
             wait(untilTrue: { state.mode == .text }, seconds: 3)
             return state.mode == .text ? nil : "режим не Текст"
         }
+    }
+
+    /// Пункт Плану з ІНШОЮ піснею, ніж вибрана у вкладці: вкладка переходить
+    /// на неї, список частин — її, і стрілка далі листає саме її.
+    ///
+    /// Скрин власника: «в плане выбрана „Бачу Бога кожен день“, на проекторе
+    /// правильный первый куплет, но в окне программы не та песня, и при
+    /// перелистывании показывает то, что активно в окне». Пульти йдуть тією
+    /// самою дорогою (`DeskModel.activate` і `stepVerse`), тож перевірка
+    /// покриває і їх.
+    private static func planSongSwitchCheck(area: String, state: AppState) -> Check {
+        let name = "Пісня з Плану стає поточною у вкладці, і стрілка листає її"
+        let workspace = NativeSongsWorkspace.shared
+        guard let library = state.songLibrary, let entry = library.entry(state.songBookID),
+              let book = library.book(entry.id), book.songs.count >= 2 else {
+            return Check(area: area, name: name, status: .skipped, detail: "нема відкритого пісенника з двома піснями")
+        }
+        let wasMode = state.mode, wasLive = state.isLive
+        defer {
+            state.mode = wasMode
+            state.isLive = wasLive
+        }
+        state.mode = .songs
+        wait(untilTrue: { workspace.model.bookID == state.songBookID && workspace.songRows.rowCount > 1 }, seconds: 5)
+        guard workspace.songRows.rowCount > 1 else {
+            return Check(area: area, name: name, status: .skipped, detail: "вкладка пісень не показала список")
+        }
+        // Пісня A — вибрана у вкладці рукою (перший рядок).
+        workspace.clickSong(row: 0)
+        wait(untilTrue: { workspace.model.songIndex == workspace.songRows.song(at: 0) }, seconds: 2)
+        guard let songA = workspace.model.songIndex else {
+            return Check(area: area, name: name, status: .skipped, detail: "не вдалося вибрати пісню у вкладці")
+        }
+        // Пісня B — інша, з двома частинами й більше: є що листати.
+        guard let songB = book.songs.indices.first(where: { $0 != songA && book.songs[$0].parts.count >= 2 }) else {
+            return Check(area: area, name: name, status: .skipped, detail: "нема другої пісні з двома частинами")
+        }
+        let parts = book.songs[songB].parts
+        // Пункт Плану — тією самою дорогою, що й дотик по панелі Плану і
+        // пульти («plan» в API): пісня цілком, від першої частини.
+        let item = PlanItem(title: book.songs[songB].title,
+                            content: .song(.init(bookFileName: entry.url.lastPathComponent, songIndex: songB)))
+        DeskModel.shared.activate(item, state: state)
+        wait(untilTrue: { workspace.model.songIndex == songB && workspace.partRows.rowCount == parts.count }, seconds: 3)
+
+        var faults: [String] = []
+        var lines: [String] = ["у вкладці була №\(songA) «\(book.songs[songA].title.prefix(24))», План відкрив №\(songB) «\(book.songs[songB].title.prefix(24))»"]
+        if workspace.model.songIndex != songB {
+            faults.append("вкладка лишилася на пісні №\(workspace.model.songIndex ?? -1)")
+        }
+        if workspace.partRows.rowCount != parts.count {
+            faults.append("список частин не від пісні з Плану (\(workspace.partRows.rowCount) рядків, у пісні \(parts.count) частин)")
+        }
+        if state.shownSongForCheck?.index != songB {
+            faults.append("на слайді пісня №\(state.shownSongForCheck?.index ?? -1), а не з Плану")
+        }
+        if workspace.model.partIndex != 0 {
+            faults.append("у списку частин виділено не першу частину (\(workspace.model.partIndex ?? -1))")
+        }
+
+        // Стрілка «далі» — як з панелі керування і з пультів: друга частина
+        // ТІЄЇ САМОЇ пісні. Довгий куплет спершу гортає свої сторінки.
+        for _ in 0..<4 {
+            state.stepVerse(by: 1, live: true)
+            wait(untilTrue: { false }, seconds: 0.05)
+            if state.songPartIndex == parts[1].index { break }
+        }
+        wait(untilTrue: { workspace.model.partIndex == 1 }, seconds: 2)
+        lines.append("після стрілки: на слайді №\(state.shownSongForCheck?.index ?? -1), частина №\(state.songPartIndex ?? -1), у вкладці пісня №\(workspace.model.songIndex ?? -1), частина \(workspace.model.partIndex ?? -1)")
+        if state.shownSongForCheck?.index != songB {
+            faults.append("після стрілки на слайді пісня №\(state.shownSongForCheck?.index ?? -1) замість №\(songB)")
+        }
+        if state.songPartIndex != parts[1].index { faults.append("стрілка не перейшла на другу частину") }
+        if workspace.model.songIndex != songB { faults.append("після стрілки вкладка перескочила на №\(workspace.model.songIndex ?? -1)") }
+        if workspace.model.partIndex != 1 { faults.append("у списку частин не виділилася друга частина") }
+
+        return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: (faults.isEmpty ? "" : faults.joined(separator: "; ") + ". ") + lines.joined(separator: "; "))
     }
 
     private static func planCheck(area: String, state: AppState) -> Check {

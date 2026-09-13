@@ -41,10 +41,21 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     private var scopeButton: NSPopUpButton!
     private static let scopeKey = "constructorForSongs"
     private var forSongs: Bool { scopeButton?.indexOfSelectedItem == 1 }
+    /// Шаблони відкритого редактора: Біблії або пісень — і лише вони.
+    private var scopedPresets: [SlidePreset] { model.library.presets(forSongs: forSongs) }
+    /// Першим пунктом списку стоїть новий, ще не збережений шаблон: у
+    /// бібліотеці його нема, а порожній список над полотном збивав з пантелику.
+    private var unsavedShown = false
     private var backgroundButton: NSPopUpButton!
     private var transitionButton: NSPopUpButton!
     private var sceneTabs: NSSegmentedControl!
     private var closeButton: NSButton!
+    /// Роздільники обабіч полотна: ширини списку об'єктів і панелей
+    /// тягнуться й пам'ятаються; подвійне клацання повертає звичайні.
+    private let leftGrip = NativeWidthGrip()
+    private let rightGrip = NativeWidthGrip()
+    private static let leftWidthKey = "constructorLeftWidth"
+    private static let rightWidthKey = "constructorRightWidth"
 
     init(state: AppState, onClose: @escaping () -> Void) {
         self.state = state
@@ -55,6 +66,8 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         super.init(frame: NSRect(x: 0, y: 0, width: 1240, height: 760))
         build()
         model.attach(schemes: state.schemes, baseStyle: state.style)
+        // Редактор відкривається на тому, що зараз у залі для свого розділу.
+        model.openScope(forSongs: forSongs, assigned: state.presets.preset(for: .screen, songs: forSongs))
         observers.append(model.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.refresh() }
         })
@@ -82,7 +95,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     func requestClose() {
         guard model.asksToSave(before: .close) else { finishLive(); onClose(); return }
         switch askAboutChanges() {
-        case .save: model.save(); applyToOutputs(); finishLive(); onClose()
+        case .save: saveAndApply(); finishLive(); onClose()
         case .discard: finishLive(); onClose()
         case .cancel: break
         }
@@ -114,17 +127,19 @@ final class NativeSlideConstructor: NSView, NativeListSource {
                 self?.run(button)
             })
         }
-        // Для кого шаблон. Власник: «конструктор окремо для Біблії й окремо
-        // для пісень — у них по-різному має бути організований вивід».
+        // Два редактори в одному вікні: Біблії і пісень. Власник: «потрібен
+        // окремий редактор для Біблії й окремий для пісень — інакше губиться
+        // весь сенс двох розділів». У кожного свій список шаблонів; шаблон
+        // Біблії в редакторі пісень не з'являється, і навпаки.
         // Вибір пам'ятається; уперше — за відкритою вкладкою.
-        topBar.addArrangedSubview(NativeForm.label(OurWords.t("Для:"), secondary: false))
+        topBar.addArrangedSubview(NativeForm.label(OurWords.t("Редактор:"), secondary: false))
         scopeButton = NSPopUpButton(frame: .zero, pullsDown: false)
-        scopeButton.addItems(withTitles: [OurWords.t("Библии и всего"), OurWords.t("Песен")])
+        scopeButton.addItems(withTitles: [OurWords.t("Библия"), OurWords.t("Песни")])
         let remembered = UserDefaults.standard.object(forKey: Self.scopeKey) as? Bool
         scopeButton.selectItem(at: (remembered ?? (state.mode == .songs)) ? 1 : 0)
         scopeButton.target = self
         scopeButton.action = #selector(scopeChosen)
-        scopeButton.toolTip = OurWords.t("Сохранённый шаблон станет шаблоном для всех слайдов или только для песен")
+        scopeButton.toolTip = OurWords.t("Два редактора: шаблоны для Библии и шаблоны для песен. В списке — только шаблоны открытого редактора; сохранённый уходит в зал для своего раздела")
         topBar.addArrangedSubview(scopeButton)
         topBar.addArrangedSubview(NativeForm.label(text("Label14", "Шаблон:"), secondary: false))
         templateButton = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -209,6 +224,23 @@ final class NativeSlideConstructor: NSView, NativeListSource {
 
         canvas.missingFileLabel = text("TextMessages4", "Не найден файл:")
         addSubview(canvas)
+        addSubview(leftGrip)
+        addSubview(rightGrip)
+        leftGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(Self.leftWidthKey, self.objects.frame.width + delta, min: 220, max: 520)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        leftGrip.onReset = { [weak self] in NativeWidths.reset(Self.leftWidthKey); self?.needsLayout = true }
+        rightGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            // Вправо — панелі вужчають.
+            NativeWidths.set(Self.rightWidthKey, self.panels.frame.width - delta, min: 260, max: 560)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        rightGrip.onReset = { [weak self] in NativeWidths.reset(Self.rightWidthKey); self?.needsLayout = true }
 
         panels.onChange = { [weak self] in
             self?.canvas.needsDisplay = true
@@ -266,7 +298,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     private func run(_ button: TemplateButton) {
         switch button {
         case .new:    newTemplate()
-        case .save:   model.save(); applyToOutputs()
+        case .save:   saveAndApply()
         case .saveAs: saveAs()
         case .delete: deleteTemplate()
         }
@@ -286,6 +318,31 @@ final class NativeSlideConstructor: NSView, NativeListSource {
 
     @objc private func scopeChosen() {
         UserDefaults.standard.set(forSongs, forKey: Self.scopeKey)
+        // Перехід в інший редактор — як зміна шаблону: спершу питання про
+        // незбережені правки, і лише тоді відкривається шаблон іншого розділу.
+        if model.asksToSave(before: .switchPreset) {
+            switch askAboutChanges() {
+            case .save: saveAndApply(wasScope: !forSongs)
+            case .discard: break
+            case .cancel:
+                scopeButton.selectItem(at: forSongs ? 0 : 1)
+                UserDefaults.standard.set(forSongs, forKey: Self.scopeKey)
+                return
+            }
+        }
+        model.openScope(forSongs: forSongs, assigned: state.presets.preset(for: .screen, songs: forSongs))
+        refresh()
+    }
+
+    /// Зберегти й вивести в зал — для розділу відкритого редактора. Шаблон
+    /// несе прапорець розділу сам, щоб і привезений авторський `.sch`
+    /// зберігся в потрібний список.
+    private func saveAndApply(wasScope: Bool? = nil) {
+        let songs = wasScope ?? forSongs
+        model.preset.forSongs = songs
+        model.save()
+        state.reloadPresets()
+        state.applyPreset(model.preset, forSongs: songs)
     }
 
     @objc private func sceneChanged() {
@@ -295,8 +352,10 @@ final class NativeSlideConstructor: NSView, NativeListSource {
     }
 
     @objc private func templateChosen() {
-        let index = templateButton.indexOfSelectedItem
-        let presets = model.library.presets
+        // Перший пункт — незбережений шаблон, він і так відкритий.
+        if unsavedShown, templateButton.indexOfSelectedItem == 0 { return }
+        let index = templateButton.indexOfSelectedItem - (unsavedShown ? 1 : 0)
+        let presets = scopedPresets
         // Сперва свои шаблоны, следом авторские `.sch` — они берутся только
         // за основу: сохраняются правки уже своим файлом.
         let schemes = model.schemes?.templates ?? []
@@ -309,7 +368,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         let departure: SlideConstructorModel.Departure = index < presets.count ? .switchPreset : .importScheme
         if model.asksToSave(before: departure) {
             switch askAboutChanges() {
-            case .save: model.save(); applyToOutputs()
+            case .save: saveAndApply()
             case .discard: break
             case .cancel: refresh(); return
             }
@@ -320,6 +379,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
             let position = index - presets.count
             guard schemes.indices.contains(position) else { return }
             model.importScheme(schemes[position])
+            model.preset.forSongs = forSongs
         }
         refresh()
     }
@@ -354,13 +414,13 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         // же путём, что смена шаблона: сперва «Шаблон изменен. Сохранить?».
         if model.asksToSave(before: .newTemplate) {
             switch askAboutChanges() {
-            case .save: model.save(); applyToOutputs()
+            case .save: saveAndApply()
             case .discard: break
             case .cancel: return
             }
         }
         guard let name = askName(title: text("TextMessages12", "Создание шаблона"), value: "") else { return }
-        model.makeNew(named: name)
+        model.makeNew(named: name, forSongs: forSongs)
         refresh()
     }
 
@@ -376,6 +436,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
             alert.addButton(withTitle: OurWords.t("Нет"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
+        model.preset.forSongs = forSongs
         model.saveAs(name)
         applyToOutputs()
         refresh()
@@ -433,6 +494,19 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         state.applyPreset(model.preset, forSongs: forSongs)
     }
 
+    /// Куди підуть шаблони й скільки їх у кожному редакторі — для самоперевірки.
+    var scopeForCheck: (forSongs: Bool, listed: [String]) {
+        (forSongs, (0..<templateButton.numberOfItems).map { templateButton.itemTitle(at: $0) })
+    }
+    func chooseScopeForCheck(forSongs songs: Bool) {
+        scopeButton.selectItem(at: songs ? 1 : 0)
+        scopeChosen()
+    }
+    func chooseTemplateForCheck(at index: Int) {
+        templateButton.selectItem(at: index)
+        templateChosen()
+    }
+
     // MARK: - Обновление
 
     private var backgroundFiles: [URL] {
@@ -456,6 +530,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         hasher.combine(model.preset.transition)
         hasher.combine(model.selectedObject?.imagePath)
         hasher.combine(model.selectedObject?.maskPath)
+        hasher.combine(forSongs)
         let fingerprint = hasher.finalize()
 
         // Дешёвая часть — на каждое изменение.
@@ -482,12 +557,26 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         // Список шаблонов: свои, затем авторские.
         // Имена встроенных шаблонов — на языке интерфейса; свои имена
         // владельца словарь не знает и оставит как есть.
-        let presets = model.library.presets.map { OurWords.t($0.name) }
+        let scoped = scopedPresets
+        let presets = scoped.map { OurWords.t($0.name) }
         let schemes = (model.schemes?.templates ?? []).map { OurWords.t("Из папки Templates: ") + $0.name }
         templateButton.removeAllItems()
-        templateButton.addItems(withTitles: presets + schemes)
-        if let index = model.library.presets.firstIndex(where: { $0.id == model.preset.id }) {
+        // Пункти — просто в меню, а не `addItems(withTitles:)`: той викидає
+        // однойменні пункти, і два «Проектор» ставали одним — список
+        // коротшав, а вибір по номеру відкривав не той шаблон.
+        for title in presets + schemes {
+            templateButton.menu?.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
+        }
+        if let index = scoped.firstIndex(where: { $0.id == model.preset.id }) {
+            unsavedShown = false
             templateButton.selectItem(at: index)
+        } else {
+            // Новий, ще не збережений шаблон: у списку його нема, і показувати
+            // замість нього перший зі списку — брехня. Показуємо його самого.
+            unsavedShown = true
+            let title = OurWords.t(model.preset.name) + " " + OurWords.t("(не сохранён)")
+            templateButton.menu?.insertItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""), at: 0)
+            templateButton.selectItem(at: 0)
         }
 
         let files = backgroundFiles
@@ -509,16 +598,34 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         needsLayout = true
     }
 
-    /// Подставляем то, что сейчас выбрано в программе: длинный стих сразу
-    /// показывает, влезает ли он в рамку, а короткий — нет.
+    /// На полотні — те, що показує САМЕ ЦЕЙ редактор. Редактор Біблії: вірш,
+    /// другий переклад, адреса — навіть коли відкрита вкладка пісень (власник:
+    /// «в конструкторе слайдов Библии отображается песня с припевом — в
+    /// Библии совсем другая структура»). Редактор пісень: куплет і підпис
+    /// частини («Куплет», «Приспів») в об'єкті адреси — як на слайді пісні;
+    /// назва пісні — лише окремим об'єктом «Назва пісні», коли його додали
+    /// («отображается название вместо куплета или припева»). Довгий вірш
+    /// беремо живий: одразу видно, влізає він у рамку чи ні.
     private var sample: ConstructorSample {
         var sample = ConstructorSample()
         let slide = state.slide
-        sample.mainText = slide.mainText.isEmpty
-            ? "Для моєї ноги Твоє слово світильник, то світло для стежки моєї." : slide.mainText
-        sample.secondaryText = slide.secondaryTexts.first
+        if forSongs {
+            let live = state.mode == .songs && !slide.mainText.isEmpty
+            sample.mainText = live ? slide.mainText
+                : "Хвали, душе моя, Господа!\nХвалитиму Господа, поки живу,\nспіватиму Богові моєму, поки я є."
+            sample.secondaryText = ""
+            sample.reference = live && !slide.reference.isEmpty ? slide.reference : OurWords.t("Куплет")
+            sample.primaryReference = sample.reference
+            sample.secondaryReference = ""
+            sample.songTitle = state.selectedSong?.title ?? OurWords.t("Название песни")
+            return sample
+        }
+        let live = state.mode == .bible && !slide.mainText.isEmpty
+        sample.mainText = live ? slide.mainText
+            : "Для моєї ноги Твоє слово світильник, то світло для стежки моєї."
+        sample.secondaryText = (live ? slide.secondaryTexts.first : nil)
             ?? "Thy word is a lamp unto my feet, and a light unto my path."
-        sample.reference = slide.reference.isEmpty ? "Пс. 118:105" : slide.reference
+        sample.reference = live && !slide.reference.isEmpty ? slide.reference : "Пс. 118:105"
         sample.primaryReference = sample.reference
         sample.secondaryReference = sample.reference
         if let primary = state.primaryModule {
@@ -529,9 +636,12 @@ final class NativeSlideConstructor: NSView, NativeListSource {
             sample.moduleNameSecond = second.info.name
             sample.moduleShortNameSecond = second.info.shortName
         }
-        sample.songTitle = state.selectedSong?.title ?? "Название песни"
+        sample.songTitle = OurWords.t("Название песни")
         return sample
     }
+
+    /// Образець полотна — самоперевірці.
+    var sampleForCheck: ConstructorSample { sample }
 
     // MARK: - Раскладка
 
@@ -542,7 +652,7 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         let top = topBar.frame.maxY + gap
         let bottom = bounds.height - 44
 
-        let leftWidth: CGFloat = 300
+        let leftWidth = NativeWidths.value(Self.leftWidthKey, auto: 300, min: 220, max: 520)
         leftBar.frame = NSRect(x: gap, y: top, width: leftWidth, height: 26)
         objects.frame = NSRect(x: gap, y: leftBar.frame.maxY + 4, width: leftWidth,
                                height: max(0, bottom - leftBar.frame.maxY - 72))
@@ -555,12 +665,15 @@ final class NativeSlideConstructor: NSView, NativeListSource {
         transitionButton.frame = NSRect(x: gap + captionWidth, y: backgroundButton.frame.maxY + 6,
                                         width: leftWidth - captionWidth, height: 24)
 
-        let rightWidth: CGFloat = 330
+        let rightWidth = NativeWidths.value(Self.rightWidthKey, auto: 330, min: 260, max: 560)
         panels.frame = NSRect(x: bounds.width - rightWidth - gap, y: top,
                               width: rightWidth, height: max(0, bottom - top))
-        let centreLeft = leftWidth + gap * 2
+        leftGrip.frame = NSRect(x: gap + leftWidth, y: top, width: NativeWidths.grip, height: max(0, bottom - top))
+        rightGrip.frame = NSRect(x: panels.frame.minX - gap - NativeWidths.grip, y: top,
+                                 width: NativeWidths.grip, height: max(0, bottom - top))
+        let centreLeft = leftGrip.frame.maxX + gap
         canvas.frame = NSRect(x: centreLeft, y: top,
-                              width: max(0, panels.frame.minX - centreLeft - gap),
+                              width: max(0, rightGrip.frame.minX - gap - centreLeft),
                               height: max(0, bottom - top))
 
         bottomNote.frame = NSRect(x: gap, y: bounds.height - 34, width: bounds.width - 160, height: 16)

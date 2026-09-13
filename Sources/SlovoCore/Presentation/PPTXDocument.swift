@@ -30,9 +30,19 @@ public final class PPTXDocument {
         public var shapes: [Shape]
     }
 
+    /// Дуотон текстури: темні пікселі → перший колір, світлі → другий.
+    public struct Duotone {
+        public var dark: CGColor
+        public var light: CGColor
+    }
+
     public enum Fill {
         case none
         case solid(CGColor)
+        /// Текстура зі стилю фону теми (`bgFillStyleLst`): замощена (`tile`
+        /// з масштабом у частках) або розтягнута, часто з дуотоном у колір
+        /// фону. Так зроблено фон у темах «Твердий переплет», «Пергамент».
+        case texture(part: String, tileScale: Double?, duotone: Duotone?)
         /// Ім'я частини архіву з картинкою — її дістає сам документ.
         case picture(String)
     }
@@ -88,6 +98,11 @@ public final class PPTXDocument {
         /// Він уже порахував це при верстці — рахувати заново означає розійтися
         /// з тим, що людина бачила, коли робила слайд.
         public var fontScale: Double
+        /// `normal` — PowerPoint стискає текст під рамку (`normAutofit`);
+        /// `shape` — росте рамка (`spAutoFit`); `none` — текст виходить за
+        /// рамку як є (`noAutofit` або нічого не сказано). Стискати самим
+        /// можна лише в першому випадку: у решті PowerPoint не стискає.
+        public var autofit: String = "none"
         /// Тінь самої фігури або картинки.
         public var shadow: Shadow?
         /// Тінь тексту в ній.
@@ -102,6 +117,15 @@ public final class PPTXDocument {
         public var indent: Double
         /// Маркер списку, якщо він є.
         public var bullet: String?
+        /// Лівий відступ тексту (`marL`) і відступ першого рядка від нього
+        /// (`indent`, у маркованому списку від'ємний) — у пунктах слайда.
+        public var marginLeft: Double = 0
+        public var firstIndent: Double = 0
+        /// Шрифт маркера (`buFont`; `nil` — шрифт тексту), його колір і
+        /// кегль у частках кеглю тексту (`buSzPct`).
+        public var bulletFont: String? = nil
+        public var bulletColor: CGColor? = nil
+        public var bulletSize: Double? = nil
     }
 
     public struct Run {
@@ -175,11 +199,17 @@ public final class PPTXDocument {
 
         theme = Self.readTheme(archive)
         themeEffects = Self.readThemeEffects(archive, theme: theme)
+        (themePart, themeBackgroundStyles, themeRelations) = Self.readThemeBackgrounds(archive)
         slides = parts.map { read(slide: $0) }
     }
 
     /// Кольори теми: `schemeClr` посилається на них за іменем.
     private var theme: [String: CGColor] = [:]
+    /// Стилі фону теми (`bgFillStyleLst`), частина теми і її зв'язки — щоб
+    /// `<p:bgRef idx="1002">` дійшов до текстури.
+    private var themeBackgroundStyles: [XMLElement] = []
+    private var themePart = ""
+    private var themeRelations: [String: String] = [:]
     /// Стилі ефектів теми — на них фігура посилається через `effectRef idx`
     /// (1…3; 0 — без ефекту).
     private var themeEffects: [Shadow?] = []
@@ -410,6 +440,10 @@ public final class PPTXDocument {
             .flatMap { $0.first as? XMLElement }
         let scale = Double(autofit?.attribute(forName: "fontScale")?.stringValue ?? "")
             .map { $0 / 100_000 } ?? 1
+        let autofitMode: String
+        if autofit != nil { autofitMode = "normal" }
+        else if let body, Self.has(body, child: "spAutoFit") { autofitMode = "shape" }
+        else { autofitMode = "none" }
 
         // Тінь фігури: своя в `spPr/effectLst`, інакше зі стилю теми.
         var shadow: Shadow?
@@ -423,11 +457,12 @@ public final class PPTXDocument {
         return Shape(frame: rect, fill: shapeFill,
                      strokeColor: strokeColor, strokeWidth: strokeWidth,
                      outline: shape,
-                     paragraphs: paragraphs(in: element),
+                     paragraphs: paragraphs(in: element, layout: layout, master: master),
                      rotation: rotation,
                      flipH: flipH, flipV: flipV,
                      crop: crop, anchor: anchor,
                      fontScale: max(0.1, min(1, scale)),
+                     autofit: autofitMode,
                      shadow: shadow,
                      textShadow: textShadow(of: element, layout: layout, master: master))
     }
@@ -465,6 +500,64 @@ public final class PPTXDocument {
             return Self.firstShadow(under: styles, theme: theme)
         }
         return nil
+    }
+
+    /// Звідки абзаци фігури успадковують властивості рівнів (`lvlNpPr`):
+    /// свій `lstStyle`, заповнювач-двійник у розмітці й зразку, стиль зразка.
+    private static func levelStyles(of element: XMLElement, layout: XMLElement?, master: XMLElement?) -> [XMLElement] {
+        var roots: [XMLElement] = []
+        if let own = (try? element.nodes(forXPath: "./*[local-name()='txBody']/*[local-name()='lstStyle']"))?.first as? XMLElement {
+            roots.append(own)
+        }
+        guard let wanted = placeholder(of: element) else { return roots }
+        for root in [layout, master] {
+            guard let root, let twin = placeholderElement(wanted, in: root),
+                  let list = (try? twin.nodes(forXPath: "./*[local-name()='txBody']/*[local-name()='lstStyle']"))?.first as? XMLElement
+            else { continue }
+            roots.append(list)
+        }
+        if let master {
+            let styleName: String
+            switch wanted.type {
+            case "title", "ctrTitle": styleName = "titleStyle"
+            case "body", "subTitle", "obj": styleName = "bodyStyle"
+            default: styleName = "otherStyle"
+            }
+            if let styles = (try? master.nodes(forXPath: ".//*[local-name()='txStyles']/*[local-name()='\(styleName)']"))?
+                .first as? XMLElement {
+                roots.append(styles)
+            }
+        }
+        return roots
+    }
+
+    /// Номер автонумерації в тому вигляді, який просить `buAutoNum type`.
+    private static func numbered(_ number: Int, type: String) -> String {
+        let alpha = String(UnicodeScalar(96 + max(1, min(26, number)))!)
+        let roman: String = {
+            let table = [(1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"),
+                         (50, "l"), (40, "xl"), (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")]
+            var left = max(1, number), text = ""
+            for (value, mark) in table { while left >= value { text += mark; left -= value } }
+            return text
+        }()
+        switch type {
+        case "arabicParenR": return "\(number))"
+        case "arabicParenBoth": return "(\(number))"
+        case "arabicPlain": return "\(number)"
+        case "alphaLcPeriod": return alpha + "."
+        case "alphaUcPeriod": return alpha.uppercased() + "."
+        case "alphaLcParenR": return alpha + ")"
+        case "alphaUcParenR": return alpha.uppercased() + ")"
+        case "romanLcPeriod": return roman + "."
+        case "romanUcPeriod": return roman.uppercased() + "."
+        default: return "\(number)."
+        }
+    }
+
+    /// Чи є в елемента прямий нащадок із таким іменем (без простору імен).
+    private static func has(_ element: XMLElement, child name: String) -> Bool {
+        ((try? element.nodes(forXPath: "./*[local-name()='\(name)']")) ?? []).isEmpty == false
     }
 
     private static func firstShadow(under root: XMLElement, theme: [String: CGColor]) -> Shadow? {
@@ -526,8 +619,14 @@ public final class PPTXDocument {
         }
     }
 
-    private func paragraphs(in element: XMLElement) -> [Paragraph] {
+    private func paragraphs(in element: XMLElement, layout: XMLElement? = nil, master: XMLElement? = nil) -> [Paragraph] {
         var result: [Paragraph] = []
+        // Властивості рівнів списку, звідки абзац успадковує маркер і відступи:
+        // свій `lstStyle`, той самий заповнювач у розмітці й зразку, стилі
+        // зразка. Доти брався лише `pPr` самого абзацу, і маркери, задані
+        // рівнем, пропадали.
+        let inherited = Self.levelStyles(of: element, layout: layout, master: master)
+        var numbering: [Int: Int] = [:]
         for node in (try? element.nodes(forXPath: ".//*[local-name()='txBody']/*[local-name()='p']")) ?? [] {
             guard let paragraph = node as? XMLElement else { continue }
             let properties = (try? paragraph.nodes(forXPath: "./*[local-name()='pPr']"))?
@@ -539,10 +638,63 @@ public final class PPTXDocument {
             case "just": alignment = "justify"
             default:     alignment = "left"
             }
-            let level = Double(properties?.attribute(forName: "lvl")?.stringValue ?? "0") ?? 0
-            let bullet = (try? properties?.nodes(forXPath: "./*[local-name()='buChar']"))?
-                .flatMap { $0.first as? XMLElement }?
-                .attribute(forName: "char")?.stringValue
+            let levelNumber = Int(properties?.attribute(forName: "lvl")?.stringValue ?? "0") ?? 0
+            let level = Double(levelNumber)
+            // Ланцюжок: свій pPr, далі lvlNpPr звідусіль, де він є.
+            var chain: [XMLElement] = []
+            if let properties { chain.append(properties) }
+            for root in inherited {
+                if let found = (try? root.nodes(forXPath: "./*[local-name()='lvl\(levelNumber + 1)pPr']"))?.first as? XMLElement {
+                    chain.append(found)
+                }
+            }
+            func attribute(_ name: String) -> Double? {
+                for item in chain {
+                    if let value = item.attribute(forName: name)?.stringValue, let number = Double(value) { return number }
+                }
+                return nil
+            }
+            // Маркер: перший у ланцюжку, хто щось про нього каже — `buNone`,
+            // `buChar` чи `buAutoNum`; шрифт і колір маркера — так само.
+            var bullet: String?
+            var bulletFont: String?
+            var bulletColor: CGColor?
+            var bulletSize: Double?
+            for item in chain {
+                if Self.has(item, child: "buNone") { break }
+                if let mark = (try? item.nodes(forXPath: "./*[local-name()='buChar']"))?.first as? XMLElement,
+                   let char = mark.attribute(forName: "char")?.stringValue {
+                    bullet = char
+                    break
+                }
+                if let auto = (try? item.nodes(forXPath: "./*[local-name()='buAutoNum']"))?.first as? XMLElement {
+                    let start = Int(auto.attribute(forName: "startAt")?.stringValue ?? "") ?? 1
+                    let number = numbering[levelNumber] ?? start
+                    numbering[levelNumber] = number + 1
+                    bullet = Self.numbered(number, type: auto.attribute(forName: "type")?.stringValue ?? "arabicPeriod")
+                    break
+                }
+            }
+            if bullet != nil {
+                for item in chain {
+                    if bulletFont == nil, let font = (try? item.nodes(forXPath: "./*[local-name()='buFont']"))?.first as? XMLElement,
+                       let face = font.attribute(forName: "typeface")?.stringValue {
+                        bulletFont = face
+                    }
+                    if bulletFont == nil, Self.has(item, child: "buFontTx") { bulletFont = "" }
+                    if bulletColor == nil, let colour = (try? item.nodes(forXPath: "./*[local-name()='buClr']"))?.first as? XMLElement {
+                        bulletColor = Self.color(of: colour, theme: theme)
+                    }
+                    if bulletSize == nil, let size = (try? item.nodes(forXPath: "./*[local-name()='buSzPct']"))?.first as? XMLElement,
+                       let value = Double(size.attribute(forName: "val")?.stringValue ?? "") {
+                        bulletSize = value / 100_000
+                    }
+                }
+                if bulletFont == "" { bulletFont = nil }
+            }
+            // Відступи в EMU → пункти (12700 EMU в пункті).
+            let marginLeft = (attribute("marL") ?? 0) / 12700
+            let firstIndent = (attribute("indent") ?? 0) / 12700
 
             var runs: [Run] = []
             // Діти абзацу по порядку: шматки тексту `r`, поля `fld` (номер слайда,
@@ -572,8 +724,14 @@ public final class PPTXDocument {
             }
             // Порожній абзац — це порожній рядок між блоками тексту, і він
             // тримає вигляд слайда: викидати його не можна.
-            result.append(Paragraph(runs: runs, alignment: alignment,
-                                    indent: level * 0.03, bullet: bullet))
+            var made = Paragraph(runs: runs, alignment: alignment,
+                                 indent: level * 0.03, bullet: bullet)
+            made.marginLeft = marginLeft
+            made.firstIndent = firstIndent
+            made.bulletFont = bulletFont
+            made.bulletColor = bulletColor
+            made.bulletSize = bulletSize
+            result.append(made)
         }
         // Абзаци в кінці без жодного слова нічого не тримають — вони лише
         // розтягують блок і збивають добір кегля.
@@ -715,16 +873,107 @@ public final class PPTXDocument {
         return color(of: solid, theme: theme)
     }
 
-    private static func color(of solid: XMLElement, theme: [String: CGColor]) -> CGColor? {
+    /// `phClr` — колір-підстановка стилю теми (той, що в `bgRef`/`fillRef`).
+    private static func color(of solid: XMLElement, theme: [String: CGColor], phClr: CGColor? = nil) -> CGColor? {
         if let own = (try? solid.nodes(forXPath: "./*[local-name()='srgbClr']"))?.first as? XMLElement,
            let hex = own.attribute(forName: "val")?.stringValue {
-            return color(hex: hex)
+            return color(hex: hex).map { transformed($0, by: own) }
         }
         if let scheme = (try? solid.nodes(forXPath: "./*[local-name()='schemeClr']"))?.first as? XMLElement,
            let name = scheme.attribute(forName: "val")?.stringValue {
-            return theme[name] ?? defaultScheme(name)
+            let base = name == "phClr" ? phClr : (theme[name] ?? defaultScheme(name))
+            return base.map { transformed($0, by: scheme) }
         }
         return nil
+    }
+
+    /// Дочірні перетворення кольору: `tint`, `shade`, `lumMod`, `lumOff`,
+    /// `satMod`. PowerPoint рахує tint/shade у лінійному світлі, а не в sRGB:
+    /// «shade 85 %» білого — це 238, а не 217. Без цього фон теми виходив
+    /// сірішим і темнішим, ніж у PowerPoint.
+    private static func transformed(_ color: CGColor, by element: XMLElement) -> CGColor {
+        let children = (element.children ?? []).compactMap { $0 as? XMLElement }
+        guard !children.isEmpty, let parts = color.components, parts.count >= 3 else { return color }
+        func value(_ node: XMLElement) -> Double {
+            (Double(node.attribute(forName: "val")?.stringValue ?? "") ?? 100_000) / 100_000
+        }
+        func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        func gamma(_ c: Double) -> Double { c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055 }
+        var r = Double(parts[0]), g = Double(parts[1]), b = Double(parts[2])
+        var alpha = Double(color.alpha)
+        for node in children {
+            let local = (node.name ?? "").split(separator: ":").last.map(String.init) ?? ""
+            switch local {
+            case "tint":
+                let t = value(node)
+                (r, g, b) = (gamma(linear(r) * t + (1 - t)), gamma(linear(g) * t + (1 - t)), gamma(linear(b) * t + (1 - t)))
+            case "shade":
+                let t = value(node)
+                (r, g, b) = (gamma(linear(r) * t), gamma(linear(g) * t), gamma(linear(b) * t))
+            case "lumMod", "lumOff", "satMod":
+                var (h, sat, l) = hsl(r, g, b)
+                if local == "lumMod" { l = min(1, max(0, l * value(node))) }
+                if local == "lumOff" { l = min(1, max(0, l + value(node))) }
+                if local == "satMod" { sat = min(1, max(0, sat * value(node))) }
+                (r, g, b) = rgb(h, sat, l)
+            case "alpha":
+                alpha = min(1, max(0, value(node)))
+            default:
+                break
+            }
+        }
+        return CGColor(red: r, green: g, blue: b, alpha: alpha)
+    }
+
+    private static func hsl(_ r: Double, _ g: Double, _ b: Double) -> (Double, Double, Double) {
+        let hi = max(r, g, b), lo = min(r, g, b)
+        let l = (hi + lo) / 2
+        guard hi > lo else { return (0, 0, l) }
+        let d = hi - lo
+        let s = l > 0.5 ? d / (2 - hi - lo) : d / (hi + lo)
+        var h: Double
+        if hi == r { h = (g - b) / d + (g < b ? 6 : 0) }
+        else if hi == g { h = (b - r) / d + 2 }
+        else { h = (r - g) / d + 4 }
+        h /= 6
+        return (h, s, l)
+    }
+
+    private static func rgb(_ h: Double, _ s: Double, _ l: Double) -> (Double, Double, Double) {
+        guard s > 0 else { return (l, l, l) }
+        func channel(_ p: Double, _ q: Double, _ t0: Double) -> Double {
+            var t = t0
+            if t < 0 { t += 1 }
+            if t > 1 { t -= 1 }
+            if t < 1 / 6 { return p + (q - p) * 6 * t }
+            if t < 1 / 2 { return q }
+            if t < 2 / 3 { return p + (q - p) * (2 / 3 - t) * 6 }
+            return p
+        }
+        let q = l < 0.5 ? l * (1 + s) : l + s - l * s
+        let p = 2 * l - q
+        return (channel(p, q, h + 1 / 3), channel(p, q, h), channel(p, q, h - 1 / 3))
+    }
+
+    /// Стилі фону теми та зв'язки її частини (картинки текстур).
+    private static func readThemeBackgrounds(_ archive: ZipArchive.Reader) -> (String, [XMLElement], [String: String]) {
+        let part = archive.names.first { $0.hasPrefix("ppt/theme/") && $0.hasSuffix(".xml") }
+        guard let part, let text = try? archive.text(part),
+              let document = try? XMLDocument(xmlString: text, options: Self.xmlOptions) else { return ("", [], [:]) }
+        let styles = ((try? document.nodes(forXPath: "//*[local-name()='bgFillStyleLst']/*")) ?? [])
+            .compactMap { $0 as? XMLElement }
+        var relations: [String: String] = [:]
+        let relsPart = part.replacingOccurrences(of: "theme/", with: "theme/_rels/") + ".rels"
+        if let relsText = try? archive.text(relsPart),
+           let rels = try? XMLDocument(xmlString: relsText, options: Self.xmlOptions) {
+            for node in (try? rels.nodes(forXPath: "//*[local-name()='Relationship']")) ?? [] {
+                guard let element = node as? XMLElement,
+                      let id = element.attribute(forName: "Id")?.stringValue,
+                      let target = element.attribute(forName: "Target")?.stringValue else { continue }
+                relations[id] = target
+            }
+        }
+        return (part, styles, relations)
     }
 
     private static func color(hex: String) -> CGColor? {
@@ -789,8 +1038,66 @@ public final class PPTXDocument {
         // кремовий.
         if let reference = (try? background.nodes(forXPath: "./*[local-name()='bgRef']"))?.first as? XMLElement,
            let solid = Self.color(of: reference, theme: theme) {
+            // Сам стиль: 1001–1003 → перший–третій у `bgFillStyleLst`. Суцільний —
+            // колір із перетвореннями; текстура — картинка теми з дуотоном
+            // (так зроблено «Твердий переплет»: слайд світло-сірий, зернистий,
+            // а не білий). Градієнт — середнім із кінців.
+            if let index = Int(reference.attribute(forName: "idx")?.stringValue ?? ""),
+               index >= 1001, themeBackgroundStyles.indices.contains(index - 1001) {
+                let style = themeBackgroundStyles[index - 1001]
+                let local = (style.name ?? "").split(separator: ":").last.map(String.init) ?? ""
+                switch local {
+                case "solidFill":
+                    return .solid(Self.color(of: style, theme: theme, phClr: solid) ?? solid)
+                case "blipFill":
+                    if let blip = (try? style.nodes(forXPath: "./*[local-name()='blip']"))?.first as? XMLElement,
+                       let id = Self.embedID(of: blip), let target = themeRelations[id] {
+                        var duotone: Duotone?
+                        if let tone = (try? blip.nodes(forXPath: "./*[local-name()='duotone']"))?.first as? XMLElement {
+                            let colours = ((try? tone.nodes(forXPath: "./*")) ?? []).compactMap { $0 as? XMLElement }
+                            if colours.count >= 2,
+                               let dark = Self.color(ofColour: colours[0], theme: theme, phClr: solid),
+                               let light = Self.color(ofColour: colours[1], theme: theme, phClr: solid) {
+                                duotone = Duotone(dark: dark, light: light)
+                            }
+                        }
+                        var tileScale: Double?
+                        if let tile = (try? style.nodes(forXPath: "./*[local-name()='tile']"))?.first as? XMLElement {
+                            tileScale = (Double(tile.attribute(forName: "sx")?.stringValue ?? "") ?? 100_000) / 100_000
+                        }
+                        return .texture(part: Self.resolve(target, from: themePart), tileScale: tileScale, duotone: duotone)
+                    }
+                case "gradFill":
+                    let stops = ((try? style.nodes(forXPath: ".//*[local-name()='gs']")) ?? [])
+                        .compactMap { $0 as? XMLElement }
+                        .compactMap { Self.color(of: $0, theme: theme, phClr: solid) }
+                    if let first = stops.first, let last = stops.last,
+                       let a = first.components, let b = last.components, a.count >= 3, b.count >= 3 {
+                        return .solid(CGColor(red: (a[0] + b[0]) / 2, green: (a[1] + b[1]) / 2,
+                                              blue: (a[2] + b[2]) / 2, alpha: 1))
+                    }
+                default:
+                    break
+                }
+            }
             return .solid(solid)
         }
         return nil
+    }
+
+    /// Колір із самого елемента кольору (`srgbClr`/`schemeClr`), а не з
+    /// обгортки `solidFill`.
+    private static func color(ofColour element: XMLElement, theme: [String: CGColor], phClr: CGColor?) -> CGColor? {
+        let local = (element.name ?? "").split(separator: ":").last.map(String.init) ?? ""
+        switch local {
+        case "srgbClr":
+            return element.attribute(forName: "val")?.stringValue.flatMap(color(hex:)).map { transformed($0, by: element) }
+        case "schemeClr":
+            guard let name = element.attribute(forName: "val")?.stringValue else { return nil }
+            let base = name == "phClr" ? phClr : (theme[name] ?? defaultScheme(name))
+            return base.map { transformed($0, by: element) }
+        default:
+            return nil
+        }
     }
 }
