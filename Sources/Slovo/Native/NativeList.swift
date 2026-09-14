@@ -176,6 +176,15 @@ final class NativeList: NSView, NativeListChecking {
     private var noteScheduled = false
     private var lastWidth: CGFloat = 0
 
+    /// Прокрутка, про яку попросили, поки список ще не мав висоти.
+    ///
+    /// Вкладку «Пісні» будують раніше, ніж вона отримує місце у вікні, і
+    /// першу пісню ставлять «по центру» видимої області заввишки нуль:
+    /// список з'їжджав на пів рядка, і вибрана перша пісня ховалася під
+    /// полем швидкого вибору. Таку прокрутку відкладаємо до розкладки, коли
+    /// видно хоч один рядок.
+    private var pendingScroll: (index: Int, place: Place)?
+
     /// Сколько раз спросили источник. Только для самопроверки.
     private(set) var sourceQueries = 0
     static var countsQueries = false
@@ -247,6 +256,7 @@ final class NativeList: NSView, NativeListChecking {
     }
 
     @objc private func visibleWidthChanged() {
+        if pendingScroll != nil { needsLayout = true }
         guard abs(scrollView.contentSize.width - lastWidth) > 0.5 else { return }
         needsLayout = true
     }
@@ -256,6 +266,9 @@ final class NativeList: NSView, NativeListChecking {
     override func layout() {
         scrollView.frame = bounds
         super.layout()
+        defer {
+            if let pending = pendingScroll { scrollTo(pending.index, place: pending.place) }
+        }
         let width = scrollView.contentSize.width
         guard width > 0, abs(width - lastWidth) > 0.5 else { return }
         lastWidth = width
@@ -293,6 +306,7 @@ final class NativeList: NSView, NativeListChecking {
     /// Состав списка изменился целиком: другой перевод, другая глава,
     /// другой песенник.
     func reload() {
+        pendingScroll = nil
         itemCount = source?.rowCount ?? 0
         if case .measured = heights {
             measuredHeights = Array(repeating: 0, count: itemCount)
@@ -377,11 +391,18 @@ final class NativeList: NSView, NativeListChecking {
     // MARK: - Прокрутка
 
     func scrollTo(_ index: Int, place: Place = .nearest) {
+        pendingScroll = nil
         guard index >= 0, index < itemCount else { return }
         let row = tableRow(ofItem: index)
         guard row < table.numberOfRows else { return }
         let rect = table.rect(ofRow: row)
         let clip = scrollView.contentView
+        // Висоту чекаємо від рамки видимої області (`visibleWidthChanged`),
+        // а не просимо раскладку звідси: `layout()` сам кличе цей метод.
+        guard clip.bounds.height >= rect.height else {
+            pendingScroll = (index, place)
+            return
+        }
         switch place {
         case .nearest:
             // Никакой плавности: у автора список встаёт на место мгновенно,
@@ -399,6 +420,9 @@ final class NativeList: NSView, NativeListChecking {
             scrollView.reflectScrolledClipView(clip)
         }
     }
+
+    /// Зсув видимої області від початку списку — самоперевірці.
+    var scrollOffsetForCheck: CGFloat { scrollView.contentView.bounds.minY }
 
     /// Какие строки сейчас видно. По ним считают, надо ли вообще что-то делать.
     var visibleItems: Range<Int> {
@@ -895,6 +919,17 @@ private final class NativeTableView: NSTableView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    /// ⌘A з меню «Редагування» приходить сюди, у таблицю, раніше за список:
+    /// виділення веде сам список, тож і команду віддаємо йому.
+    override func selectAll(_ sender: Any?) { owner?.selectAll() }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(selectAll(_:)) {
+            return owner.map { $0.allowsMultipleSelection && $0.itemCount > 0 } ?? false
+        }
+        return super.validateUserInterfaceItem(item)
+    }
 }
 
 /// Шапка списка для вида «Таблица» окна выбора Книги.

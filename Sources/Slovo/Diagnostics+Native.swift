@@ -55,6 +55,8 @@ extension Diagnostics {
         checks.append(contentsOf: nativeVirtual(list, source, host))
         checks.append(contentsOf: nativeSelection(list))
         checks.append(contentsOf: nativeScroll(list, host))
+        checks.append(contentsOf: nativeScrollBeforeHeight(host))
+        checks.append(nativeEditMenu(host))
         checks.append(contentsOf: nativeSingleRow(list, source, host))
         checks.append(contentsOf: nativeTiles(host))
         checks.append(contentsOf: nativeSpeed(list, host))
@@ -179,6 +181,102 @@ extension Diagnostics {
         checks.append(Check(area: "Вікно AppKit", name: "Прокрутка до рядка посередині",
                             status: centred ? .ok : .failed,
                             detail: "просили 1700, видно \(middle.lowerBound)…\(max(middle.lowerBound, middle.upperBound - 1))"))
+        return checks
+    }
+
+    /// Розділ «Редагування»: без нього ⌘V, ⌘C, ⌘X, ⌘A і ⌘Z у полях не
+    /// працюють зовсім — поле отримує ці команди лише через пункти меню.
+    private static func nativeEditMenu(_ host: NSView) -> Check {
+        let name = "Меню «Редагування»: вставка й копіювання в полях"
+        guard let main = NSApp.mainMenu else {
+            return Check(area: "Вікно AppKit", name: name, status: .skipped, detail: "рядка меню немає")
+        }
+        let wanted: [(String, String, NSEvent.ModifierFlags)] = [
+            ("undo:", "z", [.command]), ("redo:", "z", [.command, .shift]),
+            ("cut:", "x", [.command]), ("copy:", "c", [.command]),
+            ("paste:", "v", [.command]), ("selectAll:", "a", [.command]),
+        ]
+        let edit = main.items.compactMap(\.submenu).first { menu in
+            menu.items.contains { $0.action.map(NSStringFromSelector) == "paste:" }
+        }
+        guard let edit else {
+            return Check(area: "Вікно AppKit", name: name, status: .failed,
+                         detail: "у рядку меню немає розділу з «Вставити» — ⌘V у полях не працює")
+        }
+        var trouble: [String] = []
+        let field = NSTextField(string: "Слово на пробу")
+        field.frame = NSRect(x: 0, y: 900, width: 200, height: 22)
+        host.addSubview(field)
+        defer { field.removeFromSuperview() }
+        host.window?.makeFirstResponder(field)
+        let editor = field.currentEditor()
+        if editor == nil { trouble.append("поле не дало редактора") }
+        for (action, key, modifiers) in wanted {
+            guard let item = edit.items.first(where: { $0.action.map(NSStringFromSelector) == action }) else {
+                trouble.append("немає пункту \(action)")
+                continue
+            }
+            if item.keyEquivalent != key || item.keyEquivalentModifierMask != modifiers {
+                trouble.append("\(action) на «\(item.keyEquivalent)», а не на «\(key)»")
+            }
+            if item.target != nil { trouble.append("\(action) прив'язаний до цілі, а не до фокуса") }
+            if item.title.isEmpty || item.title.hasPrefix("Отмен") || item.title == "Вставить" {
+                trouble.append("\(action) без українського підпису: «\(item.title)»")
+            }
+            // Скасування веде вікно (його `undoManager`), а не редактор поля.
+            if let editor, !action.hasSuffix("do:"), !editor.responds(to: NSSelectorFromString(action)) {
+                trouble.append("редактор поля не знає \(action)")
+            }
+        }
+        if let editor {
+            editor.selectAll(nil)
+            if editor.selectedRange.length != field.stringValue.utf16.count {
+                trouble.append("«Виділити все» в полі виділило \(editor.selectedRange.length) знаків")
+            }
+        }
+        host.window?.makeFirstResponder(nil)
+        return Check(area: "Вікно AppKit", name: name, status: trouble.isEmpty ? .ok : .failed,
+                     detail: trouble.isEmpty
+                         ? "розділ «\(edit.title)»: " + edit.items.filter { !$0.isSeparatorItem }.map(\.title).joined(separator: ", ")
+                         : trouble.joined(separator: "; "))
+    }
+
+    /// Прокрутка, про яку попросили, поки список ще не мав висоти.
+    ///
+    /// Так відкривалася вкладка «Пісні»: першу пісню ставили «по центру»
+    /// видимої області заввишки нуль, список з'їжджав на пів рядка, і вибрана
+    /// перша пісня стояла під полем швидкого вибору (0.84, скачана збірка).
+    private static func nativeScrollBeforeHeight(_ host: NSView) -> [Check] {
+        var checks: [Check] = []
+        let source = CountingSource(count: 60)
+        let list = NativeList(mode: .list, metrics: .songs, heights: .uniform(34), fontSize: 13)
+        list.frame = NSRect(x: 900, y: 0, width: 340, height: 0)
+        host.addSubview(list)
+        defer {
+            list.source = nil
+            list.removeFromSuperview()
+        }
+        list.source = source
+        host.layoutSubtreeIfNeeded()
+
+        list.scrollTo(0, place: .center)
+        host.layoutSubtreeIfNeeded()
+        list.frame.size.height = 600
+        host.layoutSubtreeIfNeeded()
+        let offset = list.scrollOffsetForCheck
+        checks.append(Check(area: "Вікно AppKit", name: "Перший рядок, вибраний до появи висоти, видно цілком",
+                            status: abs(offset) < 0.5 ? .ok : .failed,
+                            detail: "зсув від початку \(Int(offset.rounded())) пт, перший видимий рядок \(list.visibleItems.lowerBound)"))
+
+        list.frame.size.height = 0
+        host.layoutSubtreeIfNeeded()
+        list.scrollTo(45, place: .center)
+        list.frame.size.height = 300
+        host.layoutSubtreeIfNeeded()
+        let visible = list.visibleItems
+        checks.append(Check(area: "Вікно AppKit", name: "Рядок посередині, вибраний до появи висоти, стає видно",
+                            status: visible.contains(45) ? .ok : .failed,
+                            detail: "просили 45, видно \(visible.lowerBound)…\(max(visible.lowerBound, visible.upperBound - 1))"))
         return checks
     }
 

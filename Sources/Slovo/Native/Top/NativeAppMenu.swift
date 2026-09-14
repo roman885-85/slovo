@@ -72,6 +72,7 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
             // звіряє за ними опис. Порожнє до першого відкриття меню і для
             // того, і для іншого виглядає як «пунктів немає зовсім».
             menuNeedsUpdate(menu)
+            if group == .file { main.addItem(editItem()) }
         }
 
         // «Вікно» — системний розділ: згорнути, розгорнути, список вікон.
@@ -93,6 +94,47 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
 
         NSApp.mainMenu = main
         NSApp.windowsMenu = windowsMenu
+    }
+
+    /// «Редагування» — стандартні команди тексту: скасувати, вирізати,
+    /// копіювати, вставити, виділити все.
+    ///
+    /// У macOS ⌘C, ⌘V, ⌘X, ⌘A і ⌘Z поле введення отримує не саме, а через
+    /// пункти цього розділу. Поки розділу не було, у жодному полі програми —
+    /// пошук, назва пісні, текст оголошення, «Перейти до теки» у вікні вибору
+    /// файлу — не працювали ні вставка, ні копіювання (0.84, перевірка
+    /// скачаної збірки). Ціль у пунктів порожня: команду бере той, хто зараз
+    /// у фокусі, а коли взяти нікому, пункт гасне сам і клавіша йде далі.
+    private func editItem() -> NSMenuItem {
+        let item = NSMenuItem()
+        let menu = NSMenu(title: OurWords.t("Правка"))
+        let entries: [(String, Selector, String, NSEvent.ModifierFlags)] = [
+            ("Отменить действие", Selector(("undo:")), "z", [.command]),
+            ("Повторить действие", Selector(("redo:")), "z", [.command, .shift]),
+            ("", Selector(("separator")), "", []),
+            ("Вырезать", #selector(NSText.cut(_:)), "x", [.command]),
+            ("Копировать", #selector(NSText.copy(_:)), "c", [.command]),
+            ("Вставить", #selector(NSText.paste(_:)), "v", [.command]),
+            ("Выделить всё", #selector(NSText.selectAll(_:)), "a", [.command]),
+        ]
+        var labelled: [(NSMenuItem, String)] = []
+        for (title, action, key, modifiers) in entries {
+            guard !title.isEmpty else {
+                menu.addItem(.separator())
+                continue
+            }
+            let entry = menu.addItem(withTitle: OurWords.t(title), action: action, keyEquivalent: key)
+            entry.keyEquivalentModifierMask = modifiers
+            labelled.append((entry, title))
+        }
+        item.title = menu.title
+        item.submenu = menu
+        relabelers.append { [weak item, weak menu] in
+            menu?.title = OurWords.t("Правка")
+            item?.title = OurWords.t("Правка")
+            for (entry, title) in labelled { entry.title = OurWords.t(title) }
+        }
+        return item
     }
 
     /// Пункти, побудовані раз і назавжди (розділ програми та «Вікно»): з

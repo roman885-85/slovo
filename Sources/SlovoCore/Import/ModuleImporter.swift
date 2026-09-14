@@ -368,7 +368,7 @@ public enum ModuleImporter {
         if existing.contains(where: { $0.url.path == resolved.path || $0.originURL.path == resolved.path }) {
             throw ImportProblem.alreadyAdded(resolved.path)
         }
-        guard looksLikeDataFolder(resolved) else { throw ImportProblem.nothingToImport(resolved.path) }
+        guard looksLikeDataFolder(resolved, archives: true) else { throw ImportProblem.nothingToImport(resolved.path) }
         if let config = configURL(in: resolved), (try? IniSettings(fileAt: config))?.sections.isEmpty ?? true {
             throw ImportProblem.badConfig(resolved.path)
         }
@@ -568,9 +568,73 @@ public enum ModuleImporter {
                                                    includingPropertiesForKeys: [.isDirectoryKey],
                                                    options: [.skipsHiddenFiles])) ?? []
         for entry in entries.sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }) {
-            if let item = moduleItem(at: entry, destination: destination) { items.append(item) }
+            if let item = moduleItem(at: entry, destination: destination) {
+                items.append(item)
+            } else if entry.pathExtension.lowercased() == "zip" {
+                items.append(contentsOf: archivedModuleItems(at: entry, destination: destination))
+            }
         }
         return items
+    }
+
+    /// Модулі з архівів `.zip`, що лежать у теці джерела.
+    ///
+    /// Так виглядає тека завантажень: модулі «Цитати з Біблії» з GitHub
+    /// приходять архівами, і людина вибирає теку, де їх кілька. Раніше майстер
+    /// показував лише розпаковані модулі, а архіви мовчки пропускав
+    /// (0.84, перевірка скачаної збірки). Розпаковуємо лише ті архіви, у
+    /// переліку файлів яких видно модуль, — тека завантажень повна чужих zip.
+    private static func archivedModuleItems(at zip: URL, destination: ImportDestination) -> [ImportItem] {
+        guard archiveMentionsModule(zip), let unpacked = try? unpackedOnce(zip) else { return [] }
+        let root = descendIntoSingleFolder(unpacked)
+        if let single = moduleItem(at: root, destination: destination) { return [single] }
+        let folder = modulesFolder(in: root)
+        let entries = (try? FileManager.default.contentsOfDirectory(at: folder,
+                                                                    includingPropertiesForKeys: [.isDirectoryKey],
+                                                                    options: [.skipsHiddenFiles])) ?? []
+        return entries
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            .compactMap { moduleItem(at: $0, destination: destination) }
+    }
+
+    /// Чи згадано в переліку файлів архіву модуль або пісенник. Перелік
+    /// читає системна `zipinfo` — без розпакування.
+    static func archiveMentionsModule(_ zip: URL) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/zipinfo")
+        process.arguments = ["-1", zip.path]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+        do { try process.run() } catch { return false }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return false }
+        let listing = (String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)).lowercased()
+        let marks = ["bibleqt.ini", ".vbm", ".\(SongBookJSON.pathExtension)", ".sqlite3", ".sqlite", ".bbl.mybible"]
+        return listing.split(whereSeparator: \.isNewline).contains { line in
+            marks.contains { line.hasSuffix($0) }
+        }
+    }
+
+    /// Розпаковані архіви цього запуску: опис джерела будується не раз
+    /// (відкрили майстер, повернулися «Назад»), а розпаковувати той самий
+    /// архів щоразу в нову тимчасову теку ні до чого.
+    nonisolated(unsafe) private static var unpackedArchives: [String: URL] = [:]
+    private static let unpackedLock = NSLock()
+
+    private static func unpackedOnce(_ zip: URL) throws -> URL {
+        let modified = (try? zip.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        let key = zip.path + "|" + String(modified?.timeIntervalSince1970 ?? 0)
+        unpackedLock.lock()
+        let known = unpackedArchives[key]
+        unpackedLock.unlock()
+        if let known, FileManager.default.fileExists(atPath: known.path) { return known }
+        let fresh = try unpack(zip)
+        unpackedLock.lock()
+        unpackedArchives[key] = fresh
+        unpackedLock.unlock()
+        return fresh
     }
 
     /// Один рядок списку модулів — або `nil`, якщо це не модуль.
@@ -810,7 +874,10 @@ public enum ModuleImporter {
     // MARK: - Дрібниці
 
     /// Чи схоже на теку з даними: є модулі, шаблони, фони або ini.
-    public static func looksLikeDataFolder(_ url: URL) -> Bool {
+    /// - Parameter archives: зважати й на архіви `.zip` із модулями. Лише для
+    ///   теки, вибраної руками: обхід дисків відкривав би кожен zip у домашній
+    ///   теці.
+    public static func looksLikeDataFolder(_ url: URL, archives: Bool = false) -> Bool {
         let fm = FileManager.default
         guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false else { return false }
         if iniURL(inModule: url) != nil { return true }
@@ -819,10 +886,14 @@ public enum ModuleImporter {
         // Гола тека з модулями чи пісенниками — теж джерело.
         let entries = (try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey],
                                                    options: [.skipsHiddenFiles])) ?? []
-        return entries.contains { entry in
-            if ["vbm", "sqlite3", "sqlite", "mybible"].contains(entry.pathExtension.lowercased()) { return true }
-            return iniURL(inModule: entry) != nil
+        // `.songbook` — свій формат пісенника: тека лише з ними раніше
+        // відкидалася як «нічого імпортувати».
+        let fileKinds = ["vbm", SongBookJSON.pathExtension, "sqlite3", "sqlite", "mybible"]
+        if entries.contains(where: { fileKinds.contains($0.pathExtension.lowercased()) || iniURL(inModule: $0) != nil }) {
+            return true
         }
+        guard archives else { return false }
+        return entries.contains { $0.pathExtension.lowercased() == "zip" && archiveMentionsModule($0) }
     }
 
     /// Ім'я версії для колонки «Версія»: з ini, інакше з імені теки.
@@ -1060,8 +1131,12 @@ public enum ModuleImporter {
 
     private static func unpack(_ archive: URL) throws -> URL {
         let fm = FileManager.default
+        // Усередині тимчасової теки — тека з ім'ям архіву: архів без обгортки
+        // (bibleqt.ini одразу в корені) інакше ліг би модулем з ім'ям
+        // «slovo-import-<UUID>».
         let target = fm.temporaryDirectory
             .appendingPathComponent("slovo-import-" + UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(archive.deletingPathExtension().lastPathComponent, isDirectory: true)
         try fm.createDirectory(at: target, withIntermediateDirectories: true)
 
         let process = Process()

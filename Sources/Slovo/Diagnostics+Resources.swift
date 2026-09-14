@@ -269,7 +269,73 @@ extension Diagnostics {
             && AppUpdater.isNewer("0.68.1", than: "0.68") && AppUpdater.isNewer("0.69.10", than: "0.69.9")
         checks.append(Check(area: area, name: "Версії програми порівнюються як десяткові", status: versions ? .ok : .failed,
                             detail: "0.8 > 0.69, 0.7 > 0.68, 0.65 > 0.6, 1.0 > 0.99, 0.8 = 0.80, 0.68.1 > 0.68, 0.69.10 > 0.69.9"))
+
+        checks.append(importArchivesInFolder(area: area))
         return checks
+    }
+
+    /// Майстер імпорту: тека, де модулі лежать архівами (тека завантажень), і
+    /// тека лише з пісенниками `.songbook`.
+    ///
+    /// У 0.84 архіви в теці мовчки пропускались, а тека з одними `.songbook`
+    /// відкидалась словами «нічого імпортувати».
+    private static func importArchivesInFolder(area: String) -> Check {
+        let name = "Імпорт: архіви модулів у теці та тека лише з пісенниками"
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("slovo-архіви-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let build = root.appendingPathComponent("збирання")
+        let folder = root.appendingPathComponent("завантаження")
+        let songs = root.appendingPathComponent("пісенники")
+        var trouble: [String] = []
+        func zip(_ from: URL, _ to: URL, keepParent: Bool) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            process.arguments = ["-c", "-k"] + (keepParent ? ["--keepParent"] : []) + [from.path, to.path]
+            try? process.run()
+            process.waitUntilExit()
+        }
+        do {
+            let module = build.appendingPathComponent("Bible_Проба_Касіян")
+            try fm.createDirectory(at: module, withIntermediateDirectories: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try fm.createDirectory(at: songs, withIntermediateDirectories: true)
+            try "BibleName = Проба Касіяна\r\nBibleShortName = ПКас\r\nBookQty = 0\r\n"
+                .write(to: module.appendingPathComponent("bibleqt.ini"), atomically: true, encoding: .utf8)
+            zip(module, folder.appendingPathComponent("kassian.zip"), keepParent: true)
+            zip(module, folder.appendingPathComponent("плоский.zip"), keepParent: false)
+            let other = build.appendingPathComponent("нотатки.txt")
+            try "не модуль".write(to: other, atomically: true, encoding: .utf8)
+            zip(other, folder.appendingPathComponent("інше.zip"), keepParent: false)
+            try "{}".write(to: songs.appendingPathComponent("проба.songbook"), atomically: true, encoding: .utf8)
+        } catch {
+            return Check(area: area, name: name, status: .skipped, detail: "не зібрано джерело: \(error)")
+        }
+
+        let destination = ImportDestination(dataRoot: root.appendingPathComponent("куди"))
+        if let source = try? ModuleImporter.source(at: folder) {
+            let modules = ModuleImporter.inventory(of: source, destination: destination).modules
+            let targets = modules.map(\.destinationURL.lastPathComponent).sorted()
+            if targets != ["Bible_Проба_Касіян", "плоский"] {
+                trouble.append("з трьох архівів узято \(targets) замість модуля з обгорткою й модуля без неї")
+            }
+            if let first = modules.first(where: { $0.destinationURL.lastPathComponent == "Bible_Проба_Касіян" }),
+               first.title != "ПКас" {
+                trouble.append("назва модуля з архіву «\(first.title)», а не «ПКас»")
+            }
+        } else {
+            trouble.append("тека з архівами модулів не прийнята як джерело")
+        }
+        if (try? ModuleImporter.source(at: songs)) == nil {
+            trouble.append("тека лише з .songbook не прийнята як джерело")
+        }
+        if ModuleImporter.looksLikeDataFolder(folder) {
+            trouble.append("обхід дисків відкриває архіви (має дивитися лише на розпаковане)")
+        }
+        return Check(area: area, name: name, status: trouble.isEmpty ? .ok : .failed,
+                     detail: trouble.isEmpty
+                         ? "тека з 3 архівами дала 2 модулі (з обгорткою й без), чужий zip пропущено; тека з .songbook прийнята"
+                         : trouble.joined(separator: "; "))
     }
 
     /// Те саме, але з мережею — `--check=ресурси-мережа`: свій каталог і

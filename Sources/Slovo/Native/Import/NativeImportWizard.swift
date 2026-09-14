@@ -192,17 +192,14 @@ final class NativeImportWizard: NSView {
         }
     }
 
-    /// Номер подраздела руководства — чтобы окно можно было сверять с ним
-    /// страница за страницей.
+    /// «Крок 2 з 6» під заголовком сторінки.
+    ///
+    /// Тут стояли номери підрозділів посібника VisioBible («4.2.1»): людині
+    /// без того посібника вони нічого не кажуть.
     private var pageStep: String {
-        switch model.page {
-        case .intro:     return "4.2"
-        case .versions:  return "4.2.1"
-        case .modules:   return "4.2.2"
-        case .templates: return "4.2.3"
-        case .images:    return "4.2.4"
-        case .summary:   return "4.2.6"
-        }
+        let pages = ImportWizardModel.Page.allCases
+        let position = (pages.firstIndex(of: model.page) ?? 0) + 1
+        return OurWords.t("Шаг %s из %s", "\(position)", "\(pages.count)")
     }
 
     // MARK: - Действия
