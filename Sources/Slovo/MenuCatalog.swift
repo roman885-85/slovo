@@ -114,6 +114,12 @@ enum SlovoMenu {
                                 action: { NativeBrowserRemoteWindow.show(state: state) }),
                 NativeMenuEntry(title: OurWords.t("Программы для Android…"),
                                 action: { NativeAndroidAppsWindow.show() }),
+                // Ресурси й оновлення з GitHub — власник: «скачать из гитхаба
+                // ресурсы (с выбором)… обновления с программы».
+                NativeMenuEntry(title: OurWords.t("Ресурсы с GitHub…"),
+                                action: { NativeResourcesWindow.show(state: state) }),
+                NativeMenuEntry(title: OurWords.t("Проверить обновление программы…"),
+                                action: { AppUpdater.checkNow(state: state) }),
                 NativeMenuEntry(title: caption("N42", "Конструктор слайда"),
                                 action: { SlideConstructorWindow.show(state: state) }),
                 NativeMenuEntry(title: OurWords.t("Редактор веб-слайдов…"),

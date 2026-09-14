@@ -46,6 +46,17 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
         // интерфейса читается из настроек следом, и подписи должны быть уже на месте.
         OurWordsBundle.load()
         start()
+        // Ресурси й оновлення з GitHub — не в самоперевірці. Пропозиція
+        // завантажити переклади — коли бібліотека вже прочитана: доти не
+        // видно, порожня тека модулів чи ще читається.
+        if !CommandLine.arguments.contains(where: { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") }) {
+            whenLibraryIsReady { [state] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    ResourceOffer.offerIfEmpty(state: state)
+                    AppUpdater.checkOnLaunch(state: state, intervalDays: SettingsStore.shared.settings.options.updateInterval)
+                }
+            }
+        }
         // Дані перенесли в свій дім — сказати один раз, коли вікно вже є.
         if let note = AppState.migrationNote,
            !CommandLine.arguments.contains(where: { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") }) {

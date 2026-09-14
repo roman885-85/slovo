@@ -1,17 +1,20 @@
 import AppKit
 import SlovoCore
 
-/// Вкладка «Обновление» (`TSUpdate`) на AppKit.
+/// Вкладка «Оновлення» (`TSUpdate`): програма й ресурси з GitHub.
 ///
-/// У автора здесь один переключатель — как часто проверять обновления.
-/// Проверять пока нечего: своего сервера обновлений у программы нет, поэтому
-/// значение только хранится, и сказано об этом прямо, а не спрятано за
-/// неработающей кнопкой.
+/// Власник: «в последствии они (ресурсы) будут обновляться и можно
+/// выполнять обновления с программы, также при обновлении самой программы
+/// также выполнять обновление с того же ресурса». Перемикач «як часто
+/// перевіряти» — автора; кнопки — наші: перевірити випуск на GitHub,
+/// відкрити ресурси.
 @MainActor
 final class NativeSettingsUpdateTab {
 
     private let state: AppState
     private let store: SettingsStore
+    private let versionLabel = NativeForm.label("", secondary: false)
+    private let checkResult = NativeForm.label("", secondary: true)
 
     init(state: AppState, store: SettingsStore) {
         self.state = state
@@ -19,7 +22,7 @@ final class NativeSettingsUpdateTab {
     }
 
     var page: NSView {
-        // Значения — дни: так их и пишет оригинал в настройки.
+        // Значення — дні: так їх і пише оригінал у налаштування.
         let days = [0, 7, 30, 365]
         let titles = [state.vb("RGUpdateIntervals->Item0", "Никогда (отключить проверку)"),
                       state.vb("RGUpdateIntervals->Item1", "Неделя"),
@@ -33,16 +36,48 @@ final class NativeSettingsUpdateTab {
                     store.settings.options.updateInterval = days[min(index, days.count - 1)]
                 })),
             ]),
+            NativeForm.Row("", [NativeForm.label(OurWords.t("При запуске программа спрашивает GitHub, вышла ли новая версия, не чаще выбранного срока."), secondary: true)]),
         ])
 
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = info?["CFBundleVersion"] as? String ?? "1"
-        let about = NativeForm.Group("", [
-            NativeForm.Row("", [NativeForm.label(OurWords.t("Версия %s (%s)", short, build), secondary: false)]),
-            NativeForm.Row("", [NativeForm.label(OurWords.t(
-                "Сервера обновлений у «Слова» нет — значение хранится для совместимости со старым файлом настроек."))]),
+        versionLabel.stringValue = OurWords.t("Версия %s (%s)", AppUpdater.currentVersion,
+                                              Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "")
+        let program = NativeForm.Group(OurWords.t("Программа"), [
+            NativeForm.Row("", [versionLabel]),
+            NativeForm.Row("", [
+                NativeForm.button(OurWords.t("Проверить обновление на GitHub"), hint: nil) { [weak self] in self?.check() },
+                checkResult,
+            ]),
         ])
-        return NativeForm.Page([interval, about])
+
+        let resources = NativeForm.Group(OurWords.t("Ресурсы"), [
+            NativeForm.Row("", [
+                NativeForm.button(OurWords.t("Ресурсы с GitHub…"), hint: OurWords.t("Переводы, песенники, фоны, шаблоны: загрузить новые или обновить")) { [state] in
+                    NativeResourcesWindow.show(state: state)
+                },
+                NativeForm.button(OurWords.t("Обновить ресурсы…"), hint: OurWords.t("Отметить всё, что обновилось в каталоге")) { [state] in
+                    NativeResourcesWindow.show(state: state, updatesOnly: true)
+                },
+            ]),
+            NativeForm.Row("", [NativeForm.label(OurWords.t("Каталог: github.com/roman885-85/slovo-resources; переводы также из «Цитаты из Библии» на GitHub."), secondary: true)]),
+        ])
+        return NativeForm.Page([interval, program, resources])
+    }
+
+    private func check() {
+        checkResult.stringValue = OurWords.t("Спрашиваю GitHub…")
+        AppUpdater.fetchLatest { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
+                self.checkResult.stringValue = "\(error)"
+            case .success(let release):
+                if AppUpdater.isNewer(release.version, than: AppUpdater.currentVersion) {
+                    self.checkResult.stringValue = OurWords.t("Есть новая версия: %s", release.version)
+                    AppUpdater.offer(release, state: self.state)
+                } else {
+                    self.checkResult.stringValue = OurWords.t("У вас последняя версия (%s)", release.version)
+                }
+            }
+        }
     }
 }

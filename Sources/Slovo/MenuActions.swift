@@ -60,6 +60,11 @@ final class MenuActions: NSObject {
     }
 
     @objc func openHelp() {
+        // Довідка — документація на GitHub: вона одна для всіх і завжди свіжа.
+        if let online = URL(string: "https://github.com/roman885-85/slovo#readme") {
+            NSWorkspace.shared.open(online)
+            return
+        }
         guard let url = state.helpFileURL else {
             let alert = NSAlert()
             alert.messageText = OurWords.t("Справка не найдена")

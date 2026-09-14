@@ -123,6 +123,11 @@ cp Resources/Defaults/hotkeys.ini "$APP/Contents/Resources/app/hotkeys.ini"
 cp Resources/Defaults/ЧИТАТИ.md "$APP/Contents/Resources/app/ЧИТАТИ.md"
 [ -f "$APP/Contents/Resources/app/inconsistencies.sqlite3" ] || [ ! -f Resources/Numbering/inconsistencies.sqlite3 ] \
   || cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
+# Пісенники VisioBible у пакеті — у свій формат .songbook, до підпису пакета.
+SCAN=".build/$NATIVE-apple-macosx/$CONFIG/slovo-scan"
+if [ -x "$SCAN" ] && [ -d "$APP/Contents/Resources/app/Modules" ]; then
+  echo "пісенники: $("$SCAN" --songbooks "$APP/Contents/Resources/app/Modules" 2>&1 | tail -1)"
+fi
 echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md; модулів: $(ls "$APP/Contents/Resources/app/Modules" 2>/dev/null | wc -l | tr -d ' ')"
 
 # Програми для Android — усередині «Слова»: людина зберігає їх з програми

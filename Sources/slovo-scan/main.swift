@@ -10,6 +10,25 @@ guard arguments.count > 1 else {
     exit(2)
 }
 
+// Пісенники VisioBible у теці модулів → свій .songbook (оригінали — в
+// «Імпорт з VisioBible» поруч). Кличе deploy.sh до підпису пакета, щоб
+// програмі не доводилося писати в підписаний пакет на першому запуску.
+if arguments[1] == "--songbooks", arguments.count >= 3 {
+    let modules = URL(fileURLWithPath: arguments[2])
+    var report = DataHome.Report(source: modules.path)
+    DataHome.convertSongBooks(in: modules,
+                              archive: modules.deletingLastPathComponent().appendingPathComponent(DataHome.importArchiveName),
+                              report: &report)
+    print(report.summary)
+    exit(report.errors.isEmpty ? 0 : 1)
+}
+
+// Ресурси для GitHub: zip-и та catalog.json з теки даних програми.
+if arguments[1] == "--catalog", arguments.count >= 5 {
+    exit(runCatalogPack(app: URL(fileURLWithPath: arguments[2]),
+                        out: URL(fileURLWithPath: arguments[3]), base: arguments[4]))
+}
+
 let modulesURL = URL(fileURLWithPath: arguments[1])
 let full = arguments.contains("--full")
 let showIndex = arguments.firstIndex(of: "--show").map { $0 + 1 }

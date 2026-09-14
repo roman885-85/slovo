@@ -2160,6 +2160,8 @@ enum Diagnostics {
         ("медіа", { mediaFlowSection(state: $0) + mediaComplaintsSection(state: $0) }),
         ("пісні", { nativeSongsSection(state: $0) }),
         ("дім", { dataHomeSection(state: $0) }),
+        ("ресурси", { resourcesSection(state: $0) }),
+        ("ресурси-мережа", { resourcesNetworkSection(state: $0) }),
         ("пошук", { search($0) + deskSection($0) }),
         ("вкладки", { showSection(state: $0) }),
         ("низ", { nativeBottomSection(state: $0) }),
