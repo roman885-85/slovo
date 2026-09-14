@@ -562,7 +562,12 @@ final class DeskModel: ObservableObject {
 
     /// Подать пункт плана на экран: щелчок по нему делает то же, что двойной
     /// щелчок по стиху или по части песни.
+    /// Скільки разів відкривали пункт Плану — самоперевірці (клацання не
+    /// відкриває, подвійне і Enter — відкривають).
+    private(set) var planActivationsForCheck = 0
+
     func activate(_ item: PlanItem, state: AppState) {
+        planActivationsForCheck += 1
         plan.select(id: item.id)
         switch item.content {
         case .scripture(let reference):
@@ -589,9 +594,7 @@ final class DeskModel: ObservableObject {
 
         case .song(let reference):
             guard let library = state.songLibrary,
-                  let entry = library.books.first(where: {
-                      $0.url.lastPathComponent.caseInsensitiveCompare(reference.bookFileName) == .orderedSame
-                  }),
+                  let entry = library.entry(fileName: reference.bookFileName),
                   let book = library.book(entry.id),
                   let song = reference.song(in: book),
                   // Песня целиком начинается с первой части — как двойной
@@ -896,9 +899,7 @@ final class DeskModel: ObservableObject {
 
         case .song:
             guard let library = state.songLibrary,
-                  let entry = library.books.first(where: {
-                      $0.url.lastPathComponent.caseInsensitiveCompare(record.songBookFileName) == .orderedSame
-                  }) else {
+                  let entry = library.entry(fileName: record.songBookFileName) else {
                 NativeTrace.say("історія: пісенника «\(record.songBookFileName)» немає")
                 return
             }

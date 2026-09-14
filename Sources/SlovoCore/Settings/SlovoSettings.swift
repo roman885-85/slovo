@@ -304,8 +304,12 @@ public struct ModuleRosterEntry: Codable, Sendable, Hashable, Identifiable {
         self.isEnabled = isEnabled
     }
 
-    /// Модуль це чи Пісенник: у пісенників розширення `.vbm`.
-    public var isSongBook: Bool { name.lowercased().hasSuffix(".vbm") }
+    /// Модуль це чи Пісенник: у пісенників розширення `.songbook` (своє)
+    /// або `.vbm` (VisioBible).
+    public var isSongBook: Bool {
+        let lower = name.lowercased()
+        return lower.hasSuffix(".vbm") || lower.hasSuffix(".songbook")
+    }
 
     /// Де модуль лежить на диску. Запис — у дусі оригіналу: відносний
     /// шлях зі зворотними скісними від теки даних (`Modules\rst+\`) або повний

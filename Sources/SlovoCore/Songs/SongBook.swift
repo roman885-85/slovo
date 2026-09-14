@@ -123,7 +123,14 @@ public struct SongBook: Sendable {
 
     public init(fileAt url: URL) throws {
         let data = try Data(contentsOf: url)
-        try self.init(data: data, name: url.deletingPathExtension().lastPathComponent)
+        let name = url.deletingPathExtension().lastPathComponent
+        // Свій формат `.songbook` (JSON) — за розширенням або за першим
+        // знаком; `.vbm` VisioBible — далі, як і раніше.
+        if SongBookJSON.isSongBookFile(url) || data.first == UInt8(ascii: "{") {
+            self = try SongBookJSON.book(from: data, name: name)
+            return
+        }
+        try self.init(data: data, name: name)
     }
 
     public init(data: Data, name: String) throws {

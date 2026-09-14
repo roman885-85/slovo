@@ -620,7 +620,7 @@ final class SongEditorModel: ObservableObject {
     func createBook() {
         guard confirmDiscardChanges() else { return }
         guard let url = SongPrompt.saveFile(title: captions.caption("SaveModuleDialog", "Сохранить Песенник как..."),
-                                            name: OurWords.t("Новый песенник"), extensions: ["vbm"],
+                                            name: OurWords.t("Новый песенник"), extensions: [SongBookJSON.pathExtension],
                                             directory: modulesFolder) else { return }
 
         let name = url.deletingPathExtension().lastPathComponent
@@ -662,7 +662,7 @@ final class SongEditorModel: ObservableObject {
                 case .cancel: askAll = .skip; return .skip
                 }
             }
-            try SongBookWriter.write(target, to: destination.url)
+            try SongBookJSON.save(target, near: destination.url)
             // Итогового окна «добавлено столько-то» в оригинале нет: после
             // «Ок» руководство не описывает ни одного сообщения, и в
             // SongsPluginFrame под него нет соответствующей строки.
@@ -712,7 +712,7 @@ final class SongEditorModel: ObservableObject {
             return
         }
         guard let url = SongPrompt.saveFile(title: captions.caption("SaveModuleDialog", "Сохранить Песенник как..."),
-                                            name: suggestion, extensions: ["vbm"],
+                                            name: suggestion, extensions: [SongBookJSON.pathExtension],
                                             directory: modulesFolder) else { return }
 
         let editor = SongBookEditor(book: imported, url: url, isModified: true)

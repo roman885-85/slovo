@@ -216,14 +216,18 @@ public final class SongBookEditor {
     @discardableResult
     public func save() throws -> URL {
         guard let url else { throw SongBookError.notASongBook(OurWords.t("путь к Песеннику не задан")) }
-        try save(to: url)
-        return url
+        return try save(to: url)
     }
 
-    public func save(to destination: URL) throws {
-        try SongBookWriter.write(book, to: destination)
-        url = destination
+    /// Повертає, куди насправді лягло: пишемо у своєму форматі `.songbook`;
+    /// на `.vbm` показали — файл ляже поруч як `.songbook`, а `.vbm`
+    /// лишиться для VisioBible.
+    @discardableResult
+    public func save(to destination: URL) throws -> URL {
+        let target = try SongBookJSON.save(book, near: destination)
+        url = target
         isModified = false
+        return target
     }
 
     // MARK: - Групи (5.3.9.4)

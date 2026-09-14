@@ -76,19 +76,15 @@ final class NativePlanPane: NSView, NativeListSource {
             self.desk.planSelection = Set(selection.compactMap { self.desk.plan[$0]?.id })
             self.updateButtons()
         }
+        // Одинарне клацання лише виділяє пункт; відкривають його подвійне
+        // клацання або Enter — так вирішив власник (14.09.2026): «по нажатию
+        // выделяется пункт плана, а по двойному щелчку мыши (или Enter)
+        // активируется». Доти (0.66–0.67) відкривало й одинарне.
         list.onActivate = { [weak self] index in
             guard let self, let item = self.desk.plan[index] else { return }
             self.desk.activate(item, state: self.state)
         }
-        // Одинарне клацання теж відкриває пункт — як на планшеті, у пульті й
-        // в оригіналі. Доти потрібне було подвійне, і власник бачив «план не
-        // завжди спрацьовує»: спрацьовував, коли випадково клацали двічі.
-        // Протяжка (переставити пункт) і клацання з клавішами (вибрати
-        // кілька) пункт не відкривають.
-        list.onClick = { [weak self] index in
-            guard let self, let item = self.desk.plan[index] else { return }
-            self.desk.activate(item, state: self.state)
-        }
+        list.activatesOnReturn = true
         reorder = NativeListReorder(list: list)
         reorder.onMove = { [weak self] from, to in
             self?.desk.movePlan(fromOffsets: IndexSet(integer: from), toOffset: to)

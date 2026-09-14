@@ -52,7 +52,7 @@ public struct ModuleLibrary {
             }
 
             switch entry.pathExtension.lowercased() {
-            case "vbm":
+            case "vbm", "songbook":
                 songs.append(entry)
             case "sqlite3", "sqlite":
                 // Супутники модуля MyBible — словники, коментарі, перехресні
@@ -84,7 +84,14 @@ public struct ModuleLibrary {
 
         self.modules = modules
         self.failures = failures
-        self.songFiles = songs
+        // Свій формат головніший: коли поруч лежать `pv3055.songbook` і
+        // `pv3055.vbm` (той, з якого перетворили), у списку — лише перший.
+        let own = Set(songs.filter { $0.pathExtension.lowercased() == SongBookJSON.pathExtension }
+            .map { $0.deletingPathExtension().lastPathComponent.lowercased() })
+        self.songFiles = songs.filter {
+            $0.pathExtension.lowercased() != "vbm"
+                || !own.contains($0.deletingPathExtension().lastPathComponent.lowercased())
+        }
     }
 
     public func module(withIdentifier id: String) -> TextModule? {

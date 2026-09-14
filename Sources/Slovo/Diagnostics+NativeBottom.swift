@@ -341,6 +341,25 @@ extension Diagnostics {
                             detail: "у плані \(desk.plan.count) пунктів, "
                                 + "список тримає \(row.plan.list.itemCount)"))
 
+        // Клацання лише виділяє пункт; подвійне клацання та Enter відкривають
+        // (власник, 14.09.2026). Рахуємо відкриття, а не дивимося на стан:
+        // пункти в плані бувають будь-які.
+        if desk.plan.count > 1 {
+            let before = desk.planActivationsForCheck
+            row.plan.list.click(item: 1)
+            let afterClick = desk.planActivationsForCheck
+            row.plan.list.click(item: 1, clickCount: 2)
+            let afterDouble = desk.planActivationsForCheck
+            row.plan.list.click(item: 0)
+            row.plan.list.pressReturnForCheck()
+            let afterReturn = desk.planActivationsForCheck
+            let ok = afterClick == before && afterDouble == before + 1 && afterReturn == before + 2
+            checks.append(Check(area: "Нижній ряд", name: "Пункт Плану: клацання виділяє, подвійне клацання і Enter відкривають",
+                                status: ok ? .ok : .failed,
+                                detail: "після клацання відкриттів +\(afterClick - before), після подвійного +\(afterDouble - afterClick), "
+                                    + "після Enter +\(afterReturn - afterDouble)"))
+        }
+
         // Перетаскивание проверяем на отдельном списке той же выделки: так
         // проверяется именно перенос, а не содержимое чужого плана.
         let sample = SamplePlan(count: 12)

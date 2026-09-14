@@ -174,6 +174,16 @@ public final class SongLibrary {
         books.first { $0.id.caseInsensitiveCompare(id) == .orderedSame }
     }
 
+    /// Збірник за ім'ям файла — повним або без розширення: План та «Історія»
+    /// пам'ятають «pv3055.vbm», а збірник уже лежить як «pv3055.songbook».
+    public func entry(fileName: String) -> Entry? {
+        if let exact = books.first(where: { $0.url.lastPathComponent.caseInsensitiveCompare(fileName) == .orderedSame }) {
+            return exact
+        }
+        let stem = (fileName as NSString).deletingPathExtension
+        return entry(stem)
+    }
+
     private func index(of id: String) -> Int? {
         books.firstIndex { $0.id.caseInsensitiveCompare(id) == .orderedSame }
     }
@@ -238,6 +248,16 @@ public final class SongLibrary {
         touch(key)
         trimCache()
 
+        // Редактор пише у своєму форматі поруч із `.vbm`: відтоді збірник —
+        // це `.songbook`, і саме його віддають планшету й експорту.
+        if books[position].url.pathExtension.lowercased() == "vbm" {
+            let own = books[position].url.deletingPathExtension().appendingPathExtension(SongBookJSON.pathExtension)
+            if FileManager.default.fileExists(atPath: own.path) { books[position] = Entry(
+                id: key, url: own, title: books[position].title, shortName: books[position].shortName,
+                publisher: books[position].publisher, revisionDate: books[position].revisionDate,
+                comment: books[position].comment, songCount: books[position].songCount,
+                isLoaded: books[position].isLoaded, failure: books[position].failure) }
+        }
         books[position].title = book.title.isEmpty ? key : book.title
         books[position].shortName = book.shortName
         books[position].publisher = book.publisher

@@ -303,7 +303,7 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         panel.prompt = state.imp("PBBNext", "Дальше")
 
         var types: [UTType] = [.zip, .folder]
-        for suffix in ["vbm", "sqlite3", "sqlite"] {
+        for suffix in ["vbm", "songbook", "sqlite3", "sqlite"] {
             if let type = UTType(filenameExtension: suffix) { types.append(type) }
         }
         panel.allowedContentTypes = types

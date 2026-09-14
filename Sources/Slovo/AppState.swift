@@ -389,7 +389,9 @@ final class AppState: ObservableObject {
     var isTextBlank: Bool { isTextHidden }
 
     init() {
-        self.modulesFolder = Defaults.modulesFolder ?? Self.guessModulesFolder()
+        // Свій дім даних: чужий корінь (пакет програми, VisioBible)
+        // переноситься сюди один раз — див. `DataHome`.
+        self.modulesFolder = Self.settleModulesFolder()
         self.secondaryModuleIDs = Defaults.secondaryModules
         // Пересылать сюда objectWillChange от NDI и веба нельзя: они шлют
         // счётчики несколько раз в секунду, а это перерисовка всего окна —
@@ -447,14 +449,43 @@ final class AppState: ObservableObject {
     /// де нічого більше не встановлено. Потім особиста тека користувача, куди
     /// лягають додані вручну модулі. Установлений VisioBible не перевіряємо:
     /// програма від нього не залежить.
-    static func guessModulesFolder() -> URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let candidates = [
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/Modules"),
-            home.appendingPathComponent("Library/Application Support/Slovo/Modules"),
-        ]
-        return candidates.first { FileManager.default.fileExists(atPath: $0.path) } ?? candidates[1]
+    /// Тека модулів на старті: збережена, а коли вона чужа (усередині
+    /// пакета чи VisioBible) або не збережена зовсім — свій дім
+    /// (`~/Library/Application Support/Slovo/Modules`), куди дані переносяться
+    /// один раз. Власник: «избавиться от остатков VisioBible».
+    static func settleModulesFolder() -> URL {
+        let fm = FileManager.default
+        let own = DataHome.modules
+        if let saved = Defaults.modulesFolder, fm.fileExists(atPath: saved.path) {
+            guard DataHome.isForeign(modulesFolder: saved) else { return saved }
+            let report = DataHome.migrate(from: saved.deletingLastPathComponent())
+            NativeTrace.say("дім даних: " + report.summary)
+            migrationNote = report.summary
+            Defaults.modulesFolder = own
+            return own
+        }
+        // Нічого не збережено: свій дім, а коли він порожній — наповнити з
+        // того, що є поруч: тека, відкладена deploy.sh, сусідні пакети,
+        // установлений VisioBible.
+        let ownHasModules = ((try? fm.contentsOfDirectory(atPath: own.path)) ?? []).contains { !$0.hasPrefix(".") }
+        if !ownHasModules, let source = DataHome.migrationCandidates(near: Bundle.main.bundleURL).first {
+            let report = DataHome.migrate(from: source)
+            NativeTrace.say("дім даних: " + report.summary)
+            // Стартові модулі з власного пакета (відкрита збірка) — не «перенесення
+            // даних», вікна про це не треба.
+            if !source.standardizedFileURL.path.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path) {
+                migrationNote = report.summary
+            }
+        }
+        try? fm.createDirectory(at: own, withIntermediateDirectories: true)
+        Defaults.modulesFolder = own
+        return own
     }
+
+    /// Що перенесли на старті — сказати людині один раз після появи вікна.
+    static var migrationNote: String?
+
+    static func guessModulesFolder() -> URL { DataHome.modules }
 
     /// Открытие библиотеки в фоне.
     ///
@@ -806,15 +837,11 @@ final class AppState: ObservableObject {
 
     private var dataRoot: URL { modulesFolder.deletingLastPathComponent() }
 
+    /// Своя довідка — «ЧИТАТИ.md» у пакеті. Довідка VisioBible (`.chm`,
+    /// `RemoteAPI_*.txt`) більше не шукається.
     var helpFileURL: URL? {
-        let folder = dataRoot.appendingPathComponent("Help")
-        let code = language?.code ?? "uk"
-        let candidates = ["VisioBible_\(code).chm", "RemoteAPI_\(code).txt", "RemoteAPI_ru.txt"]
-        for name in candidates {
-            let url = folder.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: url.path) { return url }
-        }
-        return nil
+        let own = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/ЧИТАТИ.md")
+        return FileManager.default.fileExists(atPath: own.path) ? own : nil
     }
 
     private func loadLanguages() {
@@ -2163,7 +2190,13 @@ final class AppState: ObservableObject {
         for entry in entries where entry.isSongBook {
             flags[entry.name.lowercased()] = entry.isEnabled
         }
-        let visible = all.filter { flags[$0.url.lastPathComponent.lowercased()] ?? true }
+        // Галочку ставили на «pv3055.vbm», а збірник уже «pv3055.songbook»:
+        // шукаємо й за старим ім'ям.
+        let visible = all.filter {
+            flags[$0.url.lastPathComponent.lowercased()]
+                ?? flags[$0.id.lowercased() + ".vbm"]
+                ?? true
+        }
         guard visible.map(\.id) != songBooks.map(\.id) else { return }
         songBooks = visible
         songRosterRevision += 1

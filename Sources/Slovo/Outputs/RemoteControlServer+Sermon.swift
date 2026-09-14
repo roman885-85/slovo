@@ -41,9 +41,14 @@ extension RemoteControlServer {
                 ["id": module.identifier, "name": module.displayName,
                  "short": module.info.shortName, "books": module.books.count]
             },
+            // Свій `.songbook` планшет не читає — йому збірник іде як `.vbm`,
+            // зібраний на льоту; тому і ім'я, і формат називаємо йому `.vbm`.
             "songbooks": (state.songLibrary?.books ?? []).map { entry -> [String: Any] in
-                ["file": entry.url.lastPathComponent, "name": entry.displayName,
-                 "format": entry.url.pathExtension.lowercased(), "songs": entry.songCount ?? -1]
+                let own = SongBookJSON.isSongBookFile(entry.url)
+                return ["file": own ? entry.id + ".vbm" : entry.url.lastPathComponent,
+                        "name": entry.displayName,
+                        "format": own ? "vbm" : entry.url.pathExtension.lowercased(),
+                        "songs": entry.songCount ?? -1]
             },
         ]
     }
@@ -100,9 +105,17 @@ extension RemoteControlServer {
     /// Пісенник — самим файлом: `.vbm` планшет розбирає сам, як і той, що
     /// людина скопіювала на нього руками.
     private func sendSongBook(_ file: String, state: AppState, on connection: NWConnection) {
-        guard let entry = state.songLibrary?.books.first(where: {
-            $0.url.lastPathComponent.caseInsensitiveCompare(file) == .orderedSame
-        }), let data = try? Data(contentsOf: entry.url) else {
+        guard let library = state.songLibrary, let entry = library.entry(fileName: file) else {
+            respond(connection, 404, ["error": OurWords.t("нет такого песенника")]); return
+        }
+        // Свій формат — у `.vbm` на льоту: планшет розбирає лише його.
+        let data: Data?
+        if SongBookJSON.isSongBookFile(entry.url) {
+            data = library.book(entry.id).flatMap { try? SongBookWriter.data(for: $0) }
+        } else {
+            data = try? Data(contentsOf: entry.url)
+        }
+        guard let data else {
             respond(connection, 404, ["error": OurWords.t("нет такого песенника")]); return
         }
         NativeTrace.say("пульт: пісенник «\(entry.displayName)» на планшет")

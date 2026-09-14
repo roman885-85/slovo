@@ -18,7 +18,74 @@ extension Diagnostics {
         checks.append(contentsOf: nativeSongWindow(state))
         checks.append(nativeSongsLiveBook(state))
         checks.append(nativeSongsTabPath(state))
+        checks.append(nativeSongFormat(state))
         return checks
+    }
+
+    /// Свій формат `.songbook`: те саме, що в `.vbm`, туди й назад; бібліотека
+    /// бере свій файл, а не двійник `.vbm`; План знаходить збірник за старим
+    /// ім'ям; планшет отримує `.vbm`, зібраний на льоту; редактор пише
+    /// `.songbook` поруч із `.vbm`; майстер перетворює `.vbm` у `.songbook`.
+    /// Власник: «формат vbi/vbm — VisioBible, для нас потрібен свій, але щоб
+    /// не поламати імпорт».
+    private static func nativeSongFormat(_ state: AppState) -> Check {
+        let name = "Пісенник у своєму форматі .songbook: без втрат, з імпортом .vbm і експортом для планшета"
+        guard let library = state.songLibrary,
+              let source = library.books.first(where: { $0.url.pathExtension.lowercased() == "vbm" }),
+              let book = library.book(source.id) else {
+            return Check(area: songArea, name: name, status: .skipped, detail: "у бібліотеці нема жодного .vbm")
+        }
+        var faults: [String] = []
+        let fm = FileManager.default
+        let temp = fm.temporaryDirectory.appendingPathComponent("slovo-songbook-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: temp) }
+        do {
+            try fm.createDirectory(at: temp, withIntermediateDirectories: true)
+            let vbmCopy = temp.appendingPathComponent(source.url.lastPathComponent)
+            try fm.copyItem(at: source.url, to: vbmCopy)
+            // 1. Майстер: .vbm → .songbook.
+            let own = temp.appendingPathComponent(source.id).appendingPathExtension(SongBookJSON.pathExtension)
+            try ModuleImporter.convertSongBook(from: vbmCopy, to: own)
+            // 2. Туди й назад без втрат.
+            let back = try SongBook(fileAt: own)
+            if back.songs.count != book.songs.count { faults.append("пісень \(back.songs.count) замість \(book.songs.count)") }
+            for (a, b) in zip(book.songs, back.songs) where a != b {
+                faults.append("пісня «\(a.title.prefix(30))» змінилася після запису й читання")
+                break
+            }
+            if back.groups.count != book.groups.count { faults.append("груп \(back.groups.count) замість \(book.groups.count)") }
+            if back.title != book.title || back.shortName != book.shortName { faults.append("назва чи коротке ім'я змінилися") }
+            // 3. Бібліотека бачить лише .songbook, коли поруч лежить .vbm.
+            let files = ModuleLibrary(modulesDirectory: temp).songFiles
+            if files.count != 1 || !SongBookJSON.isSongBookFile(files[0]) {
+                faults.append("у теці з обома файлами бібліотека бачить \(files.map(\.lastPathComponent))")
+            }
+            // 4. За старим ім'ям із Плану чи «Історії».
+            let small = SongLibrary(songFiles: files)
+            if small.entry(fileName: source.url.lastPathComponent)?.id != source.id {
+                faults.append("за ім'ям «\(source.url.lastPathComponent)» збірник не знайшовся")
+            }
+            // 5. Експорт у .vbm — планшету й VisioBible.
+            let exported = try SongBookWriter.data(for: back)
+            let reparsed = try SongBook(data: exported, name: source.id)
+            if reparsed.songs.count != book.songs.count { faults.append("експорт у .vbm дав \(reparsed.songs.count) пісень") }
+            // 6. Редактор пише .songbook поруч із .vbm.
+            let editorFolder = temp.appendingPathComponent("редактор")
+            try fm.createDirectory(at: editorFolder, withIntermediateDirectories: true)
+            let editedVbm = editorFolder.appendingPathComponent(source.url.lastPathComponent)
+            try fm.copyItem(at: source.url, to: editedVbm)
+            let editor = SongBookEditor(book: book, url: editedVbm, isModified: true)
+            let saved = try editor.save()
+            if !SongBookJSON.isSongBookFile(saved) || !fm.fileExists(atPath: saved.path) {
+                faults.append("редактор зберіг у «\(saved.lastPathComponent)», а не в .songbook")
+            }
+        } catch {
+            faults.append("\(error)")
+        }
+        let detail = "джерело «\(source.displayName)»: \(book.songs.count) пісень, \(book.groups.count) груп; "
+            + "перетворено, прочитано, експортовано в .vbm і збережено з редактора"
+        return Check(area: songArea, name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty ? detail : faults.joined(separator: "; ") + ". " + detail)
     }
 
     /// Нажатие на вкладку «Песни» и вправду показывает песни.

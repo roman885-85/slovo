@@ -120,6 +120,10 @@ final class NativeList: NSView, NativeListChecking {
     /// стрелки в программе листают стих и главу, и перехватывать их списку
     /// нельзя, пока об этом не попросят.
     var handlesArrowKeys = false
+    /// Enter відкриває виділений пункт (`onActivate`) — як подвійне клацання.
+    /// Вмикається лише там, де це потрібно (План): у решті списків Enter
+    /// лишається вільним.
+    var activatesOnReturn = false
 
     /// Заголовки колонок. Нужны виду «Таблица» окна выбора Книги.
     var headerTitles: [String]? {
@@ -514,6 +518,12 @@ final class NativeList: NSView, NativeListChecking {
             selectAll()
             return true
         }
+        // Enter і Enter на цифровій клавіатурі — відкрити виділене.
+        if activatesOnReturn, event.keyCode == 36 || event.keyCode == 76,
+           let row = anchor ?? selection.first, row < itemCount {
+            onActivate?(row)
+            return true
+        }
         guard handlesArrowKeys, itemCount > 0 else { return false }
         let current = anchor ?? selection.first ?? 0
         var target = current
@@ -536,6 +546,16 @@ final class NativeList: NSView, NativeListChecking {
         }
         scrollTo(target)
         return true
+    }
+
+    /// Самоперевірці: натиснути Enter так, як це робить клавіатура.
+    @discardableResult
+    func pressReturnForCheck() -> Bool {
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                           windowNumber: window?.windowNumber ?? 0, context: nil,
+                                           characters: "\r", charactersIgnoringModifiers: "\r",
+                                           isARepeat: false, keyCode: 36) else { return false }
+        return handleKeyDown(event)
     }
 
     private var pageStep: Int {

@@ -46,6 +46,17 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
         // интерфейса читается из настроек следом, и подписи должны быть уже на месте.
         OurWordsBundle.load()
         start()
+        // Дані перенесли в свій дім — сказати один раз, коли вікно вже є.
+        if let note = AppState.migrationNote,
+           !CommandLine.arguments.contains(where: { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") }) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                let alert = NSAlert()
+                alert.messageText = OurWords.t("Данные программы перенесены")
+                alert.informativeText = OurWords.t("Модули, фоны, шаблоны и планы теперь живут в папке Library/Application Support/Slovo, а пакет программы данных не содержит. Песенники VisioBible (.vbm) переведены в свой формат .songbook; оригиналы отложены в папку «Імпорт з VisioBible». Папку «Дані з пакета (VisioBible)» рядом с программой можно удалить.")
+                    + "\n\n" + note
+                alert.runModal()
+            }
+        }
     }
 
     private func start() {

@@ -86,28 +86,29 @@ rm -rf "$APP/Contents/_CodeSignature"
 # unsupported format for signature» — и пакет оставался неподписанным вовсе.
 find "$APP" -name "*.cstemp" -delete 2>/dev/null
 
-# Данные программы (Resources/app: модули, страницы автора, шаблоны) в
-# репозитории не лежат — сотни мегабайт. Если пакет собирается с нуля, берём
-# их клоном из соседнего пакета на столе: клон APFS не занимает места.
-if [ ! -d "$APP/Contents/Resources/app" ]; then
-  for sibling in "$DEST"/*.app; do
-    [ "$sibling" = "$APP" ] && continue
-    if [ -d "$sibling/Contents/Resources/app" ]; then
-      cp -Rc "$sibling/Contents/Resources/app" "$APP/Contents/Resources/app" 2>/dev/null \
-        || cp -R "$sibling/Contents/Resources/app" "$APP/Contents/Resources/app"
-      echo "данные Resources/app взяты из $(basename "$sibling")"
-      break
-    fi
-  done
+# Дані в пакеті більше не живуть (власник: «избавиться от остатков
+# VisioBible»): модулі, фони, шаблони, плани тримає програма у
+# ~/Library/Application Support/Slovo. Те, що лежало в пакеті (копія
+# VisioBible, 435 МБ), відкладаємо поруч із пакетом — програма на першому
+# запуску перенесе звідти своє, а тека лишиться архівом, який можна видалити.
+if [ -d "$APP/Contents/Resources/app/Modules" ]; then
+  ARCHIVE="$DEST/Дані з пакета (VisioBible)"
+  if [ -d "$ARCHIVE" ]; then
+    rm -rf "$APP/Contents/Resources/app"
+  else
+    mv "$APP/Contents/Resources/app" "$ARCHIVE"
+  fi
+  echo "дані з пакета відкладено: $ARCHIVE"
 fi
-[ -d "$APP/Contents/Resources/app" ] || echo "ВНИМАНИЕ: в пакете нет Resources/app — ни модулей, ни страниц автора"
-# Файл умовчань програми та розкладка клавіш — з репозиторію, щоразу: це
-# частина програми, а не дані користувача. Саме з них програма стартує на
-# новому комп'ютері, нічого не питаючи в установленого VisioBible.
+rm -rf "$APP/Contents/Resources/app"
+# У пакеті — лише своє: умовчання програми, розкладка клавіш, довідка і
+# база правил нумерації. Саме з них програма стартує на новому комп'ютері.
 mkdir -p "$APP/Contents/Resources/app"
 cp Resources/Defaults/Slovo.ini "$APP/Contents/Resources/app/Slovo.ini"
 cp Resources/Defaults/hotkeys.ini "$APP/Contents/Resources/app/hotkeys.ini"
-echo "умовчання в пакеті: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini"
+cp Resources/Defaults/ЧИТАТИ.md "$APP/Contents/Resources/app/ЧИТАТИ.md"
+[ -f Resources/Numbering/inconsistencies.sqlite3 ] && cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
+echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md, inconsistencies.sqlite3"
 
 # Програми для Android — усередині «Слова»: людина зберігає їх з програми
 # на комп'ютер або завантажує зі сторінки пульта в браузері просто на

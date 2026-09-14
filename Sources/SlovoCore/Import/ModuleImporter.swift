@@ -598,11 +598,13 @@ public enum ModuleImporter {
 
         switch url.pathExtension.lowercased() {
         case "vbm":
-            let target = destination.modulesFolder.appendingPathComponent(name)
+            // Пісенник VisioBible при імпорті перетворюється у свій формат:
+            // лягає як `<ім'я>.songbook`; `.vbi` (покажчик VisioBible) не
+            // потрібен і не переноситься.
             let base = url.deletingPathExtension()
-            // `.vbi` — службовий покажчик пісенника, без нього збірник
-            // відкривається повільніше; переносимо разом.
-            let index = base.appendingPathExtension("vbi")
+            let target = destination.modulesFolder
+                .appendingPathComponent(base.lastPathComponent)
+                .appendingPathExtension(SongBookJSON.pathExtension)
             let header = songBookHeader(at: url)
             return ImportItem(id: "song:" + name,
                               category: .songBook,
@@ -610,7 +612,20 @@ public enum ModuleImporter {
                               subtitle: header.full.isEmpty ? name : header.full,
                               sourceURL: url,
                               destinationURL: target,
-                              companions: fm.fileExists(atPath: index.path) ? [index] : [],
+                              condition: condition(source: url, destination: target),
+                              byteSize: fileSize(url),
+                              modified: modificationDate(url))
+
+        case SongBookJSON.pathExtension:
+            let target = destination.modulesFolder.appendingPathComponent(name)
+            let parsed = try? SongBook(fileAt: url)
+            let stem = url.deletingPathExtension().lastPathComponent
+            return ImportItem(id: "song:" + name,
+                              category: .songBook,
+                              title: (parsed?.shortName).flatMap { $0.isEmpty ? nil : $0 } ?? stem,
+                              subtitle: (parsed?.title).flatMap { $0.isEmpty ? nil : $0 } ?? name,
+                              sourceURL: url,
+                              destinationURL: target,
                               condition: condition(source: url, destination: target),
                               byteSize: fileSize(url),
                               modified: modificationDate(url))
@@ -745,6 +760,10 @@ public enum ModuleImporter {
         do {
             try fm.createDirectory(at: item.destinationURL.deletingLastPathComponent(),
                                    withIntermediateDirectories: true)
+            if item.category == .songBook, item.sourceURL.pathExtension.lowercased() == "vbm" {
+                try convertSongBook(from: item.sourceURL, to: item.destinationURL)
+                return nil
+            }
             try replace(from: item.sourceURL, to: item.destinationURL)
 
             for companion in item.companions {
@@ -756,6 +775,16 @@ public enum ModuleImporter {
         } catch {
             return "\(error)"
         }
+    }
+
+    /// Пісенник VisioBible → свій формат: розібрати `.vbm` і записати
+    /// `.songbook`. Відкрито — щоб перевірка йшла тим самим шляхом, що й
+    /// майстер.
+    public static func convertSongBook(from source: URL, to destination: URL) throws {
+        let book = try SongBook(fileAt: source)
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try SongBookJSON.write(book, to: destination)
     }
 
     private static func replace(from source: URL, to destination: URL) throws {
