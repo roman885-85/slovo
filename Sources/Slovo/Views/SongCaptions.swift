@@ -38,12 +38,12 @@ struct SongCaptions {
     /// `SongsPluginFrame->TextMessagesN` — тексти запитів і попереджень.
     func message(_ number: Int, _ fallback: String) -> String {
         let text = language?.caption("\(Self.prefix)TextMessages\(number)", form: Self.form, default: "") ?? ""
-        return (text.isEmpty ? fallback : text).replacingOccurrences(of: "\\n", with: "\n")
+        return (text.isEmpty ? OurWords.t(fallback) : text).replacingOccurrences(of: "\\n", with: "\n")
     }
 
     func error(_ number: Int, _ fallback: String) -> String {
         let text = language?.caption("\(Self.prefix)ErrorMessages\(number)", form: Self.form, default: "") ?? ""
-        return (text.isEmpty ? fallback : text).replacingOccurrences(of: "\\n", with: "\n")
+        return (text.isEmpty ? OurWords.t(fallback) : text).replacingOccurrences(of: "\\n", with: "\n")
     }
 
     /// Підпис пункту головного меню без префікса `SongsPluginFrame->`.
@@ -54,23 +54,23 @@ struct SongCaptions {
     /// NOpenModuleFolder. Своїх ключів у пісенника для них немає.
     func mainForm(_ key: String, _ fallback: String) -> String {
         let text = language?.caption(key, form: Self.form, default: "") ?? ""
-        return (text.isEmpty || text == key) ? fallback : text
+        return (text.isEmpty || text == key) ? OurWords.t(fallback) : text
     }
 
     /// Підписи форм редагування пісні й частини.
     func songForm(_ key: String, _ fallback: String) -> String {
         let text = language?.caption(key, form: "SongEditNameForm", default: "") ?? ""
-        return text.isEmpty ? fallback : text
+        return text.isEmpty ? OurWords.t(fallback) : text
     }
 
     func chunkForm(_ key: String, _ fallback: String) -> String {
         let text = language?.caption(key, form: "SongEditChunkForm", default: "") ?? ""
-        return text.isEmpty ? fallback : text
+        return text.isEmpty ? OurWords.t(fallback) : text
     }
 
     func copyForm(_ key: String, _ fallback: String) -> String {
         let text = language?.caption(key, form: "ImportSongsDialogForm", default: "") ?? ""
-        return text.isEmpty ? fallback : text
+        return text.isEmpty ? OurWords.t(fallback) : text
     }
 
     /// Назви частин із випадного списку вікна «Частина пісні»

@@ -94,6 +94,8 @@ extension Diagnostics {
             for (bundle, marker) in [(old, "стара"), (fresh, "нова")] {
                 try fm.createDirectory(at: bundle.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
                 try Data(marker.utf8).write(to: bundle.appendingPathComponent("Contents/MacOS/Slovo"))
+                // Помічник перевіряє, що новий пакет має виконуваний файл.
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bundle.appendingPathComponent("Contents/MacOS/Slovo").path)
                 try fm.createDirectory(at: bundle.appendingPathComponent("Contents/Resources/app"), withIntermediateDirectories: true)
                 try Data(marker.utf8).write(to: bundle.appendingPathComponent("Contents/Resources/app/Slovo.ini"))
             }
@@ -115,9 +117,24 @@ extension Diagnostics {
             let ini = (try? String(contentsOf: old.appendingPathComponent("Contents/Resources/app/Slovo.ini"), encoding: .utf8)) ?? ""
             if ini != "нова" { trouble.append("умовчання не з нового пакета") }
             if fm.fileExists(atPath: staging.path) || fm.fileExists(atPath: old.path + ".old") { trouble.append("лишилися тимчасові теки") }
+            // Нового пакета нема (теку стерли) — старий лишається цілим на місці.
+            let lost = root.appendingPathComponent(".slovo-update-стерта/Слово.app")
+            let second = AppUpdater.helperScript(pid: 999_999, bundle: old, fresh: lost,
+                                                 staging: lost.deletingLastPathComponent(), relaunch: false)
+            let file2 = root.appendingPathComponent("replace2.sh")
+            try second.write(to: file2, atomically: true, encoding: .utf8)
+            let run2 = Process()
+            run2.executableURL = URL(fileURLWithPath: "/bin/sh")
+            run2.arguments = [file2.path]
+            run2.standardError = FileHandle.nullDevice
+            try run2.run(); run2.waitUntilExit()
+            let kept = (try? String(contentsOf: old.appendingPathComponent("Contents/MacOS/Slovo"), encoding: .utf8)) ?? ""
+            if kept != "нова" || !fm.fileExists(atPath: old.appendingPathComponent("Contents/Resources/app/Modules/rst+/bibleqt.ini").path) {
+                trouble.append("без нового пакета старий не лишився цілим")
+            }
             checks.append(Check(area: area, name: "Оновлення програми зберігає переклади й дані пакета",
                                 status: trouble.isEmpty ? .ok : .failed,
-                                detail: trouble.isEmpty ? "новий пакет на місці, Modules і Templates перейшли зі старого, Slovo.ini — нове" : trouble.joined(separator: "; ")))
+                                detail: trouble.isEmpty ? "новий пакет на місці, Modules і Templates перейшли зі старого, Slovo.ini — нове; без нового пакета старий лишається цілим" : trouble.joined(separator: "; ")))
         } catch {
             checks.append(Check(area: area, name: "Оновлення програми зберігає переклади й дані пакета", status: .failed, detail: "\(error)"))
         }

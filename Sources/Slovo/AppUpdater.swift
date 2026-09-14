@@ -122,29 +122,45 @@ enum AppUpdater {
     /// тимчасових пакетах.
     nonisolated static func helperScript(pid: Int32, bundle: URL, fresh: URL, staging: URL, relaunch: Bool = true) -> String {
         func quoted(_ url: URL) -> String { "'" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        let old = quoted(bundle), new = quoted(fresh)
+        let old = quoted(bundle), new = quoted(fresh), parked = quoted(bundle) + ".old"
+        // Дані переходять уже ПІСЛЯ заміни — з відкладеного старого пакета в
+        // новий на місці. Не вдалася заміна — старий вертається цілим, з
+        // даними. У 0.82–0.83 теку з новим пакетом стирало закриття вікна,
+        // заміна падала посередині, і на місці програми не лишалося нічого,
+        // крім «Слово.app.old».
         let carry = carriedData.map { name -> String in
             let item = "'" + name + "'"
             return """
-            if [ -e \(old)/Contents/Resources/app/\(item) ]; then
-              mkdir -p \(new)/Contents/Resources/app
-              rm -rf \(new)/Contents/Resources/app/\(item)
-              mv \(old)/Contents/Resources/app/\(item) \(new)/Contents/Resources/app/\(item)
+            if [ -e \(parked)/Contents/Resources/app/\(item) ]; then
+              mkdir -p \(old)/Contents/Resources/app
+              rm -rf \(old)/Contents/Resources/app/\(item)
+              mv \(parked)/Contents/Resources/app/\(item) \(old)/Contents/Resources/app/\(item)
             fi
             """
         }.joined(separator: "\n")
         return """
         #!/bin/sh
         while kill -0 \(pid) 2>/dev/null; do sleep 0.5; done
+        if [ ! -x \(new)/Contents/MacOS/Slovo ]; then
+          echo "оновлення: нового пакета нема — лишаю старий" >&2
+          \(relaunch ? "open " + old : "")
+          exit 1
+        fi
+        rm -rf \(parked)
+        if mv \(old) \(parked); then
+          if mv \(new) \(old); then
         \(carry)
-        codesign --force --deep --sign - \(new) >/dev/null 2>&1
-        rm -rf \(old).old
-        mv \(old) \(old).old && mv \(new) \(old) && rm -rf \(old).old
+            codesign --force --deep --sign - \(old) >/dev/null 2>&1
+            rm -rf \(parked)
+          else
+            echo "оновлення: заміна не вдалася — вертаю старий пакет" >&2
+            mv \(parked) \(old)
+          fi
+        fi
         \(relaunch ? "open " + old : "")
         rm -rf \(quoted(staging))
         """
     }
-
 
     // MARK: - Перевірка на старті
 
@@ -223,6 +239,9 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
     private let bundle = Bundle.main.bundleURL
     private(set) var staging: URL?
     private var cancelled = false
+    /// Помічник заміни вже запущений: теку з новим пакетом тепер тримає він,
+    /// і стирати її не можна нічим — ні «Скасувати», ні закриттям вікна.
+    private(set) var handedOff = false
 
     init(release: AppUpdater.Release) {
         self.release = release
@@ -257,6 +276,7 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
     }
 
     func cancel() {
+        guard !handedOff else { return }
         cancelled = true
         task?.cancel()
         session?.invalidateAndCancel()
@@ -361,6 +381,7 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [helper.path]
             try process.run()
+            handedOff = true
         } catch {
             finish(OurWords.t("помощник замены не запустился: %s", "\(error)")); return
         }
@@ -430,9 +451,13 @@ enum NativeUpdateWindow {
         }
 
         let session = UpdateSession(release: release)
+        /// Іде оновлення: кнопка й закриття вікна скасовують. Скінчилося
+        /// (готово, помилка, скасовано) — лише закривають.
+        var running = true
         let action = UpdateButtonAction()
         action.handler = {
-            if session.staging != nil || window?.isVisible == true, button.title == OurWords.t("Отмена") {
+            if running {
+                running = false
                 session.cancel()
                 append(OurWords.t("Отменено. Программа осталась прежней."))
                 button.title = OurWords.t("Закрыть")
@@ -450,6 +475,7 @@ enum NativeUpdateWindow {
             status.stringValue = line
         }
         session.finished = { failure in
+            running = false
             bar.isIndeterminate = false
             if let failure {
                 append(OurWords.t("Ошибка: %s", failure))
@@ -479,7 +505,10 @@ enum NativeUpdateWindow {
         self.session = session
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: nil) { _ in
             MainActor.assumeIsolated {
-                if button.title == OurWords.t("Отмена") { session.cancel() }
+                // Закриття вікна скасовує лише те, що ще йде. Готове оновлення
+                // вікно закривається саме — разом із програмою, — і його
+                // скасовувати не можна: теку тримає помічник заміни.
+                if running { session.cancel() }
                 window = nil
                 self.session = nil
             }
