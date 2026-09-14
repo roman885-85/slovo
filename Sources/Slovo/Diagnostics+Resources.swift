@@ -225,13 +225,27 @@ extension Diagnostics {
             checks.append(Check(area: area, name: "Фони й картинки шаблонів знаходяться за застарілим повним шляхом", status: .failed, detail: "\(error)"))
         }
 
-        // 8. Опис випуску без Markdown.
+        // 8. Адреси реєстру MyBible не кодуються вдруге (404 на «UBIO'62», «ФІЛ»).
+        let registry = Data(#"""
+        {"version": 1, "hosts": [{"alias": "mz", "path": "https://mybible.zone/repository/modules/%s.zip", "priority": 1}],
+         "downloads": [{"abr": "UBIO'62", "fil": "UBIO'62", "lng": "uk", "url": ["{mz}UBIO%2762"], "siz": "2.1M"},
+                       {"abr": "ФІЛ", "fil": "ФІЛ", "lng": "uk", "url": ["{mz}%D0%A4%D0%86%D0%9B"], "siz": "2.5M"},
+                       {"abr": "AGP", "fil": "AGP", "lng": "ru", "url": ["{mz}AGP"], "siz": "589K"}]}
+        """#.utf8)
+        let links = ResourceCatalog.myBible(registry: registry)?.items.map(\.url) ?? []
+        let wanted = ["https://mybible.zone/repository/modules/UBIO%2762.zip",
+                      "https://mybible.zone/repository/modules/%D0%A4%D0%86%D0%9B.zip",
+                      "https://mybible.zone/repository/modules/AGP.zip"]
+        checks.append(Check(area: area, name: "Адреси реєстру MyBible не кодуються вдруге", status: links == wanted ? .ok : .failed,
+                            detail: links.joined(separator: " · ")))
+
+        // 9. Опис випуску без Markdown.
         let plain = AppUpdater.plain("## Що нового\n- **Пісенники** — [slovo-resources](https://github.com/x) і `.songbook`")
         checks.append(Check(area: area, name: "Опис випуску у вікні — без розмітки Markdown",
                             status: plain.contains("**") || plain.contains("](") || plain.contains("##") || plain.contains("`") ? .failed : .ok,
                             detail: plain.replacingOccurrences(of: "\n", with: " / ")))
 
-        // 9. Версії програми порівнюються як десяткові.
+        // 10. Версії програми порівнюються як десяткові.
         let versions = AppUpdater.isNewer("0.8", than: "0.69") && AppUpdater.isNewer("0.7", than: "0.68")
             && AppUpdater.isNewer("0.65", than: "0.6") && AppUpdater.isNewer("1.0", than: "0.99")
             && !AppUpdater.isNewer("0.69", than: "0.8") && !AppUpdater.isNewer("0.8", than: "0.80")

@@ -132,7 +132,11 @@ public struct ResourceCatalog: Codable, Sendable {
                 let alias = String(raw[raw.index(after: raw.startIndex)..<close])
                 let name = String(raw[raw.index(after: close)...])
                 if let path = hostPaths[alias] {
-                    let escaped = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+                    // Імена в реєстрі вже закодовані («UBIO%2762», кирилиця —
+                    // «%D0%A4%D0%86%D0%9B»); кодувати вдруге не можна — виходило
+                    // «%2527» і 404. Кодуємо лише те, що прийшло сирим.
+                    let plain = name.removingPercentEncoding ?? name
+                    let escaped = plain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "'"))) ?? name
                     link = path.replacingOccurrences(of: "%s", with: escaped)
                     break
                 }

@@ -206,9 +206,13 @@ final class NativeResourcesView: NSView, NativeListSource {
             .fonts: OurWords.t("Шрифты"), .web: OurWords.t("Страницы веб-слайдов"),
         ]
         let query = search.stringValue.trimmingCharacters(in: .whitespaces).lowercased()
+        // Код мови («uk», «ru», «en») — лише ця мова: інакше «uk» знаходило й
+        // «Luke», «UKJV» — сотню чужих перекладів.
+        let isLanguage = !query.isEmpty && catalog.items.contains { $0.language?.lowercased() == query }
         let visible = catalog.items.filter { item in
-            query.isEmpty || item.title.lowercased().contains(query) || item.subtitle.lowercased().contains(query)
-                || (item.language?.lowercased() == query)
+            if query.isEmpty { return true }
+            if isLanguage { return item.language?.lowercased() == query }
+            return item.title.lowercased().contains(query) || item.subtitle.lowercased().contains(query)
         }
         var built: [Line] = []
         if visible.contains(where: { $0.language != nil }) {

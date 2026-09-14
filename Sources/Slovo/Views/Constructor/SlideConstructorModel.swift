@@ -97,7 +97,10 @@ final class SlideConstructorModel: ObservableObject {
         } else if let first = library.presets(forSongs: forSongs).first {
             load(first)
         } else {
+            // Шаблон, який редактор створив сам, бо список порожній, — ще не
+            // правка: закриття без жодної зміни не питає «Зберегти?».
             makeNew(named: OurWords.t(forSongs ? "Песня" : "Новый шаблон"), forSongs: forSongs)
+            isDirty = false
         }
     }
 
