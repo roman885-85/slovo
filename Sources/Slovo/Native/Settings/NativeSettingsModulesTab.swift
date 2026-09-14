@@ -37,6 +37,9 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         kinds.action = #selector(kindChosen)
         kinds.selectedSegment = 0
         kinds.segmentStyle = .texturedRounded
+        // Підписи — одразу: доти вони ставилися лише після першого
+        // перечитування списку, і перемикач стояв порожнім клаптиком.
+        refreshKinds()
     }
 
     @objc private func kindChosen() {
@@ -63,6 +66,10 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         let songs = all.filter { $0.isSongBook }
         kinds.setLabel(OurWords.t("Переводы Библии") + " · \(bibles.count)", forSegment: 0)
         kinds.setLabel(OurWords.t("Песенники") + " · \(songs.count)", forSegment: 1)
+        kinds.setWidth(0, forSegment: 0)
+        kinds.setWidth(0, forSegment: 1)
+        kinds.sizeToFit()
+        kinds.invalidateIntrinsicContentSize()
         let shown = showsSongBooks ? songs : bibles
         status.stringValue = "\(OurWords.t("включено")) \(shown.filter(\.isEnabled).count) \(OurWords.t("из")) \(shown.count)"
     }

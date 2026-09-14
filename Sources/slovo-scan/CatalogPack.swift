@@ -47,8 +47,12 @@ func runCatalogPack(app: URL, out: URL, base: String) -> Int32 {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         // Без розширених атрибутів і ресурсних гілок — щоб той самий вміст
-        // давав той самий zip.
-        process.arguments = ["-c", "-k", "--keepParent", "--norsrc", "--noextattr", "--noqtn", "--noacl", source.path, target.path]
+        // давав той самий zip. `--keepParent` — лише для тек: для файла він
+        // кладе в архів його батьківську теку («Modules/pv3055.songbook»), і
+        // програма 0.8 ставила пісенник ТЕКОЮ.
+        let isFolder = (try? source.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        process.arguments = ["-c", "-k"] + (isFolder ? ["--keepParent"] : [])
+            + ["--norsrc", "--noextattr", "--noqtn", "--noacl", source.path, target.path]
         do { try process.run(); process.waitUntilExit() } catch { return nil }
         guard process.terminationStatus == 0,
               let size = (try? fm.attributesOfItem(atPath: target.path))?[.size] as? Int64 else { return nil }

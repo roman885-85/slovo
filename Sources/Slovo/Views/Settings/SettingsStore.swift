@@ -309,6 +309,57 @@ final class SettingsStore: ObservableObject {
 
     // MARK: - Вкладка «Модули» (6.1.4)
 
+    /// Звести список модулів із тим, що справді лежить у теці й відкрилося:
+    /// рядки з умовчань, яких на диску нема (у збірці «лише програма» це
+    /// вісімдесят імен VisioBible), — геть; пісенник, що став `.songbook`, —
+    /// під новим ім'ям; установлене з ресурсів, чого в списку не було, — в
+    /// кінець. Шляхи ПОЗА текою даних (зовнішній диск) не чіпаємо: диск
+    /// може бути просто не під'єднаний. Власник: «в списке модулей есть имя
+    /// модуля, который должен был загрузиться, но физически его нет».
+    @discardableResult
+    func syncModuleRoster(libraryIdentifiers: Set<String>, songBookStems: Set<String>,
+                          modulesFolder: URL, dataRoot: URL) -> Bool {
+        let fm = FileManager.default
+        var roster = settings.modules
+        let before = roster
+        // Пісенник .vbm, який уже .songbook.
+        for index in roster.indices where roster[index].name.lowercased().hasSuffix(".vbm") {
+            let url = roster[index].resolvedURL(dataRoot: dataRoot)
+            let own = url.deletingPathExtension().appendingPathExtension(SongBookJSON.pathExtension)
+            if !fm.fileExists(atPath: url.path), fm.fileExists(atPath: own.path) {
+                roster[index].path = String(roster[index].path.dropLast(3)) + SongBookJSON.pathExtension
+                roster[index].name = own.lastPathComponent
+            }
+        }
+        // Відносні рядки без файла.
+        roster.removeAll { entry in
+            !entry.path.hasPrefix("/") && !fm.fileExists(atPath: entry.resolvedURL(dataRoot: dataRoot).path)
+        }
+        // Установлене, чого нема в списку.
+        var known = Set(roster.map { $0.libraryIdentifier.lowercased() })
+        for entry in roster where entry.isSongBook {
+            known.insert((entry.name as NSString).deletingPathExtension.lowercased())
+        }
+        let prefix = modulesFolder.lastPathComponent
+        let entries = ((try? fm.contentsOfDirectory(at: modulesFolder, includingPropertiesForKeys: [.isDirectoryKey],
+                                                    options: [.skipsHiddenFiles])) ?? [])
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        for url in entries {
+            let name = url.lastPathComponent
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            let candidate = ModuleRosterEntry(path: prefix + "\\" + name + (isDirectory ? "\\" : ""), name: name, isEnabled: true)
+            let key = candidate.isSongBook ? (name as NSString).deletingPathExtension.lowercased() : candidate.libraryIdentifier.lowercased()
+            guard !known.contains(key) else { continue }
+            let belongs = candidate.isSongBook ? songBookStems.contains(key) : libraryIdentifiers.contains(key)
+            guard belongs else { continue }
+            roster.append(candidate)
+            known.insert(key)
+        }
+        guard roster != before else { return false }
+        settings.modules = roster
+        return true
+    }
+
     func setModule(_ id: String, enabled: Bool) {
         guard let index = settings.modules.firstIndex(where: { $0.id == id }) else { return }
         settings.modules[index].isEnabled = enabled

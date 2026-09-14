@@ -466,6 +466,8 @@ final class AppState: ObservableObject {
             folder = DataHome.modules
             try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
         }
+        let repaired = DataHome.repairNestedModules(in: folder)
+        if repaired > 0 { NativeTrace.say("модулі: полагоджено \(repaired), що лягли текою замість файла") }
         if let report = DataHome.convertSongBooksOnce(in: folder) {
             NativeTrace.say("пісенники: " + report.summary)
             if report.converted > 0 { migrationNote = report.summary }
@@ -524,6 +526,11 @@ final class AppState: ObservableObject {
         loadBackgrounds()
         loadLanguages()
         songLibrary = SongLibrary(songFiles: loaded.songFiles)
+        // Список модулів у налаштуваннях — за тим, що справді є на диску.
+        SettingsStore.shared.syncModuleRoster(
+            libraryIdentifiers: Set(loaded.modules.map { $0.identifier.lowercased() }),
+            songBookStems: Set(loaded.songFiles.map { $0.deletingPathExtension().lastPathComponent.lowercased() }),
+            modulesFolder: modulesFolder, dataRoot: dataRoot)
         // Галочки вкладки «Модули» ложатся на каталог тут же: `applySavedSettings`
         // дойдёт до них ниже, но `songBookID` выбирается уже сейчас — и без
         // этого выбирался бы выключенный сборник.

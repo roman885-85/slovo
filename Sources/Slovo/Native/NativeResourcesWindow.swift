@@ -270,13 +270,20 @@ final class NativeResourcesView: NSView, NativeListSource {
         summarize()
     }
 
+    /// Те, що видно в списку після пошуку: позначки діють на нього, а не на
+    /// весь каталог — у MyBible тисячі перекладів, і «Позначити всі нові»
+    /// без пошуку поставило б їх усі.
+    private var visibleItems: [ResourceItem] {
+        lines.compactMap { if case .item(let item) = $0 { return item } else { return nil } }
+    }
+
     @objc private func markNew() {
-        chosen = Set((catalog?.items ?? []).filter { standing(of: $0) == .absent }.map(\.id))
+        chosen = Set(visibleItems.filter { standing(of: $0) == .absent }.map(\.id))
         list.reload(); summarize()
     }
 
     @objc private func markUpdates() {
-        chosen = Set((catalog?.items ?? []).filter { standing(of: $0) == .outdated }.map(\.id))
+        chosen = Set(visibleItems.filter { standing(of: $0) == .outdated }.map(\.id))
         list.reload(); summarize()
     }
 

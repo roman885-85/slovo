@@ -122,7 +122,88 @@ extension Diagnostics {
             checks.append(Check(area: area, name: "Оновлення програми зберігає переклади й дані пакета", status: .failed, detail: "\(error)"))
         }
 
-        // 5. Версії програми порівнюються числами, а не рядками.
+        // 5. Вміст архіву знаходиться, хоч би як його запакували (баг 0.8:
+        //    «Modules/pv3055.songbook» лягав текою), і вже зіпсоване лагодиться.
+        do {
+            let root = temp.appendingPathComponent("архіви")
+            func make(_ name: String, _ files: [String]) throws -> URL {
+                let folder = root.appendingPathComponent(name)
+                for file in files {
+                    let url = folder.appendingPathComponent(file)
+                    try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try Data("x".utf8).write(to: url)
+                }
+                return folder
+            }
+            func item(_ file: String, _ kind: ResourceItem.Kind = .songbook) -> ResourceItem {
+                ResourceItem(id: file, kind: kind, title: file, url: "file:///x.zip", fileName: file)
+            }
+            var trouble: [String] = []
+            func expect(_ result: ResourceHub.Payload?, _ tail: String, files: Bool = false, _ label: String) {
+                switch result {
+                case .item(let url)? where !files && url.path.hasSuffix(tail): break
+                case .files(let url)? where files && url.path.hasSuffix(tail): break
+                default: trouble.append("\(label): \(String(describing: result))")
+                }
+            }
+            expect(ResourceHub.payload(in: try make("обгортка", ["Modules/pv3055.songbook"]), for: item("pv3055.songbook")),
+                   "Modules/pv3055.songbook", "пісенник у теці-обгортці")
+            expect(ResourceHub.payload(in: try make("просто", ["pv3055.songbook"]), for: item("pv3055.songbook")),
+                   "просто/pv3055.songbook", "пісенник без обгортки")
+            expect(ResourceHub.payload(in: try make("mybible", [".SQLite3"]), for: item("AGP.SQLite3", .bible)),
+                   "mybible/.SQLite3", "безіменний .SQLite3 MyBible")
+            expect(ResourceHub.payload(in: try make("mysword", ["Modules/UKJV.bbl.mybible"]), for: item("UKJV.bbl.mybible", .bible)),
+                   "Modules/UKJV.bbl.mybible", "MySword у теці-обгортці")
+            expect(ResourceHub.payload(in: try make("bq-файли", ["bibleqt.ini", "01.htm"]), for: item("Bible_X", .bible)),
+                   "bq-файли", files: true, "файли «Цитати з Біблії» без теки")
+            expect(ResourceHub.payload(in: try make("bq-тека", ["rst+/bibleqt.ini", "rst+/01.htm"]), for: item("rst+", .bible)),
+                   "bq-тека/rst+", "тека «Цитати з Біблії»")
+            // Лагодження: тека «a.songbook/» з файлом «a.songbook».
+            let broken = try make("зіпсоване", ["a.songbook/a.songbook", "UKJV.bbl.mybible/UKJV.bbl.mybible", "rst+/bibleqt.ini"])
+            let fixed = DataHome.repairNestedModules(in: broken)
+            var isDir: ObjCBool = false
+            if fixed != 2 { trouble.append("полагоджено \(fixed) замість 2") }
+            if !(fm.fileExists(atPath: broken.appendingPathComponent("a.songbook").path, isDirectory: &isDir) && !isDir.boolValue) {
+                trouble.append("a.songbook не став файлом")
+            }
+            if !fm.fileExists(atPath: broken.appendingPathComponent("rst+/bibleqt.ini").path) { trouble.append("звичайну теку модуля зачепило") }
+            checks.append(Check(area: area, name: "Вміст архіву знаходиться за будь-якого пакування; тека замість файла лагодиться",
+                                status: trouble.isEmpty ? .ok : .failed,
+                                detail: trouble.isEmpty ? "обгортка «Modules/», безіменний .SQLite3, MySword, «Цитата з Біблії» текою й файлами; полагоджено 2" : trouble.joined(separator: "; ")))
+        } catch {
+            checks.append(Check(area: area, name: "Вміст архіву знаходиться за будь-якого пакування; тека замість файла лагодиться", status: .failed, detail: "\(error)"))
+        }
+
+        // 6. Список модулів у налаштуваннях зводиться з тим, що є на диску.
+        do {
+            let root = temp.appendingPathComponent("реєстр")
+            let modules = root.appendingPathComponent("Modules")
+            try fm.createDirectory(at: modules.appendingPathComponent("rst+"), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: modules.appendingPathComponent("pv3055.songbook"))
+            try fm.createDirectory(at: modules.appendingPathComponent("Новий"), withIntermediateDirectories: true)
+            let store = SettingsStore.shared
+            let saved = store.settings.modules
+            defer { store.settings.modules = saved }
+            store.settings.modules = [
+                ModuleRosterEntry(path: "Modules\\rst+\\", name: "rst+", isEnabled: true),
+                ModuleRosterEntry(path: "Modules\\UA_Ogienko\\", name: "UA_Ogienko", isEnabled: true),
+                ModuleRosterEntry(path: "Modules\\pv3055.vbm", name: "pv3055.vbm", isEnabled: false),
+                ModuleRosterEntry(path: "/Volumes/Зовнішній/Modules/KJV/", name: "KJV", isEnabled: true),
+            ]
+            let changed = store.syncModuleRoster(libraryIdentifiers: ["rst+", "новий"], songBookStems: ["pv3055"],
+                                                 modulesFolder: modules, dataRoot: root)
+            let names = store.settings.modules.map(\.name)
+            let songbook = store.settings.modules.first { $0.name == "pv3055.songbook" }
+            let ok = changed && names == ["rst+", "pv3055.songbook", "KJV", "Новий"] && songbook?.isEnabled == false
+                && songbook?.path == "Modules\\pv3055.songbook"
+            checks.append(Check(area: area, name: "Список модулів у налаштуваннях — за тим, що є на диску", status: ok ? .ok : .failed,
+                                detail: "стало: " + store.settings.modules.map { "\($0.name) (\($0.path))" }.joined(separator: ", ")
+                                    + " — зник UA_Ogienko без файла, pv3055.vbm → .songbook із тією самою галочкою, зовнішній KJV лишився, «Новий» додано"))
+        } catch {
+            checks.append(Check(area: area, name: "Список модулів у налаштуваннях — за тим, що є на диску", status: .failed, detail: "\(error)"))
+        }
+
+        // 7. Версії програми порівнюються як десяткові.
         let versions = AppUpdater.isNewer("0.8", than: "0.69") && AppUpdater.isNewer("0.7", than: "0.68")
             && AppUpdater.isNewer("0.65", than: "0.6") && AppUpdater.isNewer("1.0", than: "0.99")
             && !AppUpdater.isNewer("0.69", than: "0.8") && !AppUpdater.isNewer("0.8", than: "0.80")

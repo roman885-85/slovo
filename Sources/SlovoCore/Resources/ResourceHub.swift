@@ -66,6 +66,54 @@ public final class ResourceHub: @unchecked Sendable {
         task.resume()
     }
 
+    /// Що в розпакованому архіві є самим ресурсом.
+    public enum Payload {
+        /// Файл чи тека — лягає на місце цілком під іменем ресурсу.
+        case item(URL)
+        /// Файли модуля без теки — лягають у теку з іменем ресурсу.
+        case files(URL)
+    }
+
+    /// Розширення, за якими ресурс — один ФАЙЛ, а не тека.
+    public static let fileExtensions = ["songbook", "vbm", "sqlite3", "sqlite", "mybible"]
+
+    /// Знайти ресурс у розпакованому, хоч би як його запакували: з
+    /// теками-обгортками чи без, файл під своїм ім'ям чи безіменний
+    /// «.SQLite3» MyBible, модуль «Цитати з Біблії» текою чи самими файлами.
+    public static func payload(in staging: URL, for item: ResourceItem) -> Payload? {
+        let fm = FileManager.default
+        let skip: Set<String> = ["__MACOSX", ".DS_Store"]
+        let all = (fm.enumerator(at: staging, includingPropertiesForKeys: [.isDirectoryKey])?.allObjects as? [URL] ?? [])
+            .filter { url in !url.pathComponents.contains(where: { skip.contains($0) }) }
+        func isDirectory(_ url: URL) -> Bool {
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        }
+        let wanted = item.fileName.lowercased()
+        let extensionOfWanted = fileExtensions.first { wanted.hasSuffix("." + $0) }
+        if let ext = extensionOfWanted {
+            let files = all.filter { !isDirectory($0) }
+            if let exact = files.first(where: { $0.lastPathComponent.lowercased() == wanted }) { return .item(exact) }
+            let sameKind = files.filter {
+                let name = $0.lastPathComponent.lowercased()
+                return name.hasSuffix("." + ext) || name == "." + ext
+            }
+            // «UKJV.bbl.mybible» — теж «.mybible»: беремо, лише коли такий один.
+            if sameKind.count == 1 { return .item(sameKind[0]) }
+            return nil
+        }
+        // Тека модуля «Цитата з Біблії»: там, де лежить bibleqt.ini, — найближча до верху.
+        let inis = all.filter { $0.lastPathComponent.lowercased() == "bibleqt.ini" }
+            .sorted { $0.pathComponents.count < $1.pathComponents.count }
+        if let ini = inis.first {
+            let folder = ini.deletingLastPathComponent()
+            return folder.standardizedFileURL.path == staging.standardizedFileURL.path ? .files(folder) : .item(folder)
+        }
+        // Інше — одна тека чи один файл на верхньому рівні.
+        let top = ((try? fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)) ?? [])
+            .filter { !skip.contains($0.lastPathComponent) }
+        return top.count == 1 ? .item(top[0]) : nil
+    }
+
     /// Перший файл з потрібним ім'ям (або просто перший) із zip-а в пам'яті.
     static func unzipFirst(_ data: Data, named wanted: String) -> Data? {
         let fm = FileManager.default
@@ -186,27 +234,28 @@ public final class ResourceHub: @unchecked Sendable {
         // «.SQLite3» — без імені. Відкидаємо лише службове macOS.
         let unpacked = ((try? fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)) ?? [])
             .filter { !["__MACOSX", ".DS_Store"].contains($0.lastPathComponent) }
-        // Архів «Цитати з Біблії» містить теку модуля або самі файли модуля;
-        // свій — теку чи файл під власним ім'ям.
         let destination = layout.destination(for: item)
         do {
             switch item.kind {
             case .bible, .songbook:
-                let payload: URL
-                if unpacked.count == 1 {
-                    payload = unpacked[0]
-                } else if unpacked.contains(where: { $0.lastPathComponent.lowercased() == "bibleqt.ini" }) {
-                    payload = staging      // файли модуля без теки — кладемо всі під ім'ям ресурсу
-                } else {
+                // Що саме класти — шукаємо, а не беремо «єдине, що є»: у 0.8
+                // файл пісенника лежав у zip-і всередині теки «Modules/», і
+                // на диск лягала ТЕКА з іменем пісенника (власник: «пише
+                // завершено, а фізично не скачується»).
+                guard let found = Self.payload(in: staging, for: item) else {
                     return .unpack(OurWords.t("в архиве нет модуля"))
                 }
                 try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
-                if payload == staging {
+                switch found {
+                case .item(let url):
+                    try fm.moveItem(at: url, to: destination)
+                case .files(let folder):
                     try fm.createDirectory(at: destination, withIntermediateDirectories: true)
-                    for file in unpacked { try fm.moveItem(at: file, to: destination.appendingPathComponent(file.lastPathComponent)) }
-                } else {
-                    try fm.moveItem(at: payload, to: destination)
+                    for file in (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+                    where !["__MACOSX", ".DS_Store"].contains(file.lastPathComponent) {
+                        try fm.moveItem(at: file, to: destination.appendingPathComponent(file.lastPathComponent))
+                    }
                 }
                 // Пісенник VisioBible — одразу у свій формат, старий двійник геть.
                 if item.kind == .songbook {

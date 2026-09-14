@@ -397,6 +397,10 @@ final class NativeMainWindowController: NSObject, NSWindowDelegate {
     }
 
     private func applyLibraryOverlay(state: AppState) {
+        // Заставку «Відкриваю бібліотеку…» прибираємо, щойно читання скінчилося,
+        // хоч би з чим: доти з порожньою текою модулів (збірка «лише програма»)
+        // вона лишалася поверх усіх вікон і закривала половину вікна ресурсів.
+        if !state.isLoadingLibrary { NativeSplash.hide() }
         let message: String?
         if let error = state.loadError {
             message = error
@@ -418,9 +422,12 @@ final class NativeMainWindowController: NSObject, NSWindowDelegate {
         if let existing = libraryOverlay {
             overlay = existing
         } else {
-            overlay = NativeLibraryOverlay { [weak self] in
+            overlay = NativeLibraryOverlay(choose: { [weak self] in
                 self?.state?.menuActions.chooseModules()
-            }
+            }, download: { [weak self] in
+                guard let state = self?.state else { return }
+                NativeResourcesWindow.show(state: state)
+            })
             root.addSubview(overlay)
             libraryOverlay = overlay
         }
@@ -443,11 +450,21 @@ final class NativeMainWindowController: NSObject, NSWindowDelegate {
 final class NativeLibraryOverlay: NSView {
     private let label = NSTextField(wrappingLabelWithString: "")
     private let button = NSButton(title: OurWords.t("Выбрать папку с модулями…"), target: nil, action: nil)
+    /// Порожня тека модулів у збірці «лише програма» — головна дорога тут:
+    /// завантажити переклади з інтернету.
+    private let downloadButton = NSButton(title: OurWords.t("Загрузить с GitHub…"), target: nil, action: nil)
     private let choose: () -> Void
+    private let download: () -> Void
 
-    init(choose: @escaping () -> Void) {
+    init(choose: @escaping () -> Void, download: @escaping () -> Void) {
         self.choose = choose
+        self.download = download
         super.init(frame: .zero)
+        downloadButton.target = self
+        downloadButton.action = #selector(fetch)
+        downloadButton.bezelStyle = .rounded
+        downloadButton.keyEquivalent = "\r"
+        addSubview(downloadButton)
         // Никакого `wantsLayer`: один слойный вид переводит на слои всё окно
         // разом, и самописная отрисовка соседей — меню, вкладки, заголовки
         // колонок — остаётся пустой. Ровно так и сломалось: заслонка мелькала
@@ -466,6 +483,7 @@ final class NativeLibraryOverlay: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
 
     @objc private func pick() { choose() }
+    @objc private func fetch() { download() }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
@@ -475,6 +493,7 @@ final class NativeLibraryOverlay: NSView {
     func set(message: String, showsButton: Bool) {
         label.stringValue = message
         button.isHidden = !showsButton
+        downloadButton.isHidden = !showsButton
     }
 
     override func layout() {
@@ -485,7 +504,12 @@ final class NativeLibraryOverlay: NSView {
                              y: bounds.midY - height / 2 + 14,
                              width: width, height: height)
         let size = button.intrinsicContentSize
-        button.frame = NSRect(x: (bounds.width - size.width) / 2,
+        let second = downloadButton.intrinsicContentSize
+        let total = second.width + 12 + size.width
+        downloadButton.frame = NSRect(x: (bounds.width - total) / 2,
+                                      y: label.frame.minY - second.height - 12,
+                                      width: second.width, height: second.height)
+        button.frame = NSRect(x: downloadButton.frame.maxX + 12,
                               y: label.frame.minY - size.height - 12,
                               width: size.width, height: size.height)
     }

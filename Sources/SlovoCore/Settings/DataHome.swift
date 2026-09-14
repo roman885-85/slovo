@@ -87,6 +87,37 @@ public enum DataHome {
         }
     }
 
+    /// Полагодити модулі, що лягли ТЕКОЮ з іменем файла: «pv3055.songbook/»
+    /// з файлом «pv3055.songbook» усередині (так ставила пісенники й модулі
+    /// MySword програма 0.8 з архівів ресурсів 14.09). Повертає, скільки
+    /// полагоджено.
+    @discardableResult
+    public static func repairNestedModules(in modules: URL) -> Int {
+        let fm = FileManager.default
+        var repaired = 0
+        let entries = (try? fm.contentsOfDirectory(at: modules, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            let lower = name.lowercased()
+            guard ["songbook", "vbm", "sqlite3", "sqlite", "mybible"].contains(where: { lower.hasSuffix("." + $0) }),
+                  (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            let files = (fm.enumerator(at: entry, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? [])
+                .filter { !$0.hasDirectoryPath && $0.lastPathComponent != ".DS_Store" }
+            guard let inner = files.first(where: { $0.lastPathComponent.lowercased() == lower }) ?? (files.count == 1 ? files[0] : nil)
+            else { continue }
+            let parked = modules.appendingPathComponent(".slovo-repair-" + UUID().uuidString)
+            do {
+                try fm.moveItem(at: inner, to: parked)
+                try fm.removeItem(at: entry)
+                try fm.moveItem(at: parked, to: entry)
+                repaired += 1
+            } catch {
+                try? fm.removeItem(at: parked)
+            }
+        }
+        return repaired
+    }
+
     /// Перетворити пісенники в теці модулів — один раз на теку (за журналом).
     /// Повертає звіт, коли щось справді зробили.
     @discardableResult
