@@ -103,12 +103,31 @@ enum AppUpdater {
         if let regex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\([^)]+\\)") {
             text = regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "$1")
         }
-        let lines = text.components(separatedBy: .newlines).map { line -> String in
-            var line = line
+        // Рядки абзацу в Markdown переносяться руками, щоб файл читався в
+        // редакторі; у вікні ці переноси рвали речення посередині («з 0.82 /
+        // і 0.83 — / лише вручну», 0.85). Складаємо абзац і пункт списку в
+        // один рядок; заголовок і порожній рядок лишаються межами.
+        var result: [String] = []
+        var joinable = false
+        for raw in text.components(separatedBy: .newlines) {
+            var line = raw
+            let isHeading = line.hasPrefix("#")
             while line.hasPrefix("#") { line.removeFirst() }
-            return line.trimmingCharacters(in: .whitespaces)
+            line = line.trimmingCharacters(in: .whitespaces)
+            let startsItem = line.hasPrefix("- ") || line.hasPrefix("* ")
+                || line.range(of: "^[0-9]+\\. ", options: .regularExpression) != nil
+            if line.isEmpty {
+                if result.last != "" { result.append("") }
+                joinable = false
+            } else if joinable, !isHeading, !startsItem, let last = result.last {
+                result[result.count - 1] = last + " " + line
+            } else {
+                result.append(line)
+                joinable = !isHeading
+            }
         }
-        return lines.joined(separator: "\n").replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        while result.last == "" { result.removeLast() }
+        return result.joined(separator: "\n")
     }
 
     /// Теки й файли даних у `Contents/Resources/app`, які переходять зі

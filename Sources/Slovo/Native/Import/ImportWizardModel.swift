@@ -302,9 +302,18 @@ enum ImportWizardWindow {
 
     static func show(state: AppState) {
         if let window = controller?.window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+            // Випадково закритий майстер відкривається там, де його лишили.
+            // Але після перенесення лишати нічого: опис джерел пораховано до
+            // нього, і з меню відкривалося старе зведення з кнопкою
+            // «Імпортувати» (0.85, перевірка скачаної збірки).
+            if (window.contentView as? NativeImportWizard)?.hasFinishedImport == true {
+                window.orderOut(nil)
+                controller = nil
+            } else {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                return
+            }
         }
 
         // Пока библиотека открывается, мастеру нечем работать: опись строится

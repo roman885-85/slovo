@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>uk</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>uk</string>
+		<string>en</string>
+		<string>de</string>
+		<string>ru</string>
+	</array>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>Слово</string>
 	<key>CFBundleExecutable</key>
@@ -15,9 +26,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.85</string>
+	<string>0.86</string>
 	<key>CFBundleVersion</key>
-	<string>0.85.0</string>
+	<string>0.86.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
@@ -25,7 +36,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Свободное ПО для церковного служения</string>
+	<string>Вільна програма для церковного служіння</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>«Слово» надсилає відео NDI у локальну мережу та відповідає пульту на телефоні.</string>
 	<key>NSBonjourServices</key>

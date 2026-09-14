@@ -108,6 +108,11 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
     private func editItem() -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: OurWords.t("Правка"))
+        // Системні пункти («Автозаповнення», «Почати диктування…», «Емодзі та
+        // символи») macOS дописує в цей розділ сама — і, бувало, не раз: на
+        // стенді «Емодзі» стояли тричі. Повтори прибираємо перед показом.
+        menu.delegate = self
+        editMenu = menu
         let entries: [(String, Selector, String, NSEvent.ModifierFlags)] = [
             ("Отменить действие", Selector(("undo:")), "z", [.command]),
             ("Повторить действие", Selector(("redo:")), "z", [.command, .shift]),
@@ -137,6 +142,25 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
         return item
     }
 
+    private weak var editMenu: NSMenu?
+
+    /// Прибрати пункти, що стоять удруге з тією самою дією й підписом, і
+    /// роздільники, що опинилися поруч.
+    func removeRepeatedItems(in menu: NSMenu) {
+        var seen: Set<String> = []
+        for item in menu.items.reversed() {
+            guard !item.isSeparatorItem, let action = item.action else { continue }
+            let key = NSStringFromSelector(action) + "|" + item.title
+            if !seen.insert(key).inserted { menu.removeItem(item) }
+        }
+        var previousWasSeparator = true
+        for item in menu.items {
+            if item.isSeparatorItem, previousWasSeparator { menu.removeItem(item); continue }
+            previousWasSeparator = item.isSeparatorItem
+        }
+        if let last = menu.items.last, last.isSeparatorItem { menu.removeItem(last) }
+    }
+
     /// Пункти, побудовані раз і назавжди (розділ програми та «Вікно»): з
     /// опису вони не збираються, тому при зміні мови перепідписуються тут.
     private var relabelers: [() -> Void] = []
@@ -160,6 +184,10 @@ final class NativeAppMenu: NSObject, NSMenuDelegate {
     // MARK: - Наповнення
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === editMenu {
+            removeRepeatedItems(in: menu)
+            return
+        }
         guard let group = groups[ObjectIdentifier(menu)] else { return }
         menu.removeAllItems()
         for entry in SlovoMenu.entries(for: group, state: state) {

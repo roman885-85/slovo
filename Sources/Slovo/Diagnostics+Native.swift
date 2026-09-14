@@ -57,6 +57,7 @@ extension Diagnostics {
         checks.append(contentsOf: nativeScroll(list, host))
         checks.append(contentsOf: nativeScrollBeforeHeight(host))
         checks.append(nativeEditMenu(host))
+        checks.append(nativeBundleLanguages())
         checks.append(contentsOf: nativeSingleRow(list, source, host))
         checks.append(contentsOf: nativeTiles(host))
         checks.append(contentsOf: nativeSpeed(list, host))
@@ -204,6 +205,11 @@ extension Diagnostics {
                          detail: "у рядку меню немає розділу з «Вставити» — ⌘V у полях не працює")
         }
         var trouble: [String] = []
+        // Перед показом розділ прибирає повтори системних пунктів.
+        edit.delegate?.menuNeedsUpdate?(edit)
+        let keys = edit.items.filter { !$0.isSeparatorItem }.map { ($0.action.map(NSStringFromSelector) ?? "") + "|" + $0.title }
+        let repeated = Set(keys.filter { key in keys.filter { $0 == key }.count > 1 })
+        if !repeated.isEmpty { trouble.append("пункти повторюються: \(repeated.sorted())") }
         let field = NSTextField(string: "Слово на пробу")
         field.frame = NSRect(x: 0, y: 900, width: 200, height: 22)
         host.addSubview(field)
@@ -238,6 +244,32 @@ extension Diagnostics {
         return Check(area: "Вікно AppKit", name: name, status: trouble.isEmpty ? .ok : .failed,
                      detail: trouble.isEmpty
                          ? "розділ «\(edit.title)»: " + edit.items.filter { !$0.isSeparatorItem }.map(\.title).joined(separator: ", ")
+                         : trouble.joined(separator: "; "))
+    }
+
+    /// Системні підписи — мовою системи.
+    ///
+    /// Пакет не оголошував жодної мови, і macOS брала англійську: у вікні
+    /// вибору файлу «Cancel» і «Favorites», у меню «Undo Paste», «AutoFill»,
+    /// розмір «8,8 MB» — на українській системі (0.85).
+    private static func nativeBundleLanguages() -> Check {
+        let name = "Системні підписи мовою системи, а не англійською"
+        var trouble: [String] = []
+        let declared = (Bundle.main.object(forInfoDictionaryKey: "CFBundleLocalizations") as? [String]) ?? []
+        if !declared.contains("uk") { trouble.append("пакет не оголошує українську (CFBundleLocalizations: \(declared))") }
+        if Bundle.main.developmentLocalization != "uk" {
+            trouble.append("основна мова пакета «\(Bundle.main.developmentLocalization ?? "—")», а не uk")
+        }
+        let system = Locale.preferredLanguages.first ?? "—"
+        let chosen = Bundle.main.preferredLocalizations.first ?? "—"
+        let undo = UndoManager().undoMenuTitle(forUndoActionName: "X")
+        if system.hasPrefix("uk") {
+            if chosen != "uk" { trouble.append("система українська, а пакет узяв «\(chosen)»") }
+            if undo.hasPrefix("Undo") { trouble.append("меню скасування англійською: «\(undo)»") }
+        }
+        return Check(area: "Вікно AppKit", name: name, status: trouble.isEmpty ? .ok : .failed,
+                     detail: trouble.isEmpty
+                         ? "система \(system), пакет \(chosen), оголошено \(declared.joined(separator: ", ")); «\(undo)»"
                          : trouble.joined(separator: "; "))
     }
 

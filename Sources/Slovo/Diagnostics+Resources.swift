@@ -261,6 +261,11 @@ extension Diagnostics {
         checks.append(Check(area: area, name: "Опис випуску у вікні — без розмітки Markdown",
                             status: plain.contains("**") || plain.contains("](") || plain.contains("##") || plain.contains("`") ? .failed : .ok,
                             detail: plain.replacingOccurrences(of: "\n", with: " / ")))
+        let wrapped = AppUpdater.plain("Оновлення 0.85 — лише програма. Ставиться з 0.84 (з 0.82\nі 0.83 —\nлише вручну).\n\n## Що нового\n\n- **Вставка** працює: у меню\n  з'явився розділ.\n- Друге.\n1. Крок\n   далі.\nКінець абзацу\n")
+        let wrappedWanted = "Оновлення 0.85 — лише програма. Ставиться з 0.84 (з 0.82 і 0.83 — лише вручну).\n\nЩо нового\n\n- Вставка працює: у меню з'явився розділ.\n- Друге.\n1. Крок далі. Кінець абзацу"
+        checks.append(Check(area: area, name: "Опис випуску у вікні — абзаци без ручних переносів",
+                            status: wrapped == wrappedWanted ? .ok : .failed,
+                            detail: wrapped.replacingOccurrences(of: "\n", with: " / ")))
 
         // 10. Версії програми порівнюються як десяткові.
         let versions = AppUpdater.isNewer("0.8", than: "0.69") && AppUpdater.isNewer("0.7", than: "0.68")

@@ -180,6 +180,10 @@ final class NativeImportWizard: NSView {
     /// Вид страницы — для самопроверки.
     func view(of page: ImportWizardModel.Page) -> NSView? { pages[page] }
 
+    /// Перенесення вже відбулося: повторне відкриття з меню починає майстер
+    /// спочатку, а не показує старе зведення зі старим описом джерел.
+    var hasFinishedImport: Bool { model.outcome != nil && !model.isRunning }
+
     private var pageTitle: String {
         switch model.page {
         case .intro:     return OurWords.t("Импорт модулей, шаблонов и фонов")
