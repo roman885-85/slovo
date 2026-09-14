@@ -86,29 +86,44 @@ rm -rf "$APP/Contents/_CodeSignature"
 # unsupported format for signature» — и пакет оставался неподписанным вовсе.
 find "$APP" -name "*.cstemp" -delete 2>/dev/null
 
-# Дані в пакеті більше не живуть (власник: «избавиться от остатков
-# VisioBible»): модулі, фони, шаблони, плани тримає програма у
-# ~/Library/Application Support/Slovo. Те, що лежало в пакеті (копія
-# VisioBible, 435 МБ), відкладаємо поруч із пакетом — програма на першому
-# запуску перенесе звідти своє, а тека лишиться архівом, який можна видалити.
-if [ -d "$APP/Contents/Resources/app/Modules" ]; then
-  ARCHIVE="$DEST/Дані з пакета (VisioBible)"
-  if [ -d "$ARCHIVE" ]; then
-    rm -rf "$APP/Contents/Resources/app"
-  else
-    mv "$APP/Contents/Resources/app" "$ARCHIVE"
-  fi
-  echo "дані з пакета відкладено: $ARCHIVE"
+# Переклади й модулі — завжди всередині пакета (власник: «все переводы и
+# модули внутри пакета всегда»): скопійований пакет має бути цілим. Дані
+# (Modules, BackGrounds, Templates, Plans, Fonts, RemoteAPI) у репозиторії
+# не лежать — сотні мегабайт; коли в пакеті їх нема, беремо з теки,
+# відкладеної поруч (переносимо назад), або клоном із сусіднього пакета.
+if [ ! -d "$APP/Contents/Resources/app/Modules" ]; then
+  for source in "$DEST/Дані з пакета (VisioBible)" "$DEST"/*.app/Contents/Resources/app; do
+    [ -d "$source/Modules" ] || continue
+    [ "$source" = "$APP/Contents/Resources/app" ] && continue
+    mkdir -p "$APP/Contents/Resources/app"
+    for name in Modules BackGrounds Templates Plans Fonts RemoteAPI "Імпорт з VisioBible" inconsistencies.sqlite3 settings.json; do
+      [ -e "$source/$name" ] || continue
+      [ -e "$APP/Contents/Resources/app/$name" ] && continue
+      case "$source" in
+        *"Дані з пакета (VisioBible)") mv "$source/$name" "$APP/Contents/Resources/app/$name" ;;
+        *) cp -Rc "$source/$name" "$APP/Contents/Resources/app/$name" 2>/dev/null \
+             || cp -R "$source/$name" "$APP/Contents/Resources/app/$name" ;;
+      esac
+    done
+    echo "дані в пакет узято з: $source"
+    break
+  done
 fi
-rm -rf "$APP/Contents/Resources/app"
-# У пакеті — лише своє: умовчання програми, розкладка клавіш, довідка і
-# база правил нумерації. Саме з них програма стартує на новому комп'ютері.
+[ -d "$APP/Contents/Resources/app/Modules" ] || echo "ВНИМАНИЕ: в пакете нет Resources/app/Modules — ни переводов, ни песенников"
+# Залишків VisioBible у пакеті нема: довідка .chm, мови .lng (інтерфейс іде
+# зі свого словника), стилі .vsf, знімки, службові ini.
+for junk in Help Language Styles ScreenShots fonts_correct.ini hebrnew.ini shortnames.json; do
+  rm -rf "$APP/Contents/Resources/app/$junk"
+done
+# Своє — з репозиторію, щоразу: умовчання, розкладка клавіш, довідка, база
+# правил нумерації. Саме з них програма стартує на новому комп'ютері.
 mkdir -p "$APP/Contents/Resources/app"
 cp Resources/Defaults/Slovo.ini "$APP/Contents/Resources/app/Slovo.ini"
 cp Resources/Defaults/hotkeys.ini "$APP/Contents/Resources/app/hotkeys.ini"
 cp Resources/Defaults/ЧИТАТИ.md "$APP/Contents/Resources/app/ЧИТАТИ.md"
-[ -f Resources/Numbering/inconsistencies.sqlite3 ] && cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
-echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md, inconsistencies.sqlite3"
+[ -f "$APP/Contents/Resources/app/inconsistencies.sqlite3" ] || [ ! -f Resources/Numbering/inconsistencies.sqlite3 ] \
+  || cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
+echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md; модулів: $(ls "$APP/Contents/Resources/app/Modules" 2>/dev/null | wc -l | tr -d ' ')"
 
 # Програми для Android — усередині «Слова»: людина зберігає їх з програми
 # на комп'ютер або завантажує зі сторінки пульта в браузері просто на

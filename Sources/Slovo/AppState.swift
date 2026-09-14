@@ -449,40 +449,31 @@ final class AppState: ObservableObject {
     /// де нічого більше не встановлено. Потім особиста тека користувача, куди
     /// лягають додані вручну модулі. Установлений VisioBible не перевіряємо:
     /// програма від нього не залежить.
-    /// Тека модулів на старті: збережена, а коли вона чужа (усередині
-    /// пакета чи VisioBible) або не збережена зовсім — свій дім
-    /// (`~/Library/Application Support/Slovo/Modules`), куди дані переносяться
-    /// один раз. Власник: «избавиться от остатков VisioBible».
+    /// Тека модулів на старті. Власник: «все переводы и модули внутри пакета
+    /// всегда» — тому за умовчанням це `Contents/Resources/app/Modules` у
+    /// самому пакеті (скопійований пакет — цілий); вибрана вручну — збережена;
+    /// пакет без даних (відкрита збірка) — свій дім у Application Support.
+    /// Пісенники VisioBible в теці один раз переводяться у свій `.songbook`.
     static func settleModulesFolder() -> URL {
         let fm = FileManager.default
-        let own = DataHome.modules
+        let inBundle = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/Modules")
+        let folder: URL
         if let saved = Defaults.modulesFolder, fm.fileExists(atPath: saved.path) {
-            guard DataHome.isForeign(modulesFolder: saved) else { return saved }
-            let report = DataHome.migrate(from: saved.deletingLastPathComponent())
-            NativeTrace.say("дім даних: " + report.summary)
-            migrationNote = report.summary
-            Defaults.modulesFolder = own
-            return own
+            folder = saved
+        } else if fm.fileExists(atPath: inBundle.path) {
+            folder = inBundle
+        } else {
+            folder = DataHome.modules
+            try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        // Нічого не збережено: свій дім, а коли він порожній — наповнити з
-        // того, що є поруч: тека, відкладена deploy.sh, сусідні пакети,
-        // установлений VisioBible.
-        let ownHasModules = ((try? fm.contentsOfDirectory(atPath: own.path)) ?? []).contains { !$0.hasPrefix(".") }
-        if !ownHasModules, let source = DataHome.migrationCandidates(near: Bundle.main.bundleURL).first {
-            let report = DataHome.migrate(from: source)
-            NativeTrace.say("дім даних: " + report.summary)
-            // Стартові модулі з власного пакета (відкрита збірка) — не «перенесення
-            // даних», вікна про це не треба.
-            if !source.standardizedFileURL.path.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path) {
-                migrationNote = report.summary
-            }
+        if let report = DataHome.convertSongBooksOnce(in: folder) {
+            NativeTrace.say("пісенники: " + report.summary)
+            if report.converted > 0 { migrationNote = report.summary }
         }
-        try? fm.createDirectory(at: own, withIntermediateDirectories: true)
-        Defaults.modulesFolder = own
-        return own
+        return folder
     }
 
-    /// Що перенесли на старті — сказати людині один раз після появи вікна.
+    /// Що перетворили на старті — сказати людині один раз після появи вікна.
     static var migrationNote: String?
 
     static func guessModulesFolder() -> URL { DataHome.modules }

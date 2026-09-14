@@ -191,23 +191,25 @@ extension Diagnostics {
     /// Поділ списку на переклади й пісенники.
     private static func modulesSplitCheck(area: String, state: AppState,
                                           store: SettingsStore) -> Check {
-        let name = "Список модулів поділено на Біблії та пісенники"
+        let name = "Модулі в налаштуваннях: переклади й пісенники — окремими списками"
         let tab = NativeSettingsModulesTab(state: state, store: store)
-        var headers: [String] = []
-        for index in 0..<tab.rowCount {
-            let row = tab.row(at: index)
-            if row.lead.isEmpty && !row.text.isEmpty { headers.append(row.text) }
-        }
         let bibles = store.settings.modules.filter { !$0.isSongBook }.count
         let songs = store.settings.modules.filter { $0.isSongBook }.count
-        let wanted = (bibles > 0 ? 1 : 0) + (songs > 0 ? 1 : 0)
-        let detail = "рядків \(tab.rowCount), заголовків \(headers.count): "
-            + headers.joined(separator: " | ") + "; перекладів \(bibles), пісенників \(songs)"
-        guard headers.count == wanted, tab.rowCount == store.settings.modules.count + wanted else {
-            return Check(area: area, name: name, status: .failed,
-                         detail: "очікували \(wanted) заголовки; " + detail)
+        var faults: [String] = []
+        tab.showForCheck(songBooks: false)
+        let shownBibles = tab.rowKindsForCheck
+        if shownBibles.count != bibles || shownBibles.contains(true) {
+            faults.append("у списку перекладів \(shownBibles.count) рядків (перекладів \(bibles)), пісенників серед них \(shownBibles.filter { $0 }.count)")
         }
-        return Check(area: area, name: name, status: .ok, detail: detail)
+        tab.showForCheck(songBooks: true)
+        let shownSongs = tab.rowKindsForCheck
+        if shownSongs.count != songs || shownSongs.contains(false) {
+            faults.append("у списку пісенників \(shownSongs.count) рядків (пісенників \(songs)), перекладів серед них \(shownSongs.filter { !$0 }.count)")
+        }
+        if tab.rowCount != songs { faults.append("рядків у таблиці \(tab.rowCount), а пісенників \(songs)") }
+        let detail = "перекладів \(bibles) — у своєму списку \(shownBibles.count); пісенників \(songs) — у своєму \(shownSongs.count)"
+        return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty ? detail : faults.joined(separator: "; ") + ". " + detail)
     }
 
     /// Галочка перекладу діє одразу, без «Ок».

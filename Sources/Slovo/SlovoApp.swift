@@ -51,8 +51,8 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
            !CommandLine.arguments.contains(where: { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") }) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 let alert = NSAlert()
-                alert.messageText = OurWords.t("Данные программы перенесены")
-                alert.informativeText = OurWords.t("Модули, фоны, шаблоны и планы теперь живут в папке Library/Application Support/Slovo, а пакет программы данных не содержит. Песенники VisioBible (.vbm) переведены в свой формат .songbook; оригиналы отложены в папку «Імпорт з VisioBible». Папку «Дані з пакета (VisioBible)» рядом с программой можно удалить.")
+                alert.messageText = OurWords.t("Песенники переведены в формат Слова")
+                alert.informativeText = OurWords.t("Песенники VisioBible (.vbm) в папке модулей переведены в свой формат .songbook. Оригиналы отложены в папку «Імпорт з VisioBible» рядом с папкой модулей — их можно удалить.")
                     + "\n\n" + note
                 alert.runModal()
             }

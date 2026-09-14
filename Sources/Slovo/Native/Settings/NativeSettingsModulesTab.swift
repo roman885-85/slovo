@@ -19,6 +19,11 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
     private let list = NativeTable(detailWidth: 220)
     private let status = NativeForm.label("")
     private var selected: Int?
+    /// Два окремі списки — переклади Біблії та пісенники; перемикач над
+    /// списком. Власник: «в настройках модули переводов и песенников должны
+    /// быть разделены, чтобы не путаться в них».
+    private let kinds = NSSegmentedControl(labels: ["", ""], trackingMode: .selectOne, target: nil, action: nil)
+    private(set) var showsSongBooks = false
 
     init(state: AppState, store: SettingsStore) {
         self.state = state
@@ -28,6 +33,38 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         list.onSelect = { [weak self] _, active, _ in self?.selected = active }
         list.onActivate = { [weak self] index in self?.toggle(at: index) }
         list.onLeadClick = { [weak self] index in self?.toggle(at: index) }
+        kinds.target = self
+        kinds.action = #selector(kindChosen)
+        kinds.selectedSegment = 0
+        kinds.segmentStyle = .texturedRounded
+    }
+
+    @objc private func kindChosen() {
+        showsSongBooks = kinds.selectedSegment == 1
+        selected = nil
+        refreshList()
+    }
+
+    /// Самоперевірці: відкрити список перекладів або пісенників.
+    func showForCheck(songBooks: Bool) {
+        kinds.selectedSegment = songBooks ? 1 : 0
+        kindChosen()
+    }
+
+    /// Самоперевірці: якого роду кожен рядок відкритого списку.
+    var rowKindsForCheck: [Bool] {
+        lines.compactMap { if case .module(let entry) = $0 { return entry.isSongBook } else { return nil } }
+    }
+
+    /// Підписи перемикача з лічильниками: «Переклади Біблії · 57».
+    private func refreshKinds() {
+        let all = rows
+        let bibles = all.filter { !$0.isSongBook }
+        let songs = all.filter { $0.isSongBook }
+        kinds.setLabel(OurWords.t("Переводы Библии") + " · \(bibles.count)", forSegment: 0)
+        kinds.setLabel(OurWords.t("Песенники") + " · \(songs.count)", forSegment: 1)
+        let shown = showsSongBooks ? songs : bibles
+        status.stringValue = "\(OurWords.t("включено")) \(shown.filter(\.isEnabled).count) \(OurWords.t("из")) \(shown.count)"
     }
 
     var page: NSView { NativeForm.Page([modules, loading]) }
@@ -60,12 +97,13 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
                                                      "Импорт модулей...")) { [weak self] in self?.importModule() })
 
         return NativeForm.Group(state.vb("Label1", OurWords.t("Текстовые модули:")), [
+            NativeForm.Row("", [kinds]),
             NativeForm.Row("", [
                 NativeForm.button(state.vbHint("SBCheckAll", OurWords.t("Пометить все")), hint: nil) { [weak self] in
-                    self?.store.setAllModules(enabled: true); self?.refreshList()
+                    self?.setShownSection(enabled: true)
                 },
                 NativeForm.button(state.vbHint("SBUnCheckAll", OurWords.t("Снять пометку со всех")), hint: nil) { [weak self] in
-                    self?.store.setAllModules(enabled: false); self?.refreshList()
+                    self?.setShownSection(enabled: false)
                 },
                 status,
             ]),
@@ -75,7 +113,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
                                  secondary: true),
             ]),
             NativeForm.Row("", stretch: true, [
-                NativeForm.label(OurWords.t("Видно сразу, «Ок» только запоминает. Щелчок по заголовку раздела включает или выключает весь раздел."),
+                NativeForm.label(OurWords.t("Видно сразу, «Ок» только запоминает. «Пометить все» и «Снять пометку» действуют на открытый список — переводы или песенники."),
                                  secondary: true),
             ]),
         ])
@@ -109,6 +147,13 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         }
         guard case .module(let entry)? = line(at: index) else { return }
         store.setModule(entry.id, enabled: !entry.isEnabled)
+        refreshList()
+        state.applyModuleRoster(store.settings.modules)
+    }
+
+    /// «Позначити все» / «Зняти позначку» — лише для відкритого списку.
+    private func setShownSection(enabled: Bool) {
+        for item in rows where item.isSongBook == showsSongBooks { store.setModule(item.id, enabled: enabled) }
         refreshList()
         state.applyModuleRoster(store.settings.modules)
     }
@@ -274,7 +319,12 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
             // Здесь именно весь каталог: выключенная строка обязана остаться
             // с названием и сокращением, иначе снятая галочка превращала бы
             // сборник в безымянный «Индекс: Нет».
-            if let book = state.allSongBooks.first(where: { $0.url.lastPathComponent.lowercased() == key }) {
+            // Пісенник — за ім'ям файла або за основою: у розписі «pv3055.vbm»,
+            // а збірник уже «pv3055.songbook».
+            let stem = (key as NSString).deletingPathExtension
+            if let book = state.allSongBooks.first(where: {
+                $0.url.lastPathComponent.lowercased() == key || $0.id.lowercased() == stem
+            }) {
                 return SettingsModuleRow(id: entry.id, name: entry.name,
                                          title: book.displayName, shortName: book.shortName,
                                          hasIndex: true, isEnabled: entry.isEnabled,
@@ -311,6 +361,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
     /// Перебудувати список і перемалювати таблицю.
     private func refreshList() {
         lineCache = nil
+        refreshKinds()
         list.reload()
     }
 
@@ -318,19 +369,9 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
     func reloadRows() { refreshList() }
 
     private func buildLines() -> [Line] {
-        let all = rows
-        let bibles = all.filter { !$0.isSongBook }
-        let songs = all.filter { $0.isSongBook }
-        var result: [Line] = []
-        if !bibles.isEmpty {
-            result.append(.header(title: heading(OurWords.t("Переводы Библии"), bibles), songBooks: false))
-            result.append(contentsOf: bibles.map(Line.module))
-        }
-        if !songs.isEmpty {
-            result.append(.header(title: heading(OurWords.t("Песенники"), songs), songBooks: true))
-            result.append(contentsOf: songs.map(Line.module))
-        }
-        return result
+        // Лише відкритий список: переклади або пісенники, без заголовків —
+        // рід видно з перемикача над списком.
+        rows.filter { $0.isSongBook == showsSongBooks }.map(Line.module)
     }
 
     private func heading(_ title: String, _ items: [SettingsModuleRow]) -> String {

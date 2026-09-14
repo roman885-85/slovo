@@ -30,10 +30,13 @@ extension Diagnostics {
     /// не поламати імпорт».
     private static func nativeSongFormat(_ state: AppState) -> Check {
         let name = "Пісенник у своєму форматі .songbook: без втрат, з імпортом .vbm і експортом для планшета"
+        // Джерело — будь-який збірник: `.vbm` як є, а `.songbook` спершу
+        // збираємо у `.vbm` (у теці модулів після перетворення `.vbm` уже нема).
+        wait(untilTrue: { state.songLibrary != nil && !state.isLoadingLibrary }, seconds: 10)
         guard let library = state.songLibrary,
-              let source = library.books.first(where: { $0.url.pathExtension.lowercased() == "vbm" }),
+              let source = library.books.first(where: { library.book($0.id)?.songs.isEmpty == false }),
               let book = library.book(source.id) else {
-            return Check(area: songArea, name: name, status: .skipped, detail: "у бібліотеці нема жодного .vbm")
+            return Check(area: songArea, name: name, status: .skipped, detail: "у бібліотеці нема жодного пісенника")
         }
         var faults: [String] = []
         let fm = FileManager.default
@@ -41,8 +44,8 @@ extension Diagnostics {
         defer { try? fm.removeItem(at: temp) }
         do {
             try fm.createDirectory(at: temp, withIntermediateDirectories: true)
-            let vbmCopy = temp.appendingPathComponent(source.url.lastPathComponent)
-            try fm.copyItem(at: source.url, to: vbmCopy)
+            let vbmCopy = temp.appendingPathComponent(source.id + ".vbm")
+            try SongBookWriter.data(for: book).write(to: vbmCopy)
             // 1. Майстер: .vbm → .songbook.
             let own = temp.appendingPathComponent(source.id).appendingPathExtension(SongBookJSON.pathExtension)
             try ModuleImporter.convertSongBook(from: vbmCopy, to: own)
@@ -62,8 +65,8 @@ extension Diagnostics {
             }
             // 4. За старим ім'ям із Плану чи «Історії».
             let small = SongLibrary(songFiles: files)
-            if small.entry(fileName: source.url.lastPathComponent)?.id != source.id {
-                faults.append("за ім'ям «\(source.url.lastPathComponent)» збірник не знайшовся")
+            if small.entry(fileName: source.id + ".vbm")?.id != source.id {
+                faults.append("за ім'ям «\(source.id).vbm» збірник не знайшовся")
             }
             // 5. Експорт у .vbm — планшету й VisioBible.
             let exported = try SongBookWriter.data(for: back)
@@ -72,8 +75,8 @@ extension Diagnostics {
             // 6. Редактор пише .songbook поруч із .vbm.
             let editorFolder = temp.appendingPathComponent("редактор")
             try fm.createDirectory(at: editorFolder, withIntermediateDirectories: true)
-            let editedVbm = editorFolder.appendingPathComponent(source.url.lastPathComponent)
-            try fm.copyItem(at: source.url, to: editedVbm)
+            let editedVbm = editorFolder.appendingPathComponent(source.id + ".vbm")
+            try fm.copyItem(at: vbmCopy, to: editedVbm)
             let editor = SongBookEditor(book: book, url: editedVbm, isModified: true)
             let saved = try editor.save()
             if !SongBookJSON.isSongBookFile(saved) || !fm.fileExists(atPath: saved.path) {
