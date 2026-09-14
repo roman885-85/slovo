@@ -25,7 +25,7 @@ final class SlideImageStore: @unchecked Sendable {
         lock.unlock()
 
         let options = [kCGImageSourceShouldCache: true] as CFDictionary
-        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: DataPaths.existing(path) ?? path) as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, options) else { return nil }
 
         lock.lock()

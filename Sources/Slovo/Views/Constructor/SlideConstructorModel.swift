@@ -514,10 +514,7 @@ final class SlideConstructorModel: ObservableObject {
     func imageURL(_ name: String?) -> URL? {
         guard let name, !name.isEmpty else { return nil }
         let cleaned = name.replacingOccurrences(of: "\\", with: "/")
-        if cleaned.hasPrefix("/") {
-            let direct = URL(fileURLWithPath: cleaned)
-            return FileManager.default.fileExists(atPath: direct.path) ? direct : nil
-        }
+        if let found = DataPaths.existing(cleaned) { return URL(fileURLWithPath: found) }
         guard let folder = sourceFolder else { return nil }
         let leaf = cleaned.split(separator: "/").last.map(String.init) ?? cleaned
         let url = folder.appendingPathComponent(leaf)

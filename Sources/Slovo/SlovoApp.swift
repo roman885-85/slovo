@@ -51,10 +51,16 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
         // видно, порожня тека модулів чи ще читається.
         if !CommandLine.arguments.contains(where: { $0.hasPrefix("--check") || $0.hasPrefix("--selftest") }) {
             whenLibraryIsReady { [state] in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    ResourceOffer.offerIfEmpty(state: state)
-                    AppUpdater.checkOnLaunch(state: state, intervalDays: SettingsStore.shared.settings.options.updateInterval)
+                // Таймером, а не блоком головної черги: вікно-питання в
+                // `runModal` усередині такого блоку зупиняє всю головну чергу
+                // (див. AppUpdater).
+                let timer = Timer(timeInterval: 1.5, repeats: false) { _ in
+                    MainActor.assumeIsolated {
+                        ResourceOffer.offerIfEmpty(state: state)
+                        AppUpdater.checkOnLaunch(state: state, intervalDays: SettingsStore.shared.settings.options.updateInterval)
+                    }
                 }
+                RunLoop.main.add(timer, forMode: .common)
             }
         }
         // Дані перенесли в свій дім — сказати один раз, коли вікно вже є.

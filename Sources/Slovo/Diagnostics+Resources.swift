@@ -203,7 +203,35 @@ extension Diagnostics {
             checks.append(Check(area: area, name: "Список модулів у налаштуваннях — за тим, що є на диску", status: .failed, detail: "\(error)"))
         }
 
-        // 7. Версії програми порівнюються як десяткові.
+        // 7. Застарілі повні шляхи картинок знаходяться в поточних теках даних.
+        do {
+            let root = temp.appendingPathComponent("дані")
+            try fm.createDirectory(at: root.appendingPathComponent("BackGrounds"), withIntermediateDirectories: true)
+            try fm.createDirectory(at: root.appendingPathComponent("Templates/Autumn"), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: root.appendingPathComponent("BackGrounds/Black.jpg"))
+            try Data("x".utf8).write(to: root.appendingPathComponent("Templates/Autumn/Осень3.jpg"))
+            let saved = DataPaths.roots
+            defer { DataPaths.roots = saved }
+            DataPaths.roots = [root]
+            let a = DataPaths.existing("/Users/нікого/Desktop/Слово.app/Contents/Resources/app/BackGrounds/Black.jpg")
+            let b = DataPaths.existing("/Users/нікого/Desktop/Слово/Слово.app/Contents/Resources/app/Templates/Autumn/Осень3.jpg")
+            let c = DataPaths.existing("/Інше/місце/BackGrounds/Black.jpg")
+            let d = DataPaths.existing("/Users/нікого/Desktop/Слово.app/Contents/Resources/app/BackGrounds/нема.jpg")
+            let ok = a?.hasSuffix("дані/BackGrounds/Black.jpg") == true && b?.hasSuffix("дані/Templates/Autumn/Осень3.jpg") == true
+                && c?.hasSuffix("дані/BackGrounds/Black.jpg") == true && d == nil
+            checks.append(Check(area: area, name: "Фони й картинки шаблонів знаходяться за застарілим повним шляхом", status: ok ? .ok : .failed,
+                                detail: "фон із пакета на Робочому столі → \(a ?? "нема"); картинка шаблону зі старої теки → \(b ?? "нема"); неіснуючий → \(d ?? "нема")"))
+        } catch {
+            checks.append(Check(area: area, name: "Фони й картинки шаблонів знаходяться за застарілим повним шляхом", status: .failed, detail: "\(error)"))
+        }
+
+        // 8. Опис випуску без Markdown.
+        let plain = AppUpdater.plain("## Що нового\n- **Пісенники** — [slovo-resources](https://github.com/x) і `.songbook`")
+        checks.append(Check(area: area, name: "Опис випуску у вікні — без розмітки Markdown",
+                            status: plain.contains("**") || plain.contains("](") || plain.contains("##") || plain.contains("`") ? .failed : .ok,
+                            detail: plain.replacingOccurrences(of: "\n", with: " / ")))
+
+        // 9. Версії програми порівнюються як десяткові.
         let versions = AppUpdater.isNewer("0.8", than: "0.69") && AppUpdater.isNewer("0.7", than: "0.68")
             && AppUpdater.isNewer("0.65", than: "0.6") && AppUpdater.isNewer("1.0", than: "0.99")
             && !AppUpdater.isNewer("0.69", than: "0.8") && !AppUpdater.isNewer("0.8", than: "0.80")

@@ -1,4 +1,5 @@
 import AppKit
+import SlovoCore
 
 /// Кэш картинок, читаемых с диска.
 ///
@@ -20,7 +21,7 @@ enum ImageCache {
 
     static func image(atPath path: String) -> NSImage? {
         if let cached = full[path] { return cached }
-        guard let image = NSImage(contentsOfFile: path) else { return nil }
+        guard let image = NSImage(contentsOfFile: DataPaths.existing(path) ?? path) else { return nil }
 
         if full.count >= fullLimit { full.removeAll() }
         full[path] = image
@@ -31,7 +32,8 @@ enum ImageCache {
         let key = "\(url.path)#\(Int(height))"
         if let cached = thumbnails[key] { return cached }
 
-        guard let source = NSImage(contentsOf: url) else { return nil }
+        let located = DataPaths.existing(url.path).map { URL(fileURLWithPath: $0) } ?? url
+        guard let source = NSImage(contentsOf: located) else { return nil }
         let size = source.size
         guard size.height > 0 else { return nil }
 

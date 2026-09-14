@@ -235,6 +235,7 @@ final class AppState: ObservableObject {
     @Published var modulesFolder: URL {
         didSet {
             Defaults.modulesFolder = modulesFolder
+            DataPaths.roots = [modulesFolder.deletingLastPathComponent()]
             reloadLibrary()
         }
     }
@@ -392,6 +393,7 @@ final class AppState: ObservableObject {
         // Свій дім даних: чужий корінь (пакет програми, VisioBible)
         // переноситься сюди один раз — див. `DataHome`.
         self.modulesFolder = Self.settleModulesFolder()
+        DataPaths.roots = [modulesFolder.deletingLastPathComponent()]
         self.secondaryModuleIDs = Defaults.secondaryModules
         // Пересылать сюда objectWillChange от NDI и веба нельзя: они шлют
         // счётчики несколько раз в секунду, а это перерисовка всего окна —
@@ -1304,13 +1306,15 @@ final class AppState: ObservableObject {
            let saved = try? JSONDecoder().decode(SlideStyle.self, from: data) {
             style = saved
         }
-        if let path = Defaults.commonBackground,
-           FileManager.default.fileExists(atPath: path) {
+        // Шлях міг застаріти (програму перенесли, ресурси тепер в іншій теці) —
+        // шукаємо той самий файл за хвостом шляху в поточних коренях даних.
+        if let path = Defaults.commonBackground.flatMap(DataPaths.existing) {
             commonBackgroundPath = path
+            if path != Defaults.commonBackground { Defaults.commonBackground = path }
         }
-        if let path = Defaults.slideBackground,
-           FileManager.default.fileExists(atPath: path) {
+        if let path = Defaults.slideBackground.flatMap(DataPaths.existing) {
             slideBackgroundPath = path
+            if path != Defaults.slideBackground { Defaults.slideBackground = path }
         }
         if let shows = Defaults.showsCommonBackground { showsCommonBackground = shows }
         if let long = Defaults.tabNamesLong { tabNamesLong = long }
@@ -2010,10 +2014,10 @@ final class AppState: ObservableObject {
     func presetImageURL(_ name: String?) -> URL? {
         guard let name, !name.isEmpty else { return nil }
         let cleaned = name.replacingOccurrences(of: "\\", with: "/")
-        if cleaned.hasPrefix("/") {
-            let direct = URL(fileURLWithPath: cleaned)
-            return FileManager.default.fileExists(atPath: direct.path) ? direct : nil
-        }
+        // Повний шлях, що застарів (шаблон зроблено в програмі, яка лежала
+        // деінде), — переводимо на поточні теки даних; не знайшли — шукаємо
+        // картинку за іменем у шаблонах, як і для відносних.
+        if let found = DataPaths.existing(cleaned) { return URL(fileURLWithPath: found) }
         let leaf = cleaned.split(separator: "/").last.map(String.init) ?? cleaned
         if let ready = presetImages[leaf] { return ready }
         var found: URL?
