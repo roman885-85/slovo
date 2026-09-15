@@ -215,41 +215,81 @@ enum AppUpdater {
     /// питаємо на кожному запуску (крім «Ніколи»), а поки програма відкрита —
     /// ще раз на 12 годин. Ту саму версію, від якої відмовилися «Пізніше»,
     /// до наступного запуску вдруге не пропонуємо.
+    ///
+    /// Власник 15.09: «уведомления о новой версии приходят тогда, когда я сам
+    /// запускаю обновление вручную». Програма стоїть відкритою весь день, а
+    /// GitHub питали раз на 12 годин; і саме питання було модальним вікном,
+    /// яке, поки «Слово» не попереду, ховалося за іншими програмами. Тепер
+    /// питаємо кожні 30 хвилин і щоразу, як людина повертається до програми
+    /// (не частіше ніж раз на 30 хвилин), пропозиція — звичайне вікно поверх
+    /// інших, а поки нову версію не встановлено, у верхньому рядку стоїть
+    /// кнопка «Оновлення».
     static func checkOnLaunch(state: AppState, intervalDays: Int) {
         guard intervalDays > 0 else { return }
         checkQuietly(state: state)
         guard periodic == nil else { return }
-        let timer = Timer(timeInterval: 12 * 3600, repeats: true) { _ in
+        let timer = Timer(timeInterval: quietInterval, repeats: true) { _ in
             MainActor.assumeIsolated { checkQuietly(state: state) }
         }
         RunLoop.main.add(timer, forMode: .common)
         periodic = timer
+        activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification,
+                                                            object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let last = UserDefaults.standard.double(forKey: lastCheckKey)
+                if Date().timeIntervalSince1970 - last > quietInterval { checkQuietly(state: state) }
+            }
+        }
     }
 
+    /// Як часто питати GitHub, поки програма відкрита.
+    static let quietInterval: TimeInterval = 30 * 60
+
     private static var periodic: Timer?
+    private static var activation: Any?
     private static var declinedVersion: String?
+    /// Версії, які цього запуску вже пропонували вікном: удруге вікно не
+    /// вискакує, лишається кнопка у верхньому рядку.
+    private static var offeredThisRun: Set<String> = []
+
+    /// Нова версія, яку знайшла остання перевірка; `nil` — у нас остання.
+    private(set) static var available: Release?
+    /// Змінилося `available` — кнопці «Оновлення» у верхньому рядку.
+    static let availabilityChanged = Notification.Name("SlovoUpdateAvailabilityChanged")
+
+    static func setAvailable(_ release: Release?) {
+        guard release?.version != available?.version else { return }
+        available = release
+        NotificationCenter.default.post(name: availabilityChanged, object: nil)
+    }
 
     private static func checkQuietly(state: AppState) {
         fetchLatest { result in
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastCheckKey)
-            guard case .success(let release) = result, isNewer(release.version, than: currentVersion),
-                  release.version != declinedVersion else { return }
+            guard case .success(let release) = result else { return }
+            guard isNewer(release.version, than: currentVersion) else { setAvailable(nil); return }
+            setAvailable(release)
+            guard release.version != declinedVersion, !offeredThisRun.contains(release.version) else { return }
+            offeredThisRun.insert(release.version)
             NativeTrace.say("оновлення: на GitHub \(release.tag), у нас \(currentVersion)")
             offer(release, state: state)
         }
     }
 
     /// Вікно «Є нова версія»: оновити зараз або пізніше.
+    ///
+    /// Не модальне: воно не зупиняє програму посеред служіння і не губиться
+    /// за вікнами інших програм — стоїть поверх, а Dock привертає увагу,
+    /// якщо «Слово» зараз не попереду.
     static func offer(_ release: Release, state: AppState) {
-        let alert = NSAlert()
-        alert.messageText = OurWords.t("Есть новая версия «Слова»: %s", release.version)
-        let notes = plain(release.notes)
-        alert.informativeText = OurWords.t("У вас %s. Программа загрузит новую версию, заменит себя и перезапустится; затем можно обновить и ресурсы.", currentVersion)
-            + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(700)))
-        alert.addButton(withTitle: OurWords.t("Обновить сейчас"))
-        alert.addButton(withTitle: OurWords.t("Позже"))
-        guard alert.runModal() == .alertFirstButtonReturn else { declinedVersion = release.version; return }
-        NativeUpdateWindow.show(release: release)
+        setAvailable(release)
+        UpdateOfferPanel.show(release: release, current: currentVersion, notes: plain(release.notes)) { accepted in
+            if accepted {
+                NativeUpdateWindow.show(release: release)
+            } else {
+                declinedVersion = release.version
+            }
+        }
     }
 
     /// Пункт меню: спитати GitHub зараз і сказати відповідь — навіть «у вас
@@ -679,5 +719,94 @@ enum ResourceOffer {
         case .alertSecondButtonReturn: ImportWizardWindow.show(state: state)
         default: break
         }
+    }
+}
+
+/// Пропозиція оновитися — звичайне плаваюче вікно замість `NSAlert.runModal`.
+@MainActor
+enum UpdateOfferPanel {
+
+    private static var panel: NSPanel?
+    private static var handler: ((Bool) -> Void)?
+
+    /// Чи вікно зараз на екрані — самоперевірці.
+    static var isShown: Bool { panel?.isVisible ?? false }
+
+    static func show(release: AppUpdater.Release, current: String, notes: String, answer: @escaping (Bool) -> Void) {
+        panel?.orderOut(nil)
+        handler = answer
+        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 260),
+                             styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        window.title = OurWords.t("Обновление «Слова»")
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.hidesOnDeactivate = false
+
+        let icon = NSImageView(image: NSApp.applicationIconImage ?? NSImage())
+        icon.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 56).isActive = true
+        let title = NSTextField(labelWithString: OurWords.t("Есть новая версия «Слова»: %s", release.version))
+        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        let info = NSTextField(wrappingLabelWithString:
+            OurWords.t("У вас %s. Программа загрузит новую версию, заменит себя и перезапустится; затем можно обновить и ресурсы.", current))
+        info.font = .systemFont(ofSize: 12)
+        info.preferredMaxLayoutWidth = 360
+        let texts = NSStackView(views: [title, info])
+        texts.orientation = .vertical
+        texts.alignment = .leading
+        texts.spacing = 6
+        if !notes.isEmpty {
+            let body = NSTextField(wrappingLabelWithString: String(notes.prefix(600)))
+            body.font = .systemFont(ofSize: 11)
+            body.textColor = .secondaryLabelColor
+            body.preferredMaxLayoutWidth = 360
+            body.maximumNumberOfLines = 10
+            texts.addArrangedSubview(body)
+        }
+        let top = NSStackView(views: [icon, texts])
+        top.orientation = .horizontal
+        top.alignment = .top
+        top.spacing = 14
+
+        let later = NSButton(title: OurWords.t("Позже"), target: nil, action: nil)
+        let now = NSButton(title: OurWords.t("Обновить сейчас"), target: nil, action: nil)
+        later.bezelStyle = .rounded
+        now.bezelStyle = .rounded
+        now.keyEquivalent = "\r"
+        let laterAction = UpdateButtonAction()
+        laterAction.handler = { finish(false) }
+        let nowAction = UpdateButtonAction()
+        nowAction.handler = { finish(true) }
+        later.target = laterAction
+        later.action = #selector(UpdateButtonAction.fire)
+        now.target = nowAction
+        now.action = #selector(UpdateButtonAction.fire)
+        objc_setAssociatedObject(window, "later", laterAction, .OBJC_ASSOCIATION_RETAIN)
+        objc_setAssociatedObject(window, "now", nowAction, .OBJC_ASSOCIATION_RETAIN)
+        let buttons = NSStackView(views: [NSView(), later, now])
+        buttons.orientation = .horizontal
+        buttons.spacing = 8
+
+        let stack = NSStackView(views: [top, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .trailing
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 16, right: 18)
+        top.widthAnchor.constraint(equalToConstant: 430).isActive = true
+        window.contentView = stack
+        window.setContentSize(stack.fittingSize)
+        window.center()
+        panel = window
+        window.makeKeyAndOrderFront(nil)
+        if !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
+    }
+
+    /// Самоперевірці й закриттю: відповісти, не показуючи.
+    static func finish(_ accepted: Bool) {
+        panel?.orderOut(nil)
+        panel = nil
+        let answer = handler
+        handler = nil
+        answer?(accepted)
     }
 }

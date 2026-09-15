@@ -25,6 +25,8 @@ final class NativeScreenWorkspace: NSView {
     private let title = NSTextField(labelWithString: "")
     private let note = NSTextField(wrappingLabelWithString: "")
     private let reloadButton = NSButton(title: "", target: nil, action: nil)
+    /// Коли дозволу на запис екрана нема — кнопка просто до вікна дозволів.
+    private let permissionButton = NSButton(title: "", target: nil, action: nil)
     private let showButton = NSButton(title: "", target: nil, action: nil)
     private let hideButton = NSButton(title: "", target: nil, action: nil)
     private let rows = Rows()
@@ -39,10 +41,12 @@ final class NativeScreenWorkspace: NSView {
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
         note.maximumNumberOfLines = 8
-        for button in [reloadButton, showButton, hideButton] {
+        for button in [reloadButton, showButton, hideButton, permissionButton] {
             button.bezelStyle = .rounded
             button.target = self
         }
+        permissionButton.action = #selector(permissionTapped)
+        permissionButton.bezelColor = .controlAccentColor
         reloadButton.action = #selector(reloadTapped)
         showButton.action = #selector(showTapped)
         hideButton.action = #selector(hideTapped)
@@ -53,7 +57,7 @@ final class NativeScreenWorkspace: NSView {
             self?.chosen = row
             self?.showTapped()
         }
-        for view in [title, note, reloadButton, showButton, hideButton, list, grip] as [NSView] { addSubview(view) }
+        for view in [title, note, reloadButton, showButton, hideButton, permissionButton, list, grip] as [NSView] { addSubview(view) }
         grip.onDrag = { [weak self] delta in
             guard let self else { return }
             NativeWidths.set(Self.listWidthKey, self.list.frame.width + delta, min: 200, max: self.bounds.width * 0.7)
@@ -78,6 +82,8 @@ final class NativeScreenWorkspace: NSView {
     private func applyCaptions() {
         title.stringValue = OurWords.t("Что показать в зале")
         reloadButton.title = OurWords.t("Обновить список")
+        permissionButton.title = OurWords.t("Дать разрешение…")
+        permissionButton.toolTip = OurWords.t("Открыть окно разрешений macOS и нужный раздел «Системных настроек»")
         reloadButton.toolTip = OurWords.t("Обновить список мониторов и окон")
         showButton.title = OurWords.t("Показать")
         showButton.toolTip = OurWords.t("Показать слайд")
@@ -129,6 +135,7 @@ final class NativeScreenWorkspace: NSView {
         let capture = state.screenCapture
         showButton.isEnabled = !capture.sources.isEmpty
         hideButton.isEnabled = capture.isRunning
+        permissionButton.isHidden = !capture.needsPermission
         note.stringValue = capture.state.isEmpty ? hint : capture.state + "\n\n" + hint
         needsLayout = true
     }
@@ -154,6 +161,11 @@ final class NativeScreenWorkspace: NSView {
                             width: rightWidth, height: contentHeight)
         showButton.frame = NSRect(x: rightX, y: padding, width: 130, height: buttonHeight)
         hideButton.frame = NSRect(x: rightX + 140, y: padding, width: 110, height: buttonHeight)
+        permissionButton.frame = NSRect(x: rightX + 260, y: padding, width: 170, height: buttonHeight)
+    }
+
+    @objc private func permissionTapped() {
+        NativePermissionsWindow.open()
     }
 
     /// Самоперевірці: скільки джерел у списку і що вибрано.

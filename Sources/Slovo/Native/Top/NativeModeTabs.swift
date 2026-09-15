@@ -21,6 +21,10 @@ final class NativeModeTabs: NSView {
     private let smaller = NSImageView()
     private let larger = NSImageView()
     private let slider = NSSlider()
+    /// «Оновлення 0.92» — поки на GitHub є новіша версія, ніж ця. Не зникає
+    /// після «Пізніше»: пропозицію могли не помітити, а кнопку видно завжди.
+    let updateButton = NSButton(title: "", target: nil, action: nil)
+    private var updateObserver: Any?
     private var watch: Set<AnyCancellable> = []
     private var tokens: [Signals.Token] = []
 
@@ -45,6 +49,22 @@ final class NativeModeTabs: NSView {
             view.imageScaling = .scaleNone
             addSubview(view)
         }
+
+        updateButton.bezelStyle = .rounded
+        updateButton.controlSize = .small
+        updateButton.bezelColor = .controlAccentColor
+        updateButton.contentTintColor = .white
+        updateButton.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+        updateButton.imagePosition = .imageLeading
+        updateButton.font = .systemFont(ofSize: 11, weight: .semibold)
+        updateButton.target = self
+        updateButton.action = #selector(updateTapped)
+        addSubview(updateButton)
+        updateObserver = NotificationCenter.default.addObserver(forName: AppUpdater.availabilityChanged,
+                                                                object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyUpdate() }
+        }
+        applyUpdate()
 
         slider.minValue = Self.fontRange.lowerBound
         slider.maxValue = Self.fontRange.upperBound
@@ -100,6 +120,24 @@ final class NativeModeTabs: NSView {
         slider.frame = NSRect(x: right, y: middle - 10, width: sliderWidth, height: 20)
         right -= iconSide + 4
         smaller.frame = NSRect(x: right, y: middle - iconSide / 2, width: iconSide, height: iconSide)
+        if !updateButton.isHidden {
+            let width = ceil(updateButton.fittingSize.width) + 6
+            right -= width + 12
+            updateButton.frame = NSRect(x: right, y: middle - 11, width: width, height: 22)
+        }
+    }
+
+    private func applyUpdate() {
+        let release = AppUpdater.available
+        updateButton.isHidden = release == nil
+        updateButton.title = release.map { OurWords.t("Обновление %s", $0.version) } ?? ""
+        updateButton.toolTip = OurWords.t("Вышла новая версия «Слова» — нажмите, чтобы обновить")
+        needsLayout = true
+    }
+
+    @objc private func updateTapped() {
+        guard let release = AppUpdater.available else { return }
+        AppUpdater.offer(release, state: state)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -116,6 +154,7 @@ final class NativeModeTabs: NSView {
             tabs[mode]?.title = NativeTopCaptions.modeTitle(mode, in: language)
         }
         slider.toolTip = OurWords.t("Размер шрифта списков (или Ctrl и колесо мыши)")
+        applyUpdate()
         needsLayout = true
     }
 

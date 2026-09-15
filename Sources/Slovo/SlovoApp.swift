@@ -58,6 +58,9 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
                     MainActor.assumeIsolated {
                         ResourceOffer.offerIfEmpty(state: state)
                         AppUpdater.checkOnLaunch(state: state, intervalDays: SettingsStore.shared.settings.options.updateInterval)
+                        // Дозволи macOS: чого бракує — сказати одразу, а не
+                        // посеред служіння у вкладці «Екран».
+                        NativePermissionsWindow.checkOnLaunch()
                     }
                 }
                 RunLoop.main.add(timer, forMode: .common)

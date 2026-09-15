@@ -2154,6 +2154,7 @@ enum Diagnostics {
     static let namedSections: [(name: String, run: @MainActor (AppState) -> [Check])] = [
         ("тур", { tourSection(state: $0) }),
         ("підказки", { hintsSection(state: $0) }),
+        ("дозволи", { permissionsSection(state: $0) }),
         ("показ", { showTabsSection(state: $0) + projectorScreenNoticeSection(state: $0) }),
         ("мова", { languageSection(state: $0) + russianLeftoversSection(state: $0)
                     + unlabeledButtonsSection(state: $0) }),

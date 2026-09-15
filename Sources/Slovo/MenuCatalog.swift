@@ -172,6 +172,7 @@ enum SlovoMenu {
                                 action: { NativeBrowserRemoteWindow.show(state: state) }),
                 NativeMenuEntry(title: OurWords.t("Программы для Android…"),
                                 action: { NativeAndroidAppsWindow.show() }),
+                NativeMenuEntry(title: OurWords.t("Разрешения macOS…"), action: { NativePermissionsWindow.open() }),
                 NativeMenuEntry(title: OurWords.t("Диагностика…"), action: { actions.showDiagnostics() }),
                 NativeMenuEntry(title: caption("N5", "О программе..."), action: { actions.about() }),
             ]
