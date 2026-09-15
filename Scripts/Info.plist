@@ -2,17 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>uk</string>
-		<string>en</string>
-		<string>de</string>
-		<string>ru</string>
-	</array>
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Слово</string>
 	<key>CFBundleExecutable</key>
@@ -21,28 +14,35 @@
 	<string>Slovo.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>ua.church.slovo</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>uk</string>
+		<string>en</string>
+		<string>de</string>
+		<string>ru</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>Слово</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.90</string>
+	<string>0.91</string>
 	<key>CFBundleVersion</key>
-	<string>0.90.0</string>
+	<string>0.91.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ndi._tcp</string>
+		<string>_slovo._tcp</string>
+	</array>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Вільна програма для церковного служіння</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>«Слово» надсилає відео NDI у локальну мережу та відповідає пульту на телефоні.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_ndi._tcp</string>
-		<string>_slovo._tcp</string>
-	</array>
 </dict>
 </plist>

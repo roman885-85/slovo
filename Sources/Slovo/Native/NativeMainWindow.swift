@@ -212,6 +212,8 @@ final class NativeBottomHeightGrip: NSView {
 
     /// Скільки пунктів проїхала миша вниз від минулого разу.
     var onDrag: ((CGFloat) -> Void)?
+    /// Подвійне клацання: повернути висоту автоматичну (де це має сенс).
+    var onReset: (() -> Void)?
     private var last: CGFloat?
 
     /// Рахунок згори вниз — як у всієї розкладки вікна: тоді «потягнули
@@ -236,6 +238,7 @@ final class NativeBottomHeightGrip: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2, let onReset { onReset(); last = nil; return }
         last = convert(event.locationInWindow, from: nil).y
     }
 

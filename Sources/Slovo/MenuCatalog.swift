@@ -163,7 +163,9 @@ enum SlovoMenu {
                                 action: { actions.openHelp() }),
                 NativeMenuEntry(title: OurWords.t("Горячие клавиши"), action: { NativeHelpWindow.show(topic: "keys") }),
                 NativeMenuEntry(title: OurWords.t("Если что-то не так"), action: { NativeHelpWindow.show(topic: "trouble") }),
-                NativeMenuEntry(title: OurWords.t("Как запустить на macOS (GitHub)"),
+                // Для іншого Mac: на тому, де «Слово» не запускається, цієї
+                // довідки не прочитати — посилання відкривають і пересилають звідси.
+                NativeMenuEntry(title: OurWords.t("Установка на другой Mac (GitHub)"),
                                 action: { actions.openLaunchGuide() }),
                 NativeMenuEntry(title: OurWords.t("Документация на GitHub"), action: { actions.openOnlineDocs() }),
                 NativeMenuEntry(title: OurWords.t("Пульт в браузере…"),

@@ -10,7 +10,7 @@ import Foundation
 /// картинок власника — кожна правка перевірки слухняно лягала в пам'ять.
 ///
 /// Тому захист подвійний. Поки йде перевірка, пам'ять не пише нічого. А
-/// навколо будь-якого прогону перевірок усі чотири ключі знімаються і
+/// навколо будь-якого прогону перевірок усі ці ключі знімаються і
 /// повертаються як були — навіть якщо щось проскочить повз заборону.
 ///
 /// Історію й План, які живуть у файлах, а не в цих ключах, так само
@@ -18,7 +18,7 @@ import Foundation
 enum SessionMemory {
 
     /// Ключі, під якими лежать списки людини.
-    static let keys = ["showPictureFiles", "showPresentationFiles", "mediaPlaylist", "backingTrackFile"]
+    static let keys = ["showPictureFiles", "showPresentationFiles", "mediaPlaylist", "backingTrackFile", "backingPlaylist"]
 
     /// Поки `true`, пам'ять списків не пише. Ставить самоперевірка.
     nonisolated(unsafe) static var isSuspended = false

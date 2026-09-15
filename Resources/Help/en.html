@@ -4,7 +4,7 @@
 <section id="start">
 <h2>Getting started</h2>
 <ol>
-<li><b>First launch.</b> macOS does not know the developer and blocks the app at first. Open it like this: on macOS 11–14 — right-click “Слово.app” → “Open” → “Open”; on macOS 15 and later — try to open it, then “System Settings” → “Privacy &amp; Security” → “Open Anyway” at the bottom. Details with every error and permission — <a href="https://github.com/roman885-85/slovo/blob/main/Документація/ЗАПУСК.md#english">launch guide on GitHub</a>.</li>
+<li><b>Where to keep the app.</b> Keep “Слово.app” in the Applications folder: from there an update can replace the app. To install Slovo on another Mac, use the <a href="https://github.com/roman885-85/slovo/blob/main/Документація/ЗАПУСК.md#english">guide on GitHub</a> — open or forward it from this computer, since this help is not available on a Mac where the app has not started yet.</li>
 <li><b>Permissions.</b> When the system asks to “find devices on your local network”, click “Allow”: the remote, the tablet and NDI need it. Other permissions (screen recording, folder access) are requested only when they are really needed — see <a href="#trouble">“Troubleshooting”</a>.</li>
 <li><b>Translations and songbooks.</b> On the first launch Slovo offers to download translations, songbooks, backgrounds and templates. Later — <span class="menu">Setup → Resources from GitHub…</span>, or <span class="menu">File → Import modules, templates and backgrounds…</span> for your own files.</li>
 <li><b>Projector.</b> Connect a projector or a second monitor — the slide goes there by itself. To choose another monitor: <span class="menu">Setup → Settings… → General → Monitor for the slide</span>. With a single monitor the slide is shown in its own window.</li>
@@ -87,7 +87,10 @@
 <li>Open a file (video or audio), a network stream or a YouTube link.</li>
 <li>Player buttons: to the beginning, rewind, play/pause, stop, fast forward, to the end, repeat, mute, audio track. The “to screen” switch decides whether the video goes to the hall.</li>
 <li><kbd>Ctrl</kbd>+<kbd>M</kbd> — media player, <kbd>Ctrl</kbd>+<kbd>P</kbd> — play/pause.</li>
-<li>The <b>backing track</b> plays separately from the show: you can turn song parts and the music keeps playing.</li>
+<li><b>Backing tracks</b> have their own panel under the media file list with <b>their own list</b>: music dropped onto this panel goes there, not among intros and videos. A backing track plays separately from the show: you can turn song parts and the music keeps playing.</li>
+<li>The <b>waveform</b> on the dark card shows the whole track and where the sound is now; click or drag on it to play from that point. Under it is a <b>level meter</b> for the left and right channels (red means clipping).</li>
+<li>Buttons: <b>play</b>, <b>pause</b>, <b>stop</b> (back to the start), <b>loop</b> and <b>“then the next one”</b> (keeps playing the list). Double-click a track in the list to play it at once.</li>
+<li><b>Key</b>: “♭ −0.5” and “♯ +0.5” lower or raise the key by a semitone (up to ±3 tones) without changing the tempo; click “Key: …” to return to the original. The key is remembered for each file.</li>
 </ul>
 </section>
 
@@ -198,12 +201,6 @@
 
 <section id="trouble">
 <h2>Troubleshooting</h2>
-<h3>The app does not open</h3>
-<ul>
-<li>macOS says the <b>developer cannot be verified</b> or <b>Apple could not verify</b> the app — open it with right-click → “Open” (macOS 11–14) or via “Privacy &amp; Security” → “Open Anyway” (macOS 15+).</li>
-<li>macOS says the app <b>is damaged</b> and should be moved to the Trash — this is how macOS marks files from the internet. In Terminal: <code>xattr -dr com.apple.quarantine "/Applications/Слово.app"</code>, then open it again.</li>
-<li>Every case in detail — <a href="https://github.com/roman885-85/slovo/blob/main/Документація/ЗАПУСК.md#english">launch guide</a>.</li>
-</ul>
 <h3>macOS permissions</h3>
 <ul>
 <li><b>Local Network</b> — for the remote, the tablet and NDI. If you once clicked “Don’t Allow”: “System Settings” → “Privacy &amp; Security” → “Local Network” → turn on “Слово”.</li>

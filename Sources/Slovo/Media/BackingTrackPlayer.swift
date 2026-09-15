@@ -1,5 +1,78 @@
 import AVFoundation
 import Foundation
+import UniformTypeIdentifiers
+
+/// Хвиля трека для панелі: найменше й найбільше значення відліків на кожен
+/// із `mins.count` рівних відрізків файлу — як смуга в Audacity.
+struct BackingWaveform: Sendable {
+    let url: URL
+    let mins: [Float]
+    let maxs: [Float]
+
+    /// Найгучніший відлік файлу — самоперевірці й масштабу малювання.
+    var peak: Float { max(maxs.max() ?? 0, -(mins.min() ?? 0)) }
+
+    /// Прочитати файл цілком і зібрати хвилю. Довго (секунда на пісню),
+    /// тому лише поза головним потоком.
+    static func build(from url: URL, buckets: Int = 2048) -> BackingWaveform? {
+        guard let file = try? AVAudioFile(forReading: url), file.length > 0, buckets > 0 else { return nil }
+        let format = file.processingFormat
+        let chunk: AVAudioFrameCount = 65_536
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunk) else { return nil }
+        var mins = [Float](repeating: 0, count: buckets)
+        var maxs = [Float](repeating: 0, count: buckets)
+        let perBucket = max(1, Int64((Double(file.length) / Double(buckets)).rounded(.up)))
+        let channels = Int(format.channelCount)
+        var frame: Int64 = 0
+        while frame < file.length {
+            do { try file.read(into: buffer, frameCount: chunk) } catch { break }
+            let count = Int(buffer.frameLength)
+            guard count > 0, let data = buffer.floatChannelData else { break }
+            var i = 0
+            while i < count {
+                let bucket = Int(min(Int64(buckets - 1), (frame + Int64(i)) / perBucket))
+                // До кінця поточного відрізка — без ділення на кожен відлік.
+                let bucketEnd = Int(min(Int64(count), (Int64(bucket) + 1) * perBucket - frame))
+                var low = mins[bucket], high = maxs[bucket]
+                for channel in 0..<channels {
+                    let samples = data[channel]
+                    for j in i..<max(i + 1, bucketEnd) {
+                        let value = samples[j]
+                        if value < low { low = value }
+                        if value > high { high = value }
+                    }
+                }
+                mins[bucket] = low
+                maxs[bucket] = high
+                i = max(i + 1, bucketEnd)
+            }
+            frame += Int64(count)
+        }
+        return BackingWaveform(url: url, mins: mins, maxs: maxs)
+    }
+}
+
+/// Пікові рівні з виходу фонограми для індикатора. Пише звуковий потік,
+/// забирає головний — тому під замком.
+final class BackingLevels: @unchecked Sendable {
+    private let lock = NSLock()
+    private var left: Float = 0
+    private var right: Float = 0
+
+    func push(left newLeft: Float, right newRight: Float) {
+        lock.lock()
+        left = max(left, newLeft)
+        right = max(right, newRight)
+        lock.unlock()
+    }
+
+    /// Найбільші піки з минулого разу; лічильник обнуляється.
+    func take() -> (left: Float, right: Float) {
+        lock.lock()
+        defer { left = 0; right = 0; lock.unlock() }
+        return (left, right)
+    }
+}
 
 /// Независимый проигрыватель фонограммы (минусовки).
 ///
@@ -25,9 +98,56 @@ final class BackingTrackPlayer: ObservableObject {
     /// Повторять с начала, когда дошли до конца — минусовку под долгое
     /// пение часто пускают по кругу.
     @Published var loops = false
+    /// Доіграла — одразу наступна фонограма зі списку. Власник: «добавить
+    /// кнопку проигрывания следующего трека после окончания». «По колу»
+    /// старше: якщо ввімкнено обидві, повторюється та сама.
+    @Published var playsNext = false {
+        didSet {
+            guard remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) else { return }
+            store.set(playsNext, forKey: Self.playsNextKey)
+        }
+    }
+    private static let playsNextKey = "backingPlaysNext"
+
+    /// Тон фонограми в тонах: крок 0,5 (півтону), від −3 до +3. Власник:
+    /// «добавить кнопки увеличения и уменьшения тона (шаг тона 0.5)». Темп
+    /// при цьому не міняється. Запам'ятовується для кожного файлу окремо:
+    /// пісню, яку опустили на тон, наступного разу співають так само.
+    @Published private(set) var pitchTones: Double = 0
+    static let pitchStep = 0.5
+    static let pitchLimit = 3.0
+    private let pitchUnit = AVAudioUnitTimePitch()
+    private static let pitchKey = "backingPitch"
+
+    /// Тон, що справді стоїть у звуковому ланцюжку, у центах — самоперевірці.
+    var appliedPitchCents: Float { pitchUnit.pitch }
+
+    func shiftPitch(by tones: Double) { setPitch(pitchTones + tones) }
+
+    func setPitch(_ tones: Double) {
+        let stepped = (tones / Self.pitchStep).rounded() * Self.pitchStep
+        pitchTones = min(Self.pitchLimit, max(-Self.pitchLimit, stepped))
+        pitchUnit.pitch = Float(pitchTones * 200)
+        if let url, remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) {
+            var saved = store.dictionary(forKey: Self.pitchKey) as? [String: Double] ?? [:]
+            if pitchTones == 0 { saved[url.path] = nil } else { saved[url.path] = pitchTones }
+            store.set(saved, forKey: Self.pitchKey)
+        }
+        notify()
+    }
     @Published var volume: Float = 0.8 {
         didSet { node.volume = MediaPlayerModel.gain(Double(volume)) }
     }
+
+    /// Хвиля відкритого файлу; `nil`, поки будується або файла немає.
+    @Published private(set) var waveform: BackingWaveform?
+    /// Піки виходу для індикатора рівня.
+    let levels = BackingLevels()
+    private var waveformCache: [URL: BackingWaveform] = [:]
+
+    /// Точна позиція просто зараз — для курсора на хвилі. `position`
+    /// оновлюється чотири рази на секунду, і курсор за ним ішов би ривками.
+    var livePosition: Double { currentPosition() }
 
     /// Звук — в трансляцию: зовётся из звукового потока двигателя.
     nonisolated(unsafe) var networkAudioSink: ((Data, Int, Int, Int) -> Void)?
@@ -54,6 +174,7 @@ final class BackingTrackPlayer: ObservableObject {
 
     init() {
         engine.attach(node)
+        engine.attach(pitchUnit)
         node.volume = MediaPlayerModel.gain(Double(volume))
     }
 
@@ -71,7 +192,23 @@ final class BackingTrackPlayer: ObservableObject {
             error = nil
             position = 0
             engine.disconnectNodeOutput(node)
-            engine.connect(node, to: engine.mainMixerNode, format: opened.processingFormat)
+            engine.disconnectNodeOutput(pitchUnit)
+            // Програвач → зміна тону → мікшер: відвід у трансляцію й пік-метр
+            // стоять на мікшері й чують уже змінений тон.
+            engine.connect(node, to: pitchUnit, format: opened.processingFormat)
+            engine.connect(pitchUnit, to: engine.mainMixerNode, format: opened.processingFormat)
+            let saved = remembers ? (store.dictionary(forKey: Self.pitchKey) as? [String: Double])?[target.path] : nil
+            pitchTones = saved ?? 0
+            pitchUnit.pitch = Float(pitchTones * 200)
+            loadWaveform(for: target)
+            // Відкрита фонограма завжди стоїть у своєму списку: відкрили
+            // кнопкою чи перетягуванням — вона там, і її видно виділеною.
+            if let known = playlist.firstIndex(of: target) {
+                playlistIndex = known
+            } else {
+                playlist.append(target)
+                playlistIndex = playlist.count - 1
+            }
         } catch {
             file = nil
             url = nil
@@ -83,6 +220,90 @@ final class BackingTrackPlayer: ObservableObject {
         notify()
     }
 
+    // MARK: - Свій список
+
+    /// Список фонограм — окремий від списку плеєра.
+    ///
+    /// Власник: «для блока фонограмм нет своего плейлиста, а при перетягивании
+    /// на плеер фонограмм музыки, она добавляется в общий плейлист медиа.
+    /// Сделать разделение медиаплейлиста (заставки, видео и др) и плейлиста
+    /// для фонограмм». Досі фонограма тримала один файл, а все, що кидали
+    /// мишею, ішло в список плеєра — поруч із заставками й роликами.
+    @Published private(set) var playlist: [URL] = [] { didSet { rememberPlaylist() } }
+    /// Котрий пункт списку зараз відкрито.
+    @Published private(set) var playlistIndex: Int?
+
+    /// Розширення звукових файлів, які бере фонограма. Відео сюди не йде,
+    /// навіть якщо в ньому є звук: ролик — справа плеєра.
+    static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "caf", "flac", "m4b"]
+
+    /// Чи звуковий це файл для фонограми.
+    static func isAudio(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if audioExtensions.contains(ext) { return true }
+        guard let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .audio) && !type.conforms(to: .movie)
+    }
+
+    /// Додати файли до списку фонограм. Незвукові пропускаються; якщо
+    /// нічого ще не відкрито — відкривається перший доданий (але не грає:
+    /// минусовку запускають тоді, коли почали співати). Повертає, скільки
+    /// файлів узято.
+    @discardableResult
+    func addToPlaylist(_ urls: [URL]) -> Int {
+        let wanted = urls.filter(Self.isAudio)
+        guard let first = wanted.first else { return 0 }
+        for item in wanted where !playlist.contains(item) {
+            playlist.append(item)
+        }
+        if url == nil, let index = playlist.firstIndex(of: first) { openFromPlaylist(at: index) }
+        notify()
+        return wanted.count
+    }
+
+    func openFromPlaylist(at index: Int) {
+        guard playlist.indices.contains(index) else { return }
+        open(playlist[index])
+    }
+
+    func removeFromPlaylist(at index: Int) {
+        guard playlist.indices.contains(index) else { return }
+        let removed = playlist.remove(at: index)
+        if removed == url {
+            playlistIndex = nil
+            close()
+        } else if let current = playlistIndex, current > index {
+            playlistIndex = current - 1
+        }
+        notify()
+    }
+
+    /// Очистити список. Те, що зараз грає, не зупиняється — як і в плеєрі:
+    /// список чистять між частинами служіння, а не посеред пісні.
+    func clearPlaylist() {
+        playlist = url.map { [$0] } ?? []
+        playlistIndex = url == nil ? nil : 0
+        notify()
+    }
+
+    /// Повернути список як був — самоперевірці після своїх пробних файлів.
+    func putBackPlaylist(_ urls: [URL]) {
+        playlist = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        playlistIndex = url.flatMap { playlist.firstIndex(of: $0) }
+        notify()
+    }
+
+    /// Куди писати пам'ять. Самоперевірка підставляє свій набір, щоб
+    /// перевірити запис і читання, не чіпаючи налаштувань людини.
+    var store: UserDefaults = .standard
+
+    private static let playlistKey = "backingPlaylist"
+
+    private func rememberPlaylist() {
+        guard remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) else { return }
+        store.set(playlist.map(\.path), forKey: Self.playlistKey)
+    }
+
     /// Чи запам'ятовує цей програвач відкриту фонограму між запусками.
     /// Вмикає тільки той, з яким працює людина: самоперевірка відкриває свої
     /// пробні файли, і пам'ять від них має лишатися чистою.
@@ -91,9 +312,9 @@ final class BackingTrackPlayer: ObservableObject {
     private static let memoryKey = "backingTrackFile"
 
     private func remember() {
-        guard remembers, !SessionMemory.isSuspended else { return }
-        if let url { UserDefaults.standard.set(url.path, forKey: Self.memoryKey) }
-        else { UserDefaults.standard.removeObject(forKey: Self.memoryKey) }
+        guard remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) else { return }
+        if let url { store.set(url.path, forKey: Self.memoryKey) }
+        else { store.removeObject(forKey: Self.memoryKey) }
     }
 
     /// Відкрити фонограму, що стояла минулого разу, — але не грати її.
@@ -102,8 +323,15 @@ final class BackingTrackPlayer: ObservableObject {
     /// минусовки, картинки и т.д. не сохраняются». Файла може вже й не бути
     /// — тоді просто нічого не відкриваємо.
     func restore() {
-        guard remembers, url == nil,
-              let path = UserDefaults.standard.string(forKey: Self.memoryKey),
+        guard remembers, url == nil else { return }
+        if store.object(forKey: Self.playsNextKey) != nil { playsNext = store.bool(forKey: Self.playsNextKey) }
+        // Спершу список: інакше відкрита фонограма стала б у ньому першою,
+        // а решта — після неї, не в тому порядку, як їх складали.
+        let saved = (store.stringArray(forKey: Self.playlistKey) ?? [])
+            .filter { FileManager.default.fileExists(atPath: $0) }
+            .map { URL(fileURLWithPath: $0) }
+        if playlist.isEmpty, !saved.isEmpty { playlist = saved }
+        guard let path = store.string(forKey: Self.memoryKey),
               FileManager.default.fileExists(atPath: path) else { return }
         open(URL(fileURLWithPath: path))
     }
@@ -112,6 +340,8 @@ final class BackingTrackPlayer: ObservableObject {
         stopEngine()
         file = nil
         url = nil
+        waveform = nil
+        playlistIndex = nil
         title = ""
         duration = 0
         position = 0
@@ -173,6 +403,22 @@ final class BackingTrackPlayer: ObservableObject {
         notify()
     }
 
+    /// Хвиля — з кешу або фоном. Відповідь, що запізнилася (людина вже
+    /// відкрила інший файл), відкидається.
+    private func loadWaveform(for target: URL) {
+        if let cached = waveformCache[target] { waveform = cached; return }
+        waveform = nil
+        Task.detached(priority: .utility) { [weak self] in
+            let built = BackingWaveform.build(from: target)
+            await MainActor.run {
+                guard let self, let built else { return }
+                if self.waveformCache.count > 30 { self.waveformCache.removeAll() }
+                self.waveformCache[target] = built
+                if self.url == target { self.waveform = built; self.notify() }
+            }
+        }
+    }
+
     // MARK: - Внутренности
 
     private func ensureEngine() -> Bool {
@@ -221,6 +467,11 @@ final class BackingTrackPlayer: ObservableObject {
             notify()
             return
         }
+        if playsNext, let current = playlistIndex, playlist.indices.contains(current + 1) {
+            openFromPlaylist(at: current + 1)
+            if self.file != nil { play() }
+            return
+        }
         node.stop()
         isPlaying = false
         feeding = false
@@ -259,13 +510,23 @@ final class BackingTrackPlayer: ObservableObject {
         guard !tapInstalled else { return }
         tapInstalled = true
         let mixer = engine.mainMixerNode
+        let levels = self.levels
         mixer.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            guard let self, self.feeding, !self.mainPlayerIsPlaying,
-                  let sink = self.networkAudioSink,
-                  let channels = buffer.floatChannelData else { return }
+            guard let self, self.feeding, let channels = buffer.floatChannelData else { return }
             let frames = Int(buffer.frameLength)
             let count = Int(buffer.format.channelCount)
             guard frames > 0, count > 0 else { return }
+            // Піки для індикатора — завжди, поки фонограма грає: він
+            // показує її рівень, а не те, що пішло в трансляцію.
+            var peaks: [Float] = [0, 0]
+            for channel in 0..<min(count, 2) {
+                let source = channels[channel]
+                var top: Float = 0
+                for i in 0..<frames { top = max(top, abs(source[i])) }
+                peaks[channel] = top
+            }
+            levels.push(left: peaks[0], right: count > 1 ? peaks[1] : peaks[0])
+            guard !self.mainPlayerIsPlaying, let sink = self.networkAudioSink else { return }
             var planar = Data(count: frames * count * MemoryLayout<Float>.size)
             planar.withUnsafeMutableBytes { raw in
                 let out = raw.bindMemory(to: Float.self)

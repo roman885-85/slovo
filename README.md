@@ -59,8 +59,11 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 
 - **Презентації** — PDF і PowerPoint, мініатюри сторінок, переходи.
 - **Зображення** — показ і слайд-шоу з інтервалом.
-- **Медіа** — відео, звук, мережеві потоки, YouTube; фонограма окремо від
-  показу.
+- **Медіа** — відео, звук, мережеві потоки, YouTube.
+- **Фонограми (мінусовки)** — окремий плеєр зі своїм списком, що грає під
+  показом: хвиля всього треку з курсором (клацання — грати з цього місця),
+  індикатор рівня, пауза, «по колу», «після кінця — наступна», тон ±0,5
+  (півтону) без зміни темпу — запам'ятовується для кожного файлу.
 - **Екран** — монітор або вікно іншої програми на проекторі.
 - **Текст** — оголошення із заголовком.
 
@@ -246,7 +249,7 @@ Releases.
 
 ## Стан
 
-Версія 0.90. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
+Версія 0.91. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
 
@@ -328,9 +331,12 @@ shown.
   parts (verse, chorus, bridge) with their own colours; song and songbook
   editor.
 - **Presentations, pictures, media, screen, text** — PDF and PowerPoint;
-  pictures and slideshows; video, audio, network streams, YouTube, a backing
-  track separate from the show; a monitor or another app's window on the
-  projector; announcements.
+  pictures and slideshows; video, audio, network streams, YouTube; a monitor or
+  another app's window on the projector; announcements.
+- **Backing tracks** — a separate player with its own list that plays under
+  the show: a waveform of the whole track with a cursor (click to play from
+  that point), a level meter, pause, loop, “then the next one”, key ±0.5
+  (a semitone) without changing the tempo, remembered for each file.
 - **Slide constructor** — separate editors for the Bible and songs: fonts,
   colours, shadows, outline, margins, background, text placement.
 - **Resources from the internet** — separate tabs for Bible translations,
