@@ -360,6 +360,27 @@ extension Diagnostics {
                                     + "після Enter +\(afterReturn - afterDouble)"))
         }
 
+        // Історія — так само, як План (власник, 15.09.2026: «когда по истории
+        // нажимаешь, то сразу идет вывод на проектор»).
+        if desk.history.records.count > 1 {
+            let before = desk.historyActivationsForCheck
+            row.history.list.click(item: 1)
+            let afterClick = desk.historyActivationsForCheck
+            row.history.list.click(item: 1, clickCount: 2)
+            let afterDouble = desk.historyActivationsForCheck
+            row.history.list.click(item: 0)
+            row.history.list.pressReturnForCheck()
+            let afterReturn = desk.historyActivationsForCheck
+            let ok = afterClick == before && afterDouble == before + 1 && afterReturn == before + 2
+            checks.append(Check(area: "Нижній ряд", name: "Запис Історії: клацання виділяє, подвійне клацання і Enter виводять",
+                                status: ok ? .ok : .failed,
+                                detail: "після клацання виведень +\(afterClick - before), після подвійного +\(afterDouble - afterClick), "
+                                    + "після Enter +\(afterReturn - afterDouble)"))
+        } else {
+            checks.append(Check(area: "Нижній ряд", name: "Запис Історії: клацання виділяє, подвійне клацання і Enter виводять",
+                                status: .skipped, detail: "в Історії менше двох записів"))
+        }
+
         // Перетаскивание проверяем на отдельном списке той же выделки: так
         // проверяется именно перенос, а не содержимое чужого плана.
         let sample = SamplePlan(count: 12)

@@ -59,7 +59,14 @@ extension NativeResourcesWindow {
 final class NativeResourcesView: NSView, NativeListSource {
 
     private let state: AppState
+    /// Що шукаємо: переклади, пісенники чи фони й шаблони. Власник: «не делай
+    /// путаницу. переводы выбираются отдельно, песенники отдельно».
+    private let kindControl = NSSegmentedControl()
     private let source = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// Джерела, що стоять у списку зараз (залежать від вибраного роду).
+    private var shownSources: [ResourceHub.Source] = []
+    /// Джерело, з якого прочитано `catalog`.
+    private var loadedSource: ResourceHub.Source?
     /// Пошук у списку: назва, скорочення, мова. У MyBible — тисячі перекладів.
     private let search = NSSearchField()
     private let list = NativeTable(detailWidth: 150)
@@ -84,11 +91,33 @@ final class NativeResourcesView: NSView, NativeListSource {
     private var lines: [Line] = []
 
     private var chosenSource: ResourceHub.Source {
-        switch source.indexOfSelectedItem {
-        case 1: return .bibleQuote
-        case 2: return .myBible
-        default: return .slovo
+        shownSources.indices.contains(source.indexOfSelectedItem) ? shownSources[source.indexOfSelectedItem] : .slovo
+    }
+
+    /// Роди ресурсів вибраної вкладки.
+    private var chosenKinds: Set<ResourceItem.Kind> {
+        switch kindControl.selectedSegment {
+        case 1: return [.songbook]
+        case 2: return [.backgrounds, .templates, .fonts, .web]
+        default: return [.bible]
         }
+    }
+
+    /// Джерела вкладки з підписами — лише ті, що дають цей рід.
+    private func fillSources() {
+        let all: [(ResourceHub.Source, String)] = [
+            (.slovo, OurWords.t("Ресурсы «Слова» (GitHub)")),
+            (.bibleQuote, OurWords.t("Модули «Цитата из Библии» на GitHub")),
+            (.myBible, OurWords.t("Реестр MyBible (переводы на многих языках)")),
+            (.eBible, OurWords.t("eBible.org — свободные переводы на 1000+ языках (ставятся модулем MyBible)")),
+            (.softProjector, OurWords.t("Песенники SoftProjector (softprojector.org)")),
+        ]
+        let kinds = chosenKinds
+        let fitting = all.filter { !$0.0.kinds.isDisjoint(with: kinds) }
+        shownSources = fitting.map(\.0)
+        source.removeAllItems()
+        source.addItems(withTitles: fitting.map(\.1))
+        source.selectItem(at: 0)
     }
 
     init(state: AppState) {
@@ -107,9 +136,17 @@ final class NativeResourcesView: NSView, NativeListSource {
     override var isFlipped: Bool { true }
 
     private func build() {
-        source.addItems(withTitles: [OurWords.t("Ресурсы «Слова» (переводы, песенники, фоны, шаблоны)"),
-                                     OurWords.t("Модули «Цитата из Библии» на GitHub (переводы)"),
-                                     OurWords.t("Реестр MyBible (переводы на многих языках)")])
+        kindControl.segmentCount = 3
+        for (index, title) in [OurWords.t("Переводы Библии"), OurWords.t("Песенники"), OurWords.t("Фоны и шаблоны")].enumerated() {
+            kindControl.setLabel(title, forSegment: index)
+            kindControl.setWidth(0, forSegment: index)
+        }
+        kindControl.trackingMode = .selectOne
+        kindControl.selectedSegment = 0
+        kindControl.target = self
+        kindControl.action = #selector(kindChosen)
+        addSubview(kindControl)
+        fillSources()
         source.target = self
         source.action = #selector(sourceChosen)
         addSubview(source)
@@ -147,8 +184,11 @@ final class NativeResourcesView: NSView, NativeListSource {
         super.layout()
         let gap: CGFloat = 12
         let searchWidth = min(300, bounds.width * 0.38)
-        source.frame = NSRect(x: gap, y: gap, width: bounds.width - gap * 3 - searchWidth, height: 26)
-        search.frame = NSRect(x: source.frame.maxX + gap, y: gap + 1, width: searchWidth, height: 24)
+        kindControl.sizeToFit()
+        kindControl.frame = NSRect(x: gap, y: gap, width: min(bounds.width - gap * 2, max(kindControl.frame.width, 420)), height: 26)
+        let row = kindControl.frame.maxY + 8
+        source.frame = NSRect(x: gap, y: row, width: bounds.width - gap * 3 - searchWidth, height: 26)
+        search.frame = NSRect(x: source.frame.maxX + gap, y: row + 1, width: searchWidth, height: 24)
         let buttonsY = bounds.height - gap - 28
         var x = gap
         for button in [newButton, updatesButton, noneButton] {
@@ -176,6 +216,7 @@ final class NativeResourcesView: NSView, NativeListSource {
         list.reload()
         status.stringValue = OurWords.t("Читаю каталог…")
         let picked = chosenSource
+        loadedSource = nil
         hub.fetchCatalog(picked) { [weak self] result in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -185,6 +226,17 @@ final class NativeResourcesView: NSView, NativeListSource {
                         self.status.stringValue = OurWords.t("Каталог не прочитался: %s", "\(error)")
                     case .success(let catalog):
                         self.catalog = catalog
+                        self.loadedSource = picked
+                        // «Перевірити оновлення ресурсів»: відкриваємо ту вкладку,
+                        // де оновлення справді є (часто це пісенники).
+                        if self.wantsUpdatesOnly, picked == .slovo {
+                            let outdated = catalog.items.filter { self.standing(of: $0) == .outdated }
+                            let tabs: [Set<ResourceItem.Kind>] = [[.bible], [.songbook], [.backgrounds, .templates, .fonts, .web]]
+                            if !outdated.contains(where: { self.chosenKinds.contains($0.kind) }),
+                               let tab = tabs.firstIndex(where: { kinds in outdated.contains { kinds.contains($0.kind) } }) {
+                                self.kindControl.selectedSegment = tab
+                            }
+                        }
                         self.rebuildLines()
                         if self.wantsUpdatesOnly { self.markUpdates() } else { self.summarize() }
                     }
@@ -194,6 +246,19 @@ final class NativeResourcesView: NSView, NativeListSource {
     }
 
     @objc private func sourceChosen() { reload() }
+
+    @objc private func kindChosen() {
+        fillSources()
+        search.stringValue = ""
+        chosen = []
+        // Свій каталог уже прочитано — для іншої вкладки перечитувати нема чого.
+        if loadedSource == .slovo, chosenSource == .slovo, catalog != nil {
+            rebuildLines()
+            summarize()
+        } else {
+            reload()
+        }
+    }
 
     @objc private func searchChanged() { rebuildLines() }
 
@@ -206,16 +271,18 @@ final class NativeResourcesView: NSView, NativeListSource {
             .fonts: OurWords.t("Шрифты"), .web: OurWords.t("Страницы веб-слайдов"),
         ]
         let query = search.stringValue.trimmingCharacters(in: .whitespaces).lowercased()
+        let kindsShown = chosenKinds
         // Код мови («uk», «ru», «en») — лише ця мова: інакше «uk» знаходило й
         // «Luke», «UKJV» — сотню чужих перекладів.
         let isLanguage = !query.isEmpty && catalog.items.contains { $0.language?.lowercased() == query }
         let visible = catalog.items.filter { item in
+            guard kindsShown.contains(item.kind) else { return false }
             if query.isEmpty { return true }
             if isLanguage { return item.language?.lowercased() == query }
             return item.title.lowercased().contains(query) || item.subtitle.lowercased().contains(query)
         }
         var built: [Line] = []
-        if visible.contains(where: { $0.language != nil }) {
+        if kindsShown.isSubset(of: [.bible, .songbook]), visible.contains(where: { $0.language != nil }) {
             // Список із мовами (MyBible) — за мовами: спершу мова інтерфейсу,
             // далі українська, російська, англійська, решта за абеткою.
             let preferred = [OurWords.language, "uk", "ru", "en"]
@@ -254,11 +321,13 @@ final class NativeResourcesView: NSView, NativeListSource {
 
     private func summarize() {
         guard let catalog else { return }
-        let absent = catalog.items.filter { standing(of: $0) == .absent }.count
-        let outdated = catalog.items.filter { standing(of: $0) == .outdated }.count
+        let kinds = chosenKinds
+        let items = catalog.items.filter { kinds.contains($0.kind) }
+        let absent = items.filter { standing(of: $0) == .absent }.count
+        let outdated = items.filter { standing(of: $0) == .outdated }.count
         let size = catalog.items.filter { chosen.contains($0.id) }.reduce(Int64(0)) { $0 + $1.size }
         status.stringValue = OurWords.t("Ресурсов %s; ещё не установлено %s, обновлений %s; отмечено %s (%s)",
-                                        "\(catalog.items.count)", "\(absent)", "\(outdated)", "\(chosen.count)", Self.megabytes(size))
+                                        "\(items.count)", "\(absent)", "\(outdated)", "\(chosen.count)", Self.megabytes(size))
     }
 
     private static func megabytes(_ bytes: Int64) -> String {
@@ -311,6 +380,7 @@ final class NativeResourcesView: NSView, NativeListSource {
         busy = true
         takeButton.isEnabled = false
         source.isEnabled = false
+        kindControl.isEnabled = false
         bar.isHidden = false
         bar.doubleValue = 0
         install(items)
@@ -333,6 +403,7 @@ final class NativeResourcesView: NSView, NativeListSource {
                     self.busy = false
                     self.takeButton.isEnabled = true
                     self.source.isEnabled = true
+                    self.kindControl.isEnabled = true
                     self.bar.isHidden = true
                     self.ledger = ResourceLedger.load()
                     self.chosen = []

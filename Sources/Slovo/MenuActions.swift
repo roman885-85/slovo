@@ -95,13 +95,24 @@ final class MenuActions: NSObject {
         }
     }
 
+    /// «Про програму»: назва з версією й кнопка перевірки оновлень (власник:
+    /// «в пункте о программе указывать версию и добавить туда кнопку
+    /// проверить обновление»).
     @objc func about() {
         let alert = NSAlert()
-        alert.messageText = "Слово"
-        alert.informativeText = OurWords.t("Программа для показа Библии, песен, медиа и презентаций на служении — macOS. "
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        alert.messageText = "Слово " + AppUpdater.currentVersion
+        alert.informativeText = OurWords.t("Версия %s", AppUpdater.currentVersion + (build.isEmpty ? "" : " (\(build))")) + "\n\n"
+            + OurWords.t("Программа для показа Библии, песен, медиа и презентаций на служении — macOS. "
             + "Читает модули «Цитаты из Библии» и MyBible, песенники .vbm, шаблоны слайдов; "
             + "умеет NDI, веб-слайды и ролики YouTube по ссылке.")
         alert.addButton(withTitle: OurWords.t("Закрыть"))
-        alert.runModal()
+        alert.addButton(withTitle: OurWords.t("Проверить обновление"))
+        if alert.runModal() == .alertSecondButtonReturn {
+            // Після модального вікна — наступним проходом циклу подій: перевірка
+            // сама показує свої вікна.
+            let state = self.state
+            AppUpdater.onMain { AppUpdater.checkNow(state: state) }
+        }
     }
 }

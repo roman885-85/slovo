@@ -14,10 +14,26 @@ public final class ResourceHub: @unchecked Sendable {
     public static let bibleQuoteBase = "https://raw.githubusercontent.com/BibleQuote/BibleQuote-Modules/master/"
 
     public enum Source: String, CaseIterable, Sendable {
-        case slovo, bibleQuote, myBible
+        case slovo, bibleQuote, myBible, eBible, softProjector
+
+        /// Що дає джерело. Власник: «не делай путаницу — переводы выбираются
+        /// отдельно, песенники отдельно»: вікно ресурсів показує джерела
+        /// лише того роду, який вибрано.
+        public var kinds: Set<ResourceItem.Kind> {
+            switch self {
+            case .slovo: return Set(ResourceItem.Kind.allCases)
+            case .bibleQuote, .myBible, .eBible: return [.bible]
+            case .softProjector: return [.songbook]
+            }
+        }
     }
 
     public static let myBibleRegistryURL = URL(string: "https://mybible.zone/repository/registry/registry.zip")!
+    /// Перелік перекладів eBible.org (понад півтори тисячі, вільні ліцензії).
+    public static let eBibleCatalogURL = URL(string: "https://ebible.org/Scriptures/translations.csv")!
+    /// Сторінка пісенників SoftProjector.
+    public static let softProjectorPageURL = URL(string: "https://softprojector.org/download_mod_songbooks.html")!
+    public static let softProjectorBase = "https://softprojector.org/"
 
     public let layout: ResourceLayout
     private let session: URLSession
@@ -40,6 +56,8 @@ public final class ResourceHub: @unchecked Sendable {
         case .slovo:      url = Self.ownCatalogURL
         case .bibleQuote: url = URL(string: Self.bibleQuoteBase + "modules.ini")!
         case .myBible:    url = Self.myBibleRegistryURL
+        case .eBible:     url = Self.eBibleCatalogURL
+        case .softProjector: url = Self.softProjectorPageURL
         }
         let task = session.dataTask(with: url) { data, response, error in
             if let error { completion(.failure(.network(error.localizedDescription))); return }
@@ -61,6 +79,14 @@ public final class ResourceHub: @unchecked Sendable {
                     completion(.failure(.badCatalog)); return
                 }
                 completion(.success(catalog))
+            case .eBible:
+                let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+                let catalog = ResourceCatalog.eBible(csv: text)
+                completion(catalog.items.isEmpty ? .failure(.badCatalog) : .success(catalog))
+            case .softProjector:
+                let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+                let catalog = ResourceCatalog.softProjector(html: text, base: Self.softProjectorBase)
+                completion(catalog.items.isEmpty ? .failure(.badCatalog) : .success(catalog))
             }
         }
         task.resume()
@@ -221,6 +247,10 @@ public final class ResourceHub: @unchecked Sendable {
     /// у корінь даних, поверх наявних.
     private func place(zip: URL, for item: ResourceItem) -> ResourceError? {
         let fm = FileManager.default
+        // Пісенник SoftProjector може прийти й голим .sps, не zip-ом.
+        if item.id.hasPrefix("sp:"), item.url.lowercased().hasSuffix(".sps") {
+            return placeSoftProjector(sps: zip, for: item)
+        }
         let staging = fm.temporaryDirectory.appendingPathComponent("slovo-unpack-" + UUID().uuidString)
         defer { try? fm.removeItem(at: staging) }
         do { try fm.createDirectory(at: staging, withIntermediateDirectories: true) } catch { return .unpack("\(error)") }
@@ -235,6 +265,26 @@ public final class ResourceHub: @unchecked Sendable {
         let unpacked = ((try? fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)) ?? [])
             .filter { !["__MACOSX", ".DS_Store"].contains($0.lastPathComponent) }
         let destination = layout.destination(for: item)
+        if item.id.hasPrefix("eb:") {
+            // eBible.org: «вірш на рядок» → модуль MyBible.
+            guard let text = EBibleVPL.findText(in: staging) else { return .unpack(OurWords.t("в архиве нет модуля")) }
+            let code = String(item.id.dropFirst(3))
+            do {
+                try EBibleVPL.convert(text: text, to: destination, description: .init(
+                    title: item.title, abbreviation: code.uppercased(), language: item.language ?? "",
+                    copyright: item.subtitle + " · eBible.org", rightToLeft: false))
+            } catch {
+                return .place("\(error)")
+            }
+            return nil
+        }
+        if item.id.hasPrefix("sp:") {
+            let all = fm.enumerator(at: staging, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []
+            guard let sps = all.first(where: { $0.pathExtension.lowercased() == "sps" }) else {
+                return .unpack(OurWords.t("в архиве нет модуля"))
+            }
+            return placeSoftProjector(sps: sps, for: item)
+        }
         do {
             switch item.kind {
             case .bible, .songbook:
@@ -281,6 +331,31 @@ public final class ResourceHub: @unchecked Sendable {
                     try fm.moveItem(at: file, to: target)
                 }
             }
+        } catch {
+            return .place("\(error)")
+        }
+        return nil
+    }
+}
+
+extension ResourceHub {
+    /// Пісенник SoftProjector (`.sps` будь-якої з трьох версій) → `.songbook`.
+    fileprivate func placeSoftProjector(sps: URL, for item: ResourceItem) -> ResourceError? {
+        let fm = FileManager.default
+        let destination = layout.destination(for: item)
+        do {
+            // Розбір упізнає формат за вмістом, а тимчасовий файл завантаження
+            // зветься «.zip» — даємо йому справжнє розширення.
+            let named = fm.temporaryDirectory.appendingPathComponent("slovo-sps-" + UUID().uuidString + ".sps")
+            try fm.copyItem(at: sps, to: named)
+            defer { try? fm.removeItem(at: named) }
+            var book = try SongBookImporter.fromSoftProjector(fileAt: named)
+            if book.title.isEmpty { book.title = item.title }
+            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+            try SongBookJSON.write(book, to: destination)
+            let twin = destination.deletingPathExtension().appendingPathExtension("vbm")
+            if fm.fileExists(atPath: twin.path) { try? fm.removeItem(at: twin) }
         } catch {
             return .place("\(error)")
         }

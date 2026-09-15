@@ -281,6 +281,103 @@ extension Diagnostics {
                             detail: "0.8 > 0.69, 0.7 > 0.68, 0.65 > 0.6, 1.0 > 0.99, 0.8 = 0.80, 0.68.1 > 0.68, 0.69.10 > 0.69.9"))
 
         checks.append(importArchivesInFolder(area: area))
+        checks.append(contentsOf: extraSources(area: area))
+
+        // Оновлення з копії App Translocation: пакет не там, звідки запущено.
+        let moved = URL(fileURLWithPath: "/private/var/folders/n3/x/T/AppTranslocation/3F6D/d/Слово.app")
+        let home = URL(fileURLWithPath: "/Applications/Слово.app")
+        let translocationOK = AppUpdater.isTranslocated(moved) && !AppUpdater.isTranslocated(home)
+            && AppUpdater.originalBundleURL(of: home) == home
+        let preview = NativeUpdateWindow.previewForCheck(to: "slovo-оновлення-вікно.png")
+        checks.append(Check(area: area, name: "Вікно ходу оновлення в стилі заставки: смужка й рядок кроку",
+                            status: preview ? .ok : .failed,
+                            detail: preview ? "знімок ~/Library/Logs/slovo-оновлення-вікно.png" : "знімок не записався"))
+        checks.append(Check(area: area, name: "Оновлення бачить копію App Translocation і не пише поруч із нею",
+                            status: translocationOK ? .ok : .failed,
+                            detail: "копія з AppTranslocation впізнається; звичайний пакет лишається собою; справжнє місце — SecTranslocateCreateOriginalPathForURL"))
+        return checks
+    }
+
+    /// Нові джерела без мережі: eBible.org (каталог CSV, VPL → MyBible) і
+    /// пісенники SoftProjector (сторінка, найстаріший текстовий `.sps`).
+    private static func extraSources(area: String) -> [Check] {
+        var checks: [Check] = []
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("slovo-джерела-\(UUID().uuidString)")
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        // 1. Каталог eBible.org: лише вільні й доступні, мова дволітерна.
+        let csv = #"""
+            \#u{FEFF}"languageCode","translationId","languageNameInEnglish","title","Redistributable","UpdateDate","OTverses","NTverses","DCverses","downloadable","shortTitle"
+            "eng","engwebp","English","World English Bible","True","2026-09-12","23145","7957","0","True","WEB"
+            "ukr","ukr1871","Ukrainian","Святе Письмо, ""Куліш""","True","2025-01-02","0","7957","0","True",""
+            "deu","deu1912","German","Luther 1912","False","2024-01-01","23145","7957","0","True",""
+            """#
+        let eb = ResourceCatalog.eBible(csv: csv)
+        let ebOK = eb.items.map(\.id) == ["eb:engwebp", "eb:ukr1871"] && eb.items.map(\.language) == ["en", "uk"]
+            && eb.items[1].title == "Святе Письмо, \"Куліш\"" && eb.items[0].url.hasSuffix("/engwebp_vpl.zip")
+        checks.append(Check(area: area, name: "Каталог eBible.org: вільні переклади, мова uk/en, лапки в назві",
+                            status: ebOK ? .ok : .failed,
+                            detail: eb.items.map { "\($0.id) \($0.language ?? "—") «\($0.title)»" }.joined(separator: "; ")))
+
+        // 2. VPL → модуль MyBible, який програма відкриває.
+        let vpl = root.appendingPathComponent("test_vpl.txt")
+        let module = root.appendingPathComponent("Modules/test.SQLite3")
+        try? "GEN 1:1 In the beginning, God created the heavens and the earth.\nGEN 1:2 The earth was formless.\nPSA 23:1 The LORD is my shepherd.\nJOH 3:16 For God so loved the world.\nXYZ 1:1 skipped\n"
+            .write(to: vpl, atomically: true, encoding: .utf8)
+        var vplDetail = ""
+        var vplOK = false
+        do {
+            let count = try EBibleVPL.convert(text: vpl, to: module, description: .init(
+                title: "Test Bible", abbreviation: "TST", language: "en", copyright: "public domain", rightToLeft: false))
+            let opened = try MyBibleModule(fileAt: module)
+            let john = opened.books.first { $0.canonicalNumber == 500 }
+            let text = try john.flatMap { try opened.chapters(ofBook: $0).first?.verses.first?.text } ?? ""
+            vplOK = count == 4 && opened.books.count == 3 && text == "For God so loved the world." && opened.info.name == "Test Bible"
+            vplDetail = "віршів \(count), книг \(opened.books.count) (\(opened.books.map(\.fullName).joined(separator: ", "))); Ів 3:16 «\(text)»"
+        } catch {
+            vplDetail = "\(error)"
+        }
+        checks.append(Check(area: area, name: "eBible.org: VPL стає модулем MyBible, який програма читає",
+                            status: vplOK ? .ok : .failed, detail: vplDetail))
+
+        // 3. Сторінка пісенників SoftProjector.
+        let html = """
+            <h3>English</h3>
+            <p>Christian Hymns - <a href="songbooks/Christian_Hymns.zip">Christian_Hymns.zip</a><br>
+            Worship Songs - <a href="songbooks/englishworship.sps">englishworship.sps</a> * works only with version 2</p>
+            <h3>Ukrainian</h3>
+            <p>Євангелски Пісні - <a href="songbooks/EvangelskiPisni.zip">EvangelskiPisni.zip</a><br>
+            Пiснi Спасенних - <a href="songbooks/PisniSpasennyh.zip">
+            PisniSpasennyh.zip</a><br>
+            """
+        let sp = ResourceCatalog.softProjector(html: html, base: "https://softprojector.org/")
+        let spOK = sp.items.map(\.id) == ["sp:Christian_Hymns", "sp:englishworship", "sp:EvangelskiPisni", "sp:PisniSpasennyh"]
+            && sp.items.map(\.language) == ["en", "en", "uk", "uk"] && sp.items[2].title == "Євангелски Пісні"
+            && sp.items.allSatisfy { $0.kind == .songbook && $0.fileName.hasSuffix(".songbook") }
+        checks.append(Check(area: area, name: "Пісенники SoftProjector: назви, мови, файли",
+                            status: spOK ? .ok : .failed,
+                            detail: sp.items.map { "\($0.id) \($0.language ?? "—") «\($0.title)»" }.joined(separator: "; ")))
+
+        // 4. Найстаріший текстовий .sps.
+        let old = root.appendingPathComponent("old.sps")
+        try? "##0\n##Проба пісень\n##(c) проба\n1#$#Боже, славимо Тебе#$##$##$##$##$#Куплет 1 @%Боже, славимо Тебе @%і хвалу Тобі приносим@$Приспів@%Слава Тобі#$##$#left#$#\n2#$#Друга#$##$#G#$##$##$#Verse 1.@%Рядок#$##$##$#\n"
+            .write(to: old, atomically: true, encoding: .utf8)
+        var oldDetail = ""
+        var oldOK = false
+        do {
+            let book = try SongBookImporter.fromSoftProjector(fileAt: old)
+            let first = book.songs.first
+            oldOK = book.title == "Проба пісень" && book.songs.count == 2 && first?.parts.count == 2
+                && first?.parts.last?.text == "Слава Тобі"
+            oldDetail = "«\(book.title)»: пісень \(book.songs.count); у першій частин \(first?.parts.count ?? 0): "
+                + (first?.parts.map { "\($0.kind): \($0.text.prefix(20))" }.joined(separator: " | ") ?? "")
+        } catch {
+            oldDetail = "\(error)"
+        }
+        checks.append(Check(area: area, name: "Пісенник SoftProjector 1.x (текст «##», «#$#») читається",
+                            status: oldOK ? .ok : .failed, detail: oldDetail))
         return checks
     }
 
@@ -380,6 +477,8 @@ extension Diagnostics {
             case .slovo:      label = "свій каталог slovo-resources"
             case .bibleQuote: label = "«Цитата з Біблії» на GitHub"
             case .myBible:    label = "реєстр MyBible"
+            case .eBible:     label = "eBible.org (VPL → MyBible)"
+            case .softProjector: label = "пісенники SoftProjector"
             }
             let modules = temp.appendingPathComponent(source.rawValue + "/app/Modules")
             try? fm.createDirectory(at: modules, withIntermediateDirectories: true)
@@ -398,11 +497,24 @@ extension Diagnostics {
                 case .slovo:      pick = bibles.filter { $0.size > 0 }.min { $0.size < $1.size }
                 case .bibleQuote: pick = bibles.first { $0.fileName.contains("Russian_RST") } ?? bibles.first
                 case .myBible:    pick = bibles.filter { $0.language == "uk" && $0.size > 0 }.min { $0.size < $1.size }
+                case .eBible:     pick = bibles.filter { $0.language == "uk" }.min { $0.size < $1.size }
+                                      ?? bibles.filter { $0.language == "en" }.min { $0.size < $1.size }
+                // Найстаріший текстовий формат — «Євангельські пісні».
+                case .softProjector: pick = catalog.items.first { $0.id == "sp:EvangelskiPisni" } ?? catalog.items.first
                 }
                 guard let item = pick else { continue }
                 let started = Date()
                 guard let outcome = install(item, hub: hub) else {
                     checks.append(Check(area: area, name: "Установлення з мережі: " + label, status: .failed, detail: "час вийшов"))
+                    continue
+                }
+                if item.kind == .songbook {
+                    let file = modules.appendingPathComponent(item.fileName)
+                    let songs = (try? SongBook(fileAt: file))?.songs.count ?? 0
+                    let ok = outcome.installed.count == 1 && songs > 0
+                    checks.append(Check(area: area, name: "Установлення з мережі: " + label, status: ok ? .ok : .failed,
+                                        detail: "«\(item.title)» за \(String(format: "%.1f", Date().timeIntervalSince(started))) с; пісень \(songs)"
+                                            + (outcome.failures.isEmpty ? "" : "; " + outcome.failures.map { $0.1 }.joined(separator: "; "))))
                     continue
                 }
                 let opened = ModuleLibrary(modulesDirectory: modules)

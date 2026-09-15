@@ -167,6 +167,14 @@ func languageCode(declared: String?, sample: String) -> String? {
     let text = sample.lowercased()
     func has(_ letters: String) -> Bool { text.contains { letters.contains($0) } }
     let scalars = text.unicodeScalars
+    // Назви, за якими мову видно одразу, — надійніше за літери зразка:
+    // грецький Новий Завет із транслітерацією, естонська з «ä» тощо.
+    let named: [(String, String)] = [("greek", "el"), ("греческ", "el"), ("textus receptus", "el"),
+                                     ("estonian", "et"), ("romanian", "ro"), ("cornilescu", "ro"),
+                                     ("reina-valera", "es"), ("santa biblia", "es"), ("o‘zbek", "uz"),
+                                     ("o'zbek", "uz"), ("muqaddas", "uz"), ("injil", "uz")]
+    for (word, code) in named where text.contains(word) { return code }
+    if scalars.contains(where: { (0x0530...0x058F).contains($0.value) }) { return "hy" }
     if scalars.contains(where: { (0x0590...0x05FF).contains($0.value) }) { return "he" }
     if scalars.contains(where: { (0x0370...0x03FF).contains($0.value) || (0x1F00...0x1FFF).contains($0.value) }) { return "el" }
     let cyrillic = scalars.filter { (0x0400...0x04FF).contains($0.value) }.count
@@ -181,6 +189,10 @@ func languageCode(declared: String?, sample: String) -> String? {
         return "ru"
     }
     guard latin > 0 else { return nil }
+    if has("șşțţăâî") { return "ro" }
+    if has("ñ¿¡") { return "es" }
+    if has("õ") { return "et" }
+    if has("ėųūį") { return "lt" }
     if has("ąęłńśźż") { return "pl" }
     if has("äöüß") { return "de" }
     return "en"

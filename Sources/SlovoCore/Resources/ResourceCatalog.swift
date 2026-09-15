@@ -159,6 +159,137 @@ public struct ResourceCatalog: Codable, Sendable {
         return ResourceCatalog(updated: root["version"].map { "\($0)" } ?? "", items: items)
     }
 
+    /// Каталог eBible.org: `translations.csv`, рядок на переклад.
+    ///
+    /// Беремо лише те, що дозволено поширювати й можна завантажити. Файл —
+    /// `<id>_vpl.zip`; при установці він перекладається в модуль MyBible
+    /// (`EBibleVPL`). Мова в каталозі — трилітерна (ISO 639-3); для пошуку
+    /// «uk», «ru», «en» знайомі мови перекладаємо у дволітерні.
+    public static func eBible(csv text: String) -> ResourceCatalog {
+        let rows = Self.csvRows(text)
+        guard let head = rows.first else { return ResourceCatalog(updated: "", items: []) }
+        func column(_ name: String) -> Int? { head.firstIndex { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\u{FEFF} ")) == name } }
+        guard let id = column("translationId"), let title = column("title") else { return ResourceCatalog(updated: "", items: []) }
+        let language = column("languageCode"), english = column("languageNameInEnglish")
+        let free = column("Redistributable"), downloadable = column("downloadable"), date = column("UpdateDate")
+        let short = column("shortTitle"), counts = ["OTverses", "NTverses", "DCverses"].compactMap(column)
+        var items: [ResourceItem] = []
+        var newest = ""
+        for row in rows.dropFirst() {
+            func value(_ index: Int?) -> String {
+                guard let index, row.indices.contains(index) else { return "" }
+                return row[index].trimmingCharacters(in: .whitespaces)
+            }
+            guard !value(id).isEmpty, value(free).lowercased() == "true", value(downloadable).lowercased() != "false" else { continue }
+            let verses = counts.reduce(0) { $0 + (Int(value($1)) ?? 0) }
+            guard verses > 0 else { continue }
+            let code = value(language)
+            let updated = value(date)
+            if updated > newest { newest = updated }
+            let name = value(title).isEmpty ? value(short) : value(title)
+            items.append(ResourceItem(id: "eb:" + value(id), kind: .bible,
+                                      title: name,
+                                      subtitle: [value(id), value(english), updated].filter { !$0.isEmpty }.joined(separator: " · "),
+                                      // Приблизно: VPL-архів — близько 140 байтів на вірш.
+                                      size: Int64(verses * 140), version: updated,
+                                      url: "https://ebible.org/Scriptures/\(value(id))_vpl.zip",
+                                      fileName: value(id) + ".SQLite3",
+                                      language: Self.twoLetter[code] ?? (code.isEmpty ? nil : code)))
+        }
+        return ResourceCatalog(updated: newest, items: items)
+    }
+
+    /// Пісенники SoftProjector: сторінка `download_mod_songbooks.html` —
+    /// заголовки мов `<h3>` і посилання `songbooks/<файл>.sps|zip`, перед
+    /// кожним — назва пісенника. Ставляться через розбір `.sps` у свій формат.
+    public static func softProjector(html: String, base: String) -> ResourceCatalog {
+        let languages = ["czech": "cs", "english": "en", "german": "de", "russian": "ru", "slovak": "sk",
+                         "ukrainian": "uk", "polish": "pl", "romanian": "ro", "spanish": "es"]
+        var items: [ResourceItem] = []
+        var language: String?
+        var cursor = html.startIndex
+        let pattern = try? NSRegularExpression(pattern: #"<h3>([^<]+)</h3>|<a\s+href="(songbooks/[^"]+\.(?:sps|zip))"\s*>"#,
+                                               options: [.caseInsensitive])
+        let whole = NSRange(html.startIndex..., in: html)
+        for match in pattern?.matches(in: html, range: whole) ?? [] {
+            guard let range = Range(match.range, in: html) else { continue }
+            if let header = Range(match.range(at: 1), in: html) {
+                language = languages[html[header].trimmingCharacters(in: .whitespaces).lowercased()]
+                cursor = range.upperBound
+                continue
+            }
+            guard let link = Range(match.range(at: 2), in: html) else { continue }
+            // Назва — текст між попереднім посиланням чи заголовком і цим.
+            let before = String(html[cursor..<range.lowerBound])
+            cursor = html[range.upperBound...].range(of: "</a>")?.upperBound ?? range.upperBound
+            var title = before.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&nbsp;", with: " ")
+            if let lastDash = title.range(of: " - ", options: .backwards) { title = String(title[..<lastDash.lowerBound]) }
+            if let lastStar = title.range(of: "*", options: .backwards) { title = String(title[title.index(after: lastStar.lowerBound)...]) }
+            title = title.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: CharacterSet(charactersIn: " -\n\t"))
+            let path = String(html[link])
+            let file = (path.removingPercentEncoding ?? path).components(separatedBy: "/").last ?? path
+            let stem = (file as NSString).deletingPathExtension
+            if title.isEmpty || title.count > 80 { title = stem }
+            let escaped = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "%"))) ?? path
+            let url = base.hasSuffix("/") ? base + (path.contains("%") ? path : escaped) : base + "/" + (path.contains("%") ? path : escaped)
+            guard !items.contains(where: { $0.id == "sp:" + stem }) else { continue }
+            items.append(ResourceItem(id: "sp:" + stem, kind: .songbook, title: title,
+                                      subtitle: [file, language ?? ""].filter { !$0.isEmpty }.joined(separator: " · "),
+                                      size: 0, version: "", url: url,
+                                      fileName: stem + ".songbook", language: language))
+        }
+        return ResourceCatalog(updated: "", items: items)
+    }
+
+    /// ISO 639-3 → 639-1 для мов, які шукають найчастіше.
+    static let twoLetter: [String: String] = [
+        "eng": "en", "ukr": "uk", "rus": "ru", "bel": "be", "deu": "de", "fra": "fr", "spa": "es", "por": "pt",
+        "ita": "it", "pol": "pl", "ron": "ro", "ces": "cs", "slk": "sk", "hun": "hu", "bul": "bg", "srp": "sr",
+        "hrv": "hr", "slv": "sl", "lit": "lt", "lav": "lv", "est": "et", "fin": "fi", "swe": "sv", "nor": "no",
+        "nob": "nb", "dan": "da", "nld": "nl", "ell": "el", "grc": "el", "heb": "he", "hbo": "he", "arb": "ar",
+        "arz": "ar", "tur": "tr", "kaz": "kk", "kir": "ky", "uzb": "uz", "uzn": "uz", "aze": "az", "hye": "hy",
+        "kat": "ka", "fas": "fa", "pes": "fa", "hin": "hi", "urd": "ur", "ben": "bn", "tam": "ta", "tel": "te",
+        "zho": "zh", "cmn": "zh", "jpn": "ja", "kor": "ko", "vie": "vi", "tha": "th", "ind": "id", "msa": "ms",
+        "zlm": "ms", "tgl": "tl", "swh": "sw", "swa": "sw", "amh": "am", "afr": "af", "lat": "la", "epo": "eo",
+        "mkd": "mk", "sqi": "sq", "als": "sq", "isl": "is", "gle": "ga", "cym": "cy", "mlt": "mt", "tgk": "tg",
+        "tuk": "tk", "mon": "mn", "khm": "km", "mya": "my", "npi": "ne", "sin": "si", "yor": "yo", "hau": "ha",
+        "ibo": "ig", "zul": "zu", "xho": "xh", "som": "so", "mlg": "mg", "plt": "mg",
+    ]
+
+    /// Рядки CSV: коми, лапки, лапки всередині подвоєні, переноси в лапках.
+    static func csvRows(_ text: String) -> [[String]] {
+        var rows: [[String]] = []
+        var row: [String] = []
+        var field = ""
+        var quoted = false
+        var iterator = text.makeIterator()
+        var pending: Character?
+        while let char = pending ?? iterator.next() {
+            pending = nil
+            if quoted {
+                if char == "\"" {
+                    if let next = iterator.next() {
+                        if next == "\"" { field.append("\"") } else { quoted = false; pending = next }
+                    } else { quoted = false }
+                } else { field.append(char) }
+                continue
+            }
+            switch char {
+            case "\"": quoted = true
+            case ",": row.append(field); field = ""
+            case "\n", "\r\n", "\r":
+                row.append(field); field = ""
+                if !(row.count == 1 && row[0].isEmpty) { rows.append(row) }
+                row = []
+            default: field.append(char)
+            }
+        }
+        if !field.isEmpty || !row.isEmpty { row.append(field); rows.append(row) }
+        return rows
+    }
+
     /// «589K», «2.6M» → байти.
     static func size(_ text: String?) -> Int64 {
         guard var text = text?.trimmingCharacters(in: .whitespaces).uppercased(), !text.isEmpty else { return 0 }

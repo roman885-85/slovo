@@ -221,12 +221,57 @@ public enum SongBookImporter {
         if looksLikeXML(head) {
             return try readSoftProjectorXML(at: url, name: name)
         }
+        if head.starts(with: Array("##".utf8)) || head.starts(with: [0xEF, 0xBB, 0xBF, 0x23, 0x23]) {
+            return try readSoftProjectorText(at: url, name: name)
+        }
         throw Failure.unexpectedStructure(name, """
-            Ожидались база SQLite (SoftProjector 2) или XML <spSongBook>, \
-            а файл начинается на «\(preview(head))».
-            Самый старый формат SoftProjector здесь не читается: откройте его \
-            в SoftProjector и выгрузите Песенник заново.
+            Ожидались база SQLite (SoftProjector 2), XML <spSongBook> или текст \
+            SoftProjector 1.x (начинается на «##»), а файл начинается на «\(preview(head))».
             """)
+    }
+
+    /// Найстаріший формат SoftProjector (1.x) — текст, рядок на пісню.
+    ///
+    /// Так досі лежать пісенники на softprojector.org («Євангельські пісні»,
+    /// «Пісні спасенних», «Псалмоспіви», «Песнь Возрождения»). Шапка — рядки
+    /// «##версія», «##назва», «##опис»; далі пісня — десять полів через «#$#»:
+    /// номер, назва, категорія, тональність, слова, музика, текст, нотатки,
+    /// вирівнювання, шрифт. У тексті «@$» розділяє частини, «@%» — рядки;
+    /// перший рядок частини — її назва («Куплет 1.», «Приспів», «Verse 1.»).
+    private static func readSoftProjectorText(at url: URL, name: String) throws -> SoftProjectorBook {
+        guard let raw = try? Data(contentsOf: url) else { throw Failure.cannotOpen(name) }
+        var data = raw
+        if data.starts(with: [0xEF, 0xBB, 0xBF]) { data = data.dropFirst(3) }
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .windowsCP1251) else {
+            throw Failure.cannotOpen(name)
+        }
+        var header: [String] = []
+        var songs: [SoftProjectorSong] = []
+        for line in text.components(separatedBy: .newlines) {
+            if line.hasPrefix("##") {
+                header.append(String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces))
+                continue
+            }
+            let fields = line.components(separatedBy: "#$#")
+            guard fields.count >= 7 else { continue }
+            func field(_ index: Int) -> String {
+                fields.indices.contains(index) ? fields[index].trimmingCharacters(in: .whitespaces) : ""
+            }
+            let lyrics = field(6)
+                .replacingOccurrences(of: "@$", with: "\n\n")
+                .replacingOccurrences(of: "@%", with: "\n")
+            songs.append(SoftProjectorSong(number: Int(field(0)), title: field(1), tune: field(3),
+                                           words: field(4), music: field(5), text: lyrics,
+                                           notes: field(7).replacingOccurrences(of: "@%", with: "\n")))
+        }
+        guard !songs.isEmpty else {
+            throw Failure.unexpectedStructure(name, "текст SoftProjector 1.x без песен: строк с полями «#$#» не нашлось.")
+        }
+        // Перший рядок шапки — номер версії («##0», «##4»), далі назва й опис.
+        let rest = header.first.map { $0.allSatisfy(\.isNumber) } == true ? Array(header.dropFirst()) : header
+        return SoftProjectorBook(title: rest.first ?? "",
+                                 info: rest.dropFirst().joined(separator: "\n").replacingOccurrences(of: "@%", with: "\n"),
+                                 origin: "текст SoftProjector 1.x", songs: songs)
     }
 
     /// Початок файла схожий на XML? Дивимося і однобайтовий текст, і UTF-16 —

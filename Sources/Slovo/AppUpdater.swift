@@ -137,6 +137,29 @@ enum AppUpdater {
     nonisolated static let carriedData = ["Modules", "BackGrounds", "Templates", "Plans", "Fonts", "RemoteAPI",
                                           "Імпорт з VisioBible", "settings.json"]
 
+    /// Де пакет лежить насправді.
+    ///
+    /// Програму, відкриту просто з розпакованого архіву («Завантаження»),
+    /// macOS запускає з копії в теці лише для читання
+    /// (`/private/var/folders/…/AppTranslocation/…`). Оновлення клало новий пакет
+    /// поруч із тією копією й падало: «том доступний лише для читання»
+    /// (власник, 0.87 → 0.88). Справжнє місце повертає системна
+    /// `SecTranslocateCreateOriginalPathForURL`.
+    nonisolated static func isTranslocated(_ bundle: URL) -> Bool {
+        bundle.path.contains("/AppTranslocation/")
+    }
+
+    nonisolated static func originalBundleURL(of bundle: URL) -> URL? {
+        guard isTranslocated(bundle) else { return bundle }
+        typealias Create = @convention(c) (CFURL, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Unmanaged<CFURL>?
+        guard let handle = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY),
+              let symbol = dlsym(handle, "SecTranslocateCreateOriginalPathForURL") else { return nil }
+        let create = unsafeBitCast(symbol, to: Create.self)
+        guard let original = create(bundle as CFURL, nil)?.takeRetainedValue() else { return nil }
+        let url = original as URL
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     /// Скрипт помічника. Окремо — щоб самоперевірка прогнала його на
     /// тимчасових пакетах.
     nonisolated static func helperScript(pid: Int32, bundle: URL, fresh: URL, staging: URL, relaunch: Bool = true) -> String {
@@ -187,13 +210,30 @@ enum AppUpdater {
 
     /// Раз на заданий у налаштуваннях строк (0 — ніколи) спитати GitHub і, коли
     /// є новіша версія, запропонувати. Тихо: без зв'язку — нічого.
+    ///
+    /// Власник: «при появлении новой версии выводить сообщение». Тому GitHub
+    /// питаємо на кожному запуску (крім «Ніколи»), а поки програма відкрита —
+    /// ще раз на 12 годин. Ту саму версію, від якої відмовилися «Пізніше»,
+    /// до наступного запуску вдруге не пропонуємо.
     static func checkOnLaunch(state: AppState, intervalDays: Int) {
         guard intervalDays > 0 else { return }
-        let last = UserDefaults.standard.double(forKey: lastCheckKey)
-        guard Date().timeIntervalSince1970 - last > Double(intervalDays) * 86_400 else { return }
+        checkQuietly(state: state)
+        guard periodic == nil else { return }
+        let timer = Timer(timeInterval: 12 * 3600, repeats: true) { _ in
+            MainActor.assumeIsolated { checkQuietly(state: state) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        periodic = timer
+    }
+
+    private static var periodic: Timer?
+    private static var declinedVersion: String?
+
+    private static func checkQuietly(state: AppState) {
         fetchLatest { result in
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastCheckKey)
-            guard case .success(let release) = result, isNewer(release.version, than: currentVersion) else { return }
+            guard case .success(let release) = result, isNewer(release.version, than: currentVersion),
+                  release.version != declinedVersion else { return }
             NativeTrace.say("оновлення: на GitHub \(release.tag), у нас \(currentVersion)")
             offer(release, state: state)
         }
@@ -208,7 +248,7 @@ enum AppUpdater {
             + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(700)))
         alert.addButton(withTitle: OurWords.t("Обновить сейчас"))
         alert.addButton(withTitle: OurWords.t("Позже"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { declinedVersion = release.version; return }
         NativeUpdateWindow.show(release: release)
     }
 
@@ -248,6 +288,8 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
     let release: AppUpdater.Release
     var log: (@MainActor (String) -> Void)?
     var progress: (@MainActor (Double?, String) -> Void)?
+    /// Що робимо зараз і скільки з усього зроблено (0…1) — рядок і смужка вікна.
+    var step: (@MainActor (String, Double) -> Void)?
     /// Кінець: `nil` — усе готово, помічник чекає виходу; інакше причина.
     var finished: (@MainActor (String?) -> Void)?
 
@@ -255,7 +297,10 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
     private var task: URLSessionDownloadTask?
     private var started = Date()
     private var lastLoggedTenth = -1
-    private let bundle = Bundle.main.bundleURL
+    /// Звідки запущено програму (може бути копія App Translocation).
+    private let running = Bundle.main.bundleURL
+    /// Пакет, який замінюємо, — справжнє місце програми.
+    private var bundle: URL = Bundle.main.bundleURL
     private(set) var staging: URL?
     private var cancelled = false
     /// Помічник заміни вже запущений: теку з новим пакетом тепер тримає він,
@@ -271,6 +316,12 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
         AppUpdater.onMain { sink?(text) }
     }
 
+    private func tell(_ text: String, _ done: Double) {
+        say(text)
+        let sink = step
+        AppUpdater.onMain { sink?(text, done) }
+    }
+
     private static func megabytes(_ bytes: Int64) -> String {
         String(format: "%.1f МБ", Double(bytes) / 1_048_576)
     }
@@ -281,8 +332,18 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
         }
         say(OurWords.t("Сейчас: %s. На GitHub: %s.", AppUpdater.currentVersion, release.tag))
         say(OurWords.t("Файл: %s (%s).", url.lastPathComponent, Self.megabytes(release.size)))
-        say(OurWords.t("Программа сейчас: %s", bundle.path))
-        say(OurWords.t("Загружаю…"))
+        say(OurWords.t("Программа сейчас: %s", running.path))
+        guard let original = AppUpdater.originalBundleURL(of: running) else {
+            finish(OurWords.t("macOS запустила программу из временной копии, и где лежит сама программа, узнать не удалось. Перенесите «Слово.app» в папку «Программы», откройте оттуда и обновите ещё раз."))
+            return
+        }
+        bundle = original
+        if original != running { say(OurWords.t("Сама программа лежит здесь: %s", original.path)) }
+        guard FileManager.default.isWritableFile(atPath: original.deletingLastPathComponent().path) else {
+            finish(OurWords.t("В папку %s нельзя записать. Перенесите «Слово.app» в папку «Программы», откройте оттуда и обновите ещё раз.", original.deletingLastPathComponent().path))
+            return
+        }
+        tell(OurWords.t("Загружаю новую версию…"), 0.02)
         started = Date()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60
@@ -313,7 +374,13 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
         let text = OurWords.t("Загружено %s из %s · %s МБ/с", Self.megabytes(totalBytesWritten),
                               total > 0 ? Self.megabytes(total) : "?", String(format: "%.1f", speed))
         let sink = progress
-        AppUpdater.onMain { sink?(fraction, text) }
+        let stepSink = step
+        AppUpdater.onMain {
+            sink?(fraction, text)
+            stepSink?(OurWords.t("Загружаю новую версию: %s из %s · %s МБ/с", Self.megabytes(totalBytesWritten),
+                                 total > 0 ? Self.megabytes(total) : "?", String(format: "%.1f", speed)),
+                      0.02 + (fraction ?? 0) * 0.78)
+        }
         if let fraction {
             let tenth = Int(fraction * 10)
             if tenth > lastLoggedTenth, tenth < 10 {
@@ -362,7 +429,7 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
 
     private func prepare(in staging: URL) {
         let fm = FileManager.default
-        say(OurWords.t("Распаковываю архив…"))
+        tell(OurWords.t("Распаковываю архив…"), 0.82)
         let kept = staging.appendingPathComponent("update.zip")
         let status = run("/usr/bin/ditto", ["-x", "-k", kept.path, staging.path])
         guard status == 0 else { finish(OurWords.t("не распаковалось: %s", "ditto \(status)")); return }
@@ -373,14 +440,14 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
         try? fm.removeItem(at: kept)
         let info = NSDictionary(contentsOf: fresh.appendingPathComponent("Contents/Info.plist"))
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
-        say(OurWords.t("Распаковано: %s, версия %s.", fresh.lastPathComponent, version))
+        tell(OurWords.t("Проверяю новый пакет: версия %s…", version), 0.88)
         guard fm.isExecutableFile(atPath: fresh.appendingPathComponent("Contents/MacOS/Slovo").path) else {
             finish(OurWords.t("в новом пакете нет исполняемого файла")); return
         }
         if version != release.version {
             say(OurWords.t("Внимание: в архиве версия %s, а выпуск называется %s.", version, release.version))
         }
-        say(OurWords.t("Снимаю отметку карантина с нового пакета…"))
+        tell(OurWords.t("Снимаю отметку карантина с нового пакета…"), 0.92)
         _ = run("/usr/bin/xattr", ["-cr", fresh.path])
 
         let appData = bundle.appendingPathComponent("Contents/Resources/app")
@@ -391,6 +458,7 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
             say(OurWords.t("Из старого пакета в новый перейдут: %s.", carried.joined(separator: ", ")))
         }
 
+        tell(OurWords.t("Готовлю замену программы…"), 0.96)
         let script = AppUpdater.helperScript(pid: ProcessInfo.processInfo.processIdentifier,
                                              bundle: bundle, fresh: fresh, staging: staging)
         let helper = staging.appendingPathComponent("replace.sh")
@@ -414,71 +482,109 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
     }
 }
 
-/// Вікно ходу оновлення: журнал кроків, смужка, «Скасувати» / «Закрити».
+/// Вікно ходу оновлення — у стилі заставки запуску.
+///
+/// Власник: «процесс обновления подробный, но в красивом стиле (как в плашке
+/// запуска)… вместо такого подробного окна сделать строку выполнения и
+/// описание что конкретно сейчас выполняется… и полосу выполнения». Темна
+/// плашка зі значком: заголовок, рядок «що зараз робиться» і смужка всього
+/// оновлення. Докладний журнал кроків іде в щоденник програми
+/// (`~/Library/Logs/slovo-start.txt`, рядки «оновлення:»).
 @MainActor
 enum NativeUpdateWindow {
 
     private static var window: NSWindow?
     private static var session: UpdateSession?
 
-    static func show(release: AppUpdater.Release) {
-        guard window == nil else { window?.makeKeyAndOrderFront(nil); return }
-        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
-                             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        panel.title = OurWords.t("Обновление «Слова» до %s", release.version)
-        panel.isReleasedWhenClosed = false
-        panel.minSize = NSSize(width: 480, height: 320)
+    /// Безрамкове вікно, що все одно приймає клавіатуру й клацання.
+    private final class Panel: NSWindow {
+        override var canBecomeKey: Bool { true }
+    }
 
-        let content = NSView(frame: panel.contentLayoutRect)
-        content.autoresizingMask = [.width, .height]
-        let scroll = NSTextView.scrollableTextView()
-        let text = scroll.documentView as! NSTextView
-        text.isEditable = false
-        text.font = .systemFont(ofSize: 12)
-        text.textContainerInset = NSSize(width: 6, height: 6)
-        let bar = NSProgressIndicator()
+    static func show(release: AppUpdater.Release, startSession: Bool = true) {
+        guard window == nil else { window?.makeKeyAndOrderFront(nil); return }
+        let size = NSSize(width: 500, height: 250)
+        let panel = Panel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless],
+                          backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
+        panel.isReleasedWhenClosed = false
+        panel.title = OurWords.t("Обновление «Слова» до %s", release.version)
+
+        let root = NSView(frame: NSRect(origin: .zero, size: size))
+        root.wantsLayer = true
+        root.layer?.cornerRadius = 18
+        root.layer?.masksToBounds = true
+        // Та сама темна підкладка, що в заставки запуску.
+        root.layer?.backgroundColor = NSColor(calibratedRed: 0.07, green: 0.10, blue: 0.18, alpha: 1).cgColor
+        root.appearance = NSAppearance(named: .darkAqua)
+
+        let icon = NSImageView(frame: NSRect(x: 28, y: size.height - 28 - 64, width: 64, height: 64))
+        icon.image = Bundle.main.url(forResource: "Slovo", withExtension: "icns")
+            .flatMap { NSImage(contentsOf: $0) } ?? NSApp.applicationIconImage
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        root.addSubview(icon)
+
+        let title = NSTextField(labelWithString: OurWords.t("Обновление «Слова»"))
+        title.font = .systemFont(ofSize: 22, weight: .semibold)
+        title.textColor = .white
+        title.frame = NSRect(x: 108, y: size.height - 62, width: size.width - 136, height: 28)
+        root.addSubview(title)
+
+        let versions = NSTextField(labelWithString: "\(AppUpdater.currentVersion)  →  \(release.version)")
+        versions.font = .systemFont(ofSize: 13, weight: .medium)
+        versions.textColor = NSColor.white.withAlphaComponent(0.6)
+        versions.frame = NSRect(x: 108, y: size.height - 86, width: size.width - 136, height: 18)
+        root.addSubview(versions)
+
+        // Що робиться зараз — до трьох рядків: причина помилки буває довгою.
+        let status = NSTextField(wrappingLabelWithString: OurWords.t("Готовлю обновление…"))
+        status.font = .systemFont(ofSize: 13)
+        status.textColor = NSColor.white.withAlphaComponent(0.85)
+        status.maximumNumberOfLines = 3
+        status.lineBreakMode = .byWordWrapping
+        status.frame = NSRect(x: 28, y: 86, width: size.width - 56, height: 52)
+        root.addSubview(status)
+
+        let bar = NSProgressIndicator(frame: NSRect(x: 28, y: 70, width: size.width - 56, height: 8))
         bar.style = .bar
         bar.minValue = 0
         bar.maxValue = 1
         bar.isIndeterminate = false
-        let status = NSTextField(labelWithString: "")
-        status.font = .systemFont(ofSize: 11)
-        status.textColor = .secondaryLabelColor
+        bar.doubleValue = 0
+        root.addSubview(bar)
+
+        let percent = NSTextField(labelWithString: "0 %")
+        percent.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        percent.textColor = NSColor.white.withAlphaComponent(0.5)
+        percent.frame = NSRect(x: 28, y: 28, width: 120, height: 16)
+        root.addSubview(percent)
+
         let button = NSButton(title: OurWords.t("Отмена"), target: nil, action: nil)
         button.bezelStyle = .rounded
+        button.frame = NSRect(x: size.width - 28 - 120, y: 20, width: 120, height: 30)
+        root.addSubview(button)
+        panel.contentView = root
 
-        let gap: CGFloat = 12
-        let size = content.bounds.size
-        button.frame = NSRect(x: size.width - gap - 120, y: gap, width: 120, height: 28)
-        button.autoresizingMask = [.minXMargin, .maxYMargin]
-        status.frame = NSRect(x: gap, y: gap + 5, width: size.width - gap * 3 - 120, height: 18)
-        status.autoresizingMask = [.width, .maxYMargin]
-        bar.frame = NSRect(x: gap, y: gap + 36, width: size.width - gap * 2, height: 12)
-        bar.autoresizingMask = [.width, .maxYMargin]
-        scroll.frame = NSRect(x: gap, y: gap + 56, width: size.width - gap * 2, height: size.height - gap * 2 - 56)
-        scroll.autoresizingMask = [.width, .height]
-        for view in [scroll, bar, status, button] as [NSView] { content.addSubview(view) }
-        panel.contentView = content
-
-        let stamp: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f }()
-        func append(_ line: String) {
-            let entry = "\(stamp.string(from: Date()))  \(line)\n"
-            text.textStorage?.append(NSAttributedString(string: entry, attributes: [.font: NSFont.systemFont(ofSize: 12),
-                                                                                  .foregroundColor: NSColor.labelColor]))
-            text.scrollToEndOfDocument(nil)
-            NativeTrace.say("оновлення: " + line)
+        func log(_ line: String) { NativeTrace.say("оновлення: " + line) }
+        func show(_ text: String, _ done: Double) {
+            status.stringValue = text
+            bar.doubleValue = max(bar.doubleValue, min(1, done))
+            percent.stringValue = "\(Int((bar.doubleValue * 100).rounded())) %"
         }
 
         let session = UpdateSession(release: release)
-        /// Іде оновлення: кнопка й закриття вікна скасовують. Скінчилося
-        /// (готово, помилка, скасовано) — лише закривають.
+        /// Іде оновлення: кнопка й закриття скасовують. Скінчилося — закривають.
         var running = true
         let action = UpdateButtonAction()
         action.handler = {
             if running {
                 running = false
                 session.cancel()
-                append(OurWords.t("Отменено. Программа осталась прежней."))
+                log("скасовано")
+                status.stringValue = OurWords.t("Отменено. Программа осталась прежней.")
                 button.title = OurWords.t("Закрыть")
                 return
             }
@@ -488,33 +594,28 @@ enum NativeUpdateWindow {
         button.action = #selector(UpdateButtonAction.fire)
         objc_setAssociatedObject(button, "action", action, .OBJC_ASSOCIATION_RETAIN)
 
-        session.log = { append($0) }
-        session.progress = { fraction, line in
-            if let fraction { bar.doubleValue = fraction } else { bar.isIndeterminate = true; bar.startAnimation(nil) }
-            status.stringValue = line
-        }
+        session.log = { log($0) }
+        session.step = { text, done in if running { show(text, done) } }
         session.finished = { failure in
             running = false
-            bar.isIndeterminate = false
             if let failure {
-                append(OurWords.t("Ошибка: %s", failure))
-                append(OurWords.t("Программа осталась прежней. Можно попробовать позже: «Настройка» → «Проверить обновление программы…»."))
-                status.stringValue = OurWords.t("Обновление не удалось")
+                log("помилка: " + failure)
+                status.stringValue = OurWords.t("Обновление не удалось: %s", failure)
+                status.textColor = NSColor(calibratedRed: 1, green: 0.62, blue: 0.55, alpha: 1)
+                percent.stringValue = ""
                 button.title = OurWords.t("Закрыть")
                 return
             }
-            bar.doubleValue = 1
+            show(OurWords.t("Готово. «Слово» перезапустится через %s с…", "3"), 1)
             button.isEnabled = false
             var left = 3
-            append(OurWords.t("Всё готово. Программа закроется через %s с и откроется уже новой.", "\(left)"))
-            status.stringValue = OurWords.t("Закрываюсь через %s с…", "\(left)")
             let timer = Timer(timeInterval: 1, repeats: true) { timer in
                 MainActor.assumeIsolated {
                     left -= 1
-                    status.stringValue = OurWords.t("Закрываюсь через %s с…", "\(left)")
+                    status.stringValue = OurWords.t("Готово. «Слово» перезапустится через %s с…", "\(max(left, 0))")
                     guard left <= 0 else { return }
                     timer.invalidate()
-                    append(OurWords.t("Закрываюсь."))
+                    log("закриваюся")
                     NSApp.terminate(nil)
                 }
             }
@@ -524,9 +625,8 @@ enum NativeUpdateWindow {
         self.session = session
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: nil) { _ in
             MainActor.assumeIsolated {
-                // Закриття вікна скасовує лише те, що ще йде. Готове оновлення
-                // вікно закривається саме — разом із програмою, — і його
-                // скасовувати не можна: теку тримає помічник заміни.
+                // Закриття скасовує лише те, що ще йде: готове оновлення тримає
+                // помічник заміни, і його теку стирати не можна.
                 if running { session.cancel() }
                 window = nil
                 self.session = nil
@@ -535,8 +635,22 @@ enum NativeUpdateWindow {
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        append(OurWords.t("Начинаю обновление."))
-        session.start()
+        log(OurWords.t("Начинаю обновление."))
+        if startSession { session.start() }
+    }
+
+    /// Самоперевірці: вікно з вигаданим випуском і кроком, без завантаження, —
+    /// знімок у `~/Library/Logs`.
+    static func previewForCheck(to name: String) -> Bool {
+        let fake = AppUpdater.Release(version: "9.99", tag: "v9.99", page: "", notes: "", zip: nil, size: 0)
+        show(release: fake, startSession: false)
+        session?.step?(OurWords.t("Загружаю новую версию: %s из %s · %s МБ/с", "14.9 МБ", "33.0 МБ", "8.4"), 0.46)
+        guard let view = window?.contentView else { return false }
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
+        let saved = Diagnostics.snapshot(view, to: name)
+        window?.close()
+        return saved
     }
 }
 

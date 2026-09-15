@@ -876,7 +876,11 @@ final class DeskModel: ObservableObject {
     /// показує: «повернутися до показаного» (так на планшеті й у пульті).
     /// Доти рядок лише відкривав місце в передпоказі, і на стіні нічого не
     /// мінялося — власник: «на деякі пункти не реагує».
+    /// Скільки разів відкривали запис Історії — самоперевірці кліків.
+    private(set) var historyActivationsForCheck = 0
+
     func activate(_ record: HistoryRecord, state: AppState, show: Bool = false) {
+        historyActivationsForCheck += 1
         historySelection = record.id
         switch record.kind {
         case .bible:

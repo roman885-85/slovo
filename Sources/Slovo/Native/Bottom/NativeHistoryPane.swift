@@ -47,16 +47,21 @@ final class NativeHistoryPane: NSView, NativeListSource {
         box.install(list)
 
         list.source = self
+        // Як у Плані: одинарне клацання лише виділяє запис, у зал його
+        // виводять подвійне клацання або Enter. Власник (15.09.2026): «когда
+        // по истории нажимаешь, то сразу идет вывод на проектор. Нужно чтобы
+        // было так как и с планом».
         list.onSelect = { [weak self] _, index, cause in
-            // Клацання по рядку повертає до місця — так само, як «Перейти».
-            guard let self, cause == .click, let record = self.record(at: index) else { return }
+            guard let self, cause != .code, let record = self.record(at: index) else { return }
             self.desk.historySelection = record.id
-            self.desk.activate(record, state: self.state, show: true)
+            self.onlySelected = record.id
         }
         list.onActivate = { [weak self] index in
             guard let self, let record = self.record(at: index) else { return }
+            self.onlySelected = nil
             self.desk.activate(record, state: self.state, show: true)
         }
+        list.activatesOnReturn = true
 
         tokens.append(Signals.shared.subscribe(.history) { [weak self] in self?.reloadHistory() })
         // Повзунок кегля (20) міняє всі списки вікна, а цей стояв на своєму:
@@ -127,8 +132,13 @@ final class NativeHistoryPane: NSView, NativeListSource {
     /// Показане місце більше не те, що в підсвіченому рядку, — знімаємо
     /// підсвітку. Рядок історії не «вибраний назавжди»: він показує, звідки
     /// зараз узятий вірш у залі.
+    /// Запис, який лише виділили клацанням, але не виводили. Підсвітку
+    /// «зараз показують це» знімаємо, коли пішли з показаного місця; просто
+    /// виділений запис від руху залу не залежить.
+    private var onlySelected: UUID?
+
     private func forgetIfMoved() {
-        guard let chosen = desk.historySelection,
+        guard let chosen = desk.historySelection, chosen != onlySelected,
               let record = desk.history.records.first(where: { $0.id == chosen }) else { return }
         guard record.kind == .bible else { return }
         let sameBook = state.currentBook?.index == record.bookIndex
