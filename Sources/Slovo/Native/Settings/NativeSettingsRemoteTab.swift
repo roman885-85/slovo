@@ -239,21 +239,26 @@ final class NativeSettingsRemoteTab: NSObject, NativeListSource, NativeSettingsR
     private var servers: NativeForm.Group {
         NativeForm.Group("", [
             server(state.vb("CBWEBServer", "Web Сервер"), \.webEnabled,
-                   state.vb("Label55", "Web Порт:"), \.webPort),
+                   state.vb("Label55", "Web Порт:"), \.webPort,
+                   OurWords.t("Страница пульта в браузере, веб-слайды для OBS и файлы программ для Android")),
             server(state.vb("CBWSServer", "WebSocket Сервер"), \.webSocketEnabled,
-                   state.vb("Label52", "WebSocket Порт:"), \.webSocketPort),
+                   state.vb("Label52", "WebSocket Порт:"), \.webSocketPort,
+                   OurWords.t("Управление «Словом» из других программ по WebSocket")),
             server(state.vb("CBTCPServer", "TCP Сервер"), \.tcpEnabled,
-                   state.vb("Label54", "TCP Порт:"), \.tcpPort),
+                   state.vb("Label54", "TCP Порт:"), \.tcpPort,
+                   OurWords.t("Управление «Словом» из других программ по TCP")),
             server(state.vb("CBUDPServer", "UDP Сервер"), \.udpEnabled,
-                   state.vb("Label53", "UDP Порт:"), \.udpPort),
+                   state.vb("Label53", "UDP Порт:"), \.udpPort,
+                   OurWords.t("Управление «Словом» из других программ по UDP")),
         ])
     }
 
     private func server(_ title: String, _ flag: WritableKeyPath<ProgramOptions, Bool>,
-                        _ portTitle: String, _ port: WritableKeyPath<ProgramOptions, Int>) -> NSView {
+                        _ portTitle: String, _ port: WritableKeyPath<ProgramOptions, Int>,
+                        _ hint: String) -> NSView {
         let check = NativeForm.check(title, NativeForm.Tie(
             get: { [store] in store.settings.options[keyPath: flag] },
-            set: { [store] value in store.settings.options[keyPath: flag] = value }))
+            set: { [store] value in store.settings.options[keyPath: flag] = value }), hint: hint)
         check.translatesAutoresizingMaskIntoConstraints = false
         check.widthAnchor.constraint(equalToConstant: 180).isActive = true
         return NativeForm.Row("", [

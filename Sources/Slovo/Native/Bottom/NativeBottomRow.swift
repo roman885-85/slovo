@@ -166,7 +166,7 @@ final class NativeBottomRow: NSView {
         var historyWidth = NativeBottomMetrics.historyWidth
         let planFixed = NativeBottomMetrics.planWidthIsCustom
         let historyFixed = NativeBottomMetrics.historyWidthIsCustom
-        let controlWidth = NativeBottomMetrics.controlWidth
+        let controlWidth = control.preferredWidth
         // Живий екран стоїть поруч із передпоказом і має свою ширину: її
         // тягне оператор роздільником між ними. Нуль — екрана немає.
         var liveWidth = NativeBottomMetrics.liveWidth
@@ -280,6 +280,13 @@ final class NativeBottomRow: NSView {
         }
 
         place(controlCaption, control, width: controlWidth)
+        // «Активна» — праворуч у рядку підпису «Керування».
+        control.activeBox.sizeToFit()
+        let boxWidth = control.activeBox.frame.width
+        control.activeBox.frame = NSRect(x: control.frame.maxX - boxWidth - 2, y: top - 1,
+                                         width: boxWidth, height: captionHeight + 2)
+        controlCaption.frame.size.width = max(0, controlCaption.frame.width - boxWidth - 6)
+        if control.activeBox.superview !== self { addSubview(control.activeBox) }
     }
 
     /// Перекласти ряд одразу, під рукою, що тягне роздільник.

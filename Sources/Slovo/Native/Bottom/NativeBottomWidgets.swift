@@ -85,7 +85,11 @@ enum NativeBottomMetrics {
     static let planDragMaxWidth: CGFloat = 700
     static let historyDragMaxWidth: CGFloat = 800
     static let previewMinWidth: CGFloat = 280
-    static let controlWidth: CGFloat = 340
+    /// Найменша ширина «Керування». Справжню рахує сама панель за підписами
+    /// кнопок (`NativeControlPanel.preferredWidth`): стала ширина різала
+    /// «Поточний», «Знімок» і англійські підписи (власник: «в главном меню
+    /// не все надписи видно целиком (керування)»).
+    static let controlMinWidth: CGFloat = 340
 }
 
 /// Підпис над панеллю: 11 пунктів, вторинний колір, відступ зліва 6.

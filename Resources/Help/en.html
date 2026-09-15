@@ -1,0 +1,230 @@
+<!-- Slovo help in English. Each topic is a <section id="…"> with an <h2>;
+     the contents list and search are built from them. Section ids are the
+     same in uk.html and en.html: the window opens a topic by its id. -->
+<section id="start">
+<h2>Getting started</h2>
+<ol>
+<li><b>First launch.</b> macOS does not know the developer and blocks the app at first. Open it like this: on macOS 11–14 — right-click “Слово.app” → “Open” → “Open”; on macOS 15 and later — try to open it, then “System Settings” → “Privacy &amp; Security” → “Open Anyway” at the bottom. Details with every error and permission — <a href="https://github.com/roman885-85/slovo/blob/main/Документація/ЗАПУСК.md#english">launch guide on GitHub</a>.</li>
+<li><b>Permissions.</b> When the system asks to “find devices on your local network”, click “Allow”: the remote, the tablet and NDI need it. Other permissions (screen recording, folder access) are requested only when they are really needed — see <a href="#trouble">“Troubleshooting”</a>.</li>
+<li><b>Translations and songbooks.</b> On the first launch Slovo offers to download translations, songbooks, backgrounds and templates. Later — <span class="menu">Setup → Resources from GitHub…</span>, or <span class="menu">File → Import modules, templates and backgrounds…</span> for your own files.</li>
+<li><b>Projector.</b> Connect a projector or a second monitor — the slide goes there by itself. To choose another monitor: <span class="menu">Setup → Settings… → General → Monitor for the slide</span>. With a single monitor the slide is shown in its own window.</li>
+<li><b>Language.</b> The <span class="menu">Language/Язык</span> menu: Українська, English, Русский, Deutsch.</li>
+</ol>
+<p class="tip">Hover the mouse over any button and wait a moment — a tip tells what it does.</p>
+</section>
+
+<section id="window">
+<h2>The main window</h2>
+<ul>
+<li><b>Mode tabs</b> at the top: Bible, Songs, Presentation, Media, Pictures, Screen, Text. The slider to their right sets the list font size (or <kbd>Ctrl</kbd> + mouse wheel).</li>
+<li><b>Work area</b> — the content of the chosen tab: books and verses, songs, pages, files.</li>
+<li><b>Bottom row</b> (drag it up to make it taller):
+ <ul>
+ <li><b>Plan</b> — the order of the service;</li>
+ <li><b>History</b> — everything that has already been in the hall;</li>
+ <li><b>Preview</b> — what is prepared but not yet in the hall;</li>
+ <li><b>Live screen</b> — exactly what people see; the pointer and zoom work on it;</li>
+ <li><b>Control</b> — page buttons, “Show”, “Hide”, the “Active” checkbox, slide template and backgrounds.</li>
+ </ul></li>
+<li>Drag the dividers to change the width of the Plan, the History and the live screen; double-click a divider to return the default width.</li>
+</ul>
+</section>
+
+<section id="show">
+<h2>Showing in the hall</h2>
+<p>One rule for every tab: <b>a single click prepares</b> (a verse, song part or page appears in the preview), <b>a double click, Enter or “Show” puts it in the hall</b>.</p>
+<table>
+<tr><td><b>Show</b>, <kbd>Enter</kbd>, <kbd>F5</kbd></td><td>put the prepared slide in the hall</td></tr>
+<tr><td><b>Hide</b>, <kbd>Esc</kbd></td><td>remove the slide from the hall (the background stays)</td></tr>
+<tr><td><kbd>F12</kbd></td><td>black out the hall; press again to return</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F5</kbd></td><td>blank slide: background without text</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F9</kbd></td><td>turn the common background on or off</td></tr>
+</table>
+<h3>Arrow keys and the “Active” checkbox</h3>
+<ul>
+<li><b>“Active” on</b> (default): <kbd>↑</kbd> <kbd>↓</kbd> move to the next verse, song part or page <b>right in the hall</b>; <kbd>←</kbd> <kbd>→</kbd> — only in the preview. Holding <kbd>Ctrl</kbd> swaps the pairs.</li>
+<li><b>“Active” off</b>: no arrow key changes the hall — the position moves only in the preview, and the slide goes to the hall with “Show” or <kbd>Enter</kbd>. Handy for finding the right place calmly while the previous slide stays on the wall.</li>
+<li><kbd>Shift</kbd> with an arrow extends the selection to the next verse; <kbd>Ctrl</kbd>+<kbd>A</kbd> puts the whole chapter on one slide.</li>
+<li>A <b>presenter clicker</b> (Logitech, Kensington and others) always turns the hall, whatever “Active” says: <kbd>PageDown</kbd> — next, <kbd>PageUp</kbd> — back, the blackout button — black screen.</li>
+</ul>
+</section>
+
+<section id="bible">
+<h2>Bible</h2>
+<ul>
+<li>Choose a translation, book, chapter and verse. Books can be shown as tiles or as a list (buttons next to the book list).</li>
+<li><b>Quick selection</b> (<kbd>F4</kbd>): type a reference — “John 3:16”, “Gen 1:1-5”, “1 Cor 13” (in the book names of the translation). Separately: <kbd>F7</kbd> — book, <kbd>F8</kbd> — chapter, <kbd>F9</kbd> — verse by number or by words of the text.</li>
+<li><b>Search</b> (<kbd>F3</kbd>) — by words across the whole translation; <kbd>Ctrl</kbd>+<kbd>F3</kbd> shows or hides the results.</li>
+<li>Several verses: click with <kbd>Shift</kbd> or use <kbd>Shift</kbd>+arrow. A double click on the selection shows them together.</li>
+<li><b>Two translations on a slide</b> — the “One translation / Two translations” button in the translation strip; the second translation is chosen by right-clicking its tab. Verse numbering between translations is matched in <span class="menu">Setup → Bible translation numbering discrepancy editor</span>.</li>
+<li>A long verse is split into pages by itself: the arrow turns the pages first, then moves to the next verse.</li>
+<li>Right-click a verse: “Add to Plan”, “Copy to the Text tab”, “Copy to clipboard”.</li>
+</ul>
+</section>
+
+<section id="songs">
+<h2>Songs</h2>
+<ul>
+<li>Choose a songbook and a song: search by number, title or words of the text.</li>
+<li>The parts of the song (verses, chorus, bridge) are below. A click prepares a part, a double click puts it in the hall; the arrows turn the parts.</li>
+<li>Right-click a song or a part — “Add to Plan”.</li>
+<li>Song editor: new song, text editing, groups, order, part colours. Songbook import — VisioBible <code>.vbm</code>, <code>.songbook</code>, SoftProjector <code>.sps</code>, plain text <code>.txt</code>.</li>
+</ul>
+</section>
+
+<section id="presentation">
+<h2>Presentations and pictures</h2>
+<ul>
+<li><b>Presentation</b>: “+” adds a PDF or PowerPoint file (<code>.pptx</code>, <code>.ppsx</code> and others); the file list and page thumbnails are on the left. The arrows and the ‹ › buttons turn the pages.</li>
+<li><b>Pictures</b>: “+” adds pictures or a whole folder. You can also drop files onto the window.</li>
+<li><b>Slideshow</b>: the “Slideshow” button and an interval in seconds — pages turn by themselves, in a loop. Turning a page by hand does not break the count.</li>
+</ul>
+</section>
+
+<section id="media">
+<h2>Media and backing track</h2>
+<ul>
+<li>Open a file (video or audio), a network stream or a YouTube link.</li>
+<li>Player buttons: to the beginning, rewind, play/pause, stop, fast forward, to the end, repeat, mute, audio track. The “to screen” switch decides whether the video goes to the hall.</li>
+<li><kbd>Ctrl</kbd>+<kbd>M</kbd> — media player, <kbd>Ctrl</kbd>+<kbd>P</kbd> — play/pause.</li>
+<li>The <b>backing track</b> plays separately from the show: you can turn song parts and the music keeps playing.</li>
+</ul>
+</section>
+
+<section id="screen">
+<h2>Screen</h2>
+<p>Shows a monitor or a window of another program live in the hall and in NDI. Choose the source and click “Show”. The first time, macOS asks for the <b>Screen &amp; System Audio Recording</b> permission — see <a href="#trouble">“Troubleshooting”</a>. “Refresh the list” helps when a window you just opened is not listed yet.</p>
+</section>
+
+<section id="text">
+<h2>Text (announcements)</h2>
+<p>Type a title and the text of an announcement — they appear in the preview; to the hall — “Show” or <kbd>F5</kbd>. The buttons next to the title: “Add to plan” and “Clear text”. A Bible verse can be copied here with a right click.</p>
+</section>
+
+<section id="plan">
+<h2>Plan and History</h2>
+<ul>
+<li>The <b>Plan</b> is the order of the service. Add items with a right click (“Add to Plan”) in the Bible, songs and search results, and announcements with the button on the Text tab.</li>
+<li>A click on a Plan item prepares it in the preview, a double click or <kbd>Enter</kbd> puts it in the hall. <kbd>F2</kbd> moves to the Plan.</li>
+<li>Plan buttons: clear, open, save, delete the line, move up, move down. Items can be dragged.</li>
+<li>The <b>History</b> records everything that was in the hall. It works like the Plan: click — preview, double click or <kbd>Enter</kbd> — hall. Showing an item from the History again does not change the History.</li>
+<li>A <b>sermon plan</b> from the preacher’s tablet can become the main Plan with one click, and the service plan can be brought back.</li>
+</ul>
+</section>
+
+<section id="slides">
+<h2>Templates, backgrounds and the constructor</h2>
+<ul>
+<li>The Control panel has three thumbnails: slide <b>template</b>, <b>slide background</b> and <b>common background</b>. Click a thumbnail to choose; right-click the common background to turn it on, off or remove it.</li>
+<li><kbd>Ctrl</kbd>+<kbd>B</kbd> — choose the common background, <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd> — the slide background.</li>
+<li><span class="menu">Setup → Slide constructor</span> — separate editors for the Bible and for songs: fonts, colours, shadows, outline, margins, background, text placement. Changes are visible at once.</li>
+<li><span class="menu">Setup → Web slide editor…</span> — pages for OBS and lobby monitors.</li>
+</ul>
+</section>
+
+<section id="resources">
+<h2>Translations, songbooks, import</h2>
+<ul>
+<li><span class="menu">Setup → Resources from GitHub…</span> — tabs “Bible translations”, “Songbooks”, “Backgrounds and templates”. Translation sources: Slovo resources, BibleQuote modules, the MyBible registry, eBible.org; songbooks — Slovo resources and SoftProjector. Search by name or language code (“en”, “uk”); mark all new ones or only updates.</li>
+<li><span class="menu">File → Import modules, templates and backgrounds…</span> — your own files and folders.</li>
+<li>Turn modules on or off and order them: <span class="menu">Setup → Settings… → Modules</span>.</li>
+</ul>
+<table>
+<tr><td>Translations</td><td>BibleQuote — a folder with <code>bibleqt.ini</code> or a <code>.zip</code>; MyBible <code>.SQLite3</code>; MySword <code>.bbl.mybible</code>; a VisioBible data folder</td></tr>
+<tr><td>Songbooks</td><td><code>.vbm</code> (VisioBible), <code>.songbook</code>, <code>.sps</code> (SoftProjector), <code>.txt</code></td></tr>
+<tr><td>Templates</td><td>a <code>Templates</code> folder with <code>.sch</code> files</td></tr>
+<tr><td>Backgrounds</td><td><code>.jpg</code>, <code>.png</code>, <code>.heic</code>, <code>.bmp</code>, <code>.gif</code>, <code>.tif</code>, <code>.webp</code></td></tr>
+<tr><td>Presentations</td><td><code>.pdf</code>, <code>.pptx</code>, <code>.ppsx</code>, <code>.potx</code>, <code>.pptm</code>, <code>.ppsm</code></td></tr>
+<tr><td>Video and audio</td><td><code>.mp4</code>, <code>.mov</code>, <code>.m4v</code>, <code>.mp3</code>, <code>.m4a</code>, <code>.wav</code>, <code>.aac</code>, <code>.flac</code>, streams, YouTube</td></tr>
+</table>
+</section>
+
+<section id="outputs">
+<h2>Projector, NDI, pointer and zoom</h2>
+<ul>
+<li><b>Projector</b> — the monitor is chosen in <span class="menu">Settings… → General</span>.</li>
+<li><b>NDI</b> for streaming (OBS, vMix) — in <span class="menu">Settings… → Media</span>: frame size, transparent background, sound. Sound of streams and YouTube in NDI needs the “Screen &amp; System Audio Recording” permission.</li>
+<li><b>Pointer</b>: press the left mouse button on the live screen and move without releasing. Spot colour, size and brightness are in the bar under the live screen, together with where the pointer goes (everywhere, hall only or NDI only).</li>
+<li><b>Zoom</b>: turn on “Zoom” and click the live screen — that part of the page fills the wall. “Centre” brings the view back to the middle.</li>
+<li><kbd>F11</kbd> — save a snapshot of the slide to a file.</li>
+</ul>
+</section>
+
+<section id="remote">
+<h2>Remote, tablet and browser</h2>
+<ul>
+<li>The device must be on the same Wi-Fi network as the computer.</li>
+<li><b>Browser remote</b>: <span class="menu">Setup → Browser remote…</span> — the address and a QR code. It opens on any phone, tablet or computer.</li>
+<li><b>Android apps</b> — “Slovo Remote” and “Slovo Tablet”: <span class="menu">Setup → Android apps…</span>, installed by QR code.</li>
+<li>Password (PIN), ports and switching on — <span class="menu">Settings… → Remote API</span>.</li>
+<li>If the remote cannot find the computer — see <a href="#trouble">“Troubleshooting”</a>.</li>
+</ul>
+</section>
+
+<section id="update">
+<h2>Updates</h2>
+<ul>
+<li>The app checks for updates on every launch and tells you about a new version. To check by hand: <span class="menu">Setup → Check for program update…</span> or <span class="menu">Help → About → Check for updates</span>.</li>
+<li>The update shows a progress bar and the current step, then the app restarts. Translations, songbooks and settings stay.</li>
+<li>So that the update can replace the app, keep “Слово.app” in the Applications folder, not in Downloads.</li>
+</ul>
+</section>
+
+<section id="keys">
+<h2>Keyboard shortcuts</h2>
+<p>Change them in <span class="menu">Settings… → Shortcuts</span>. <kbd>Ctrl</kbd> is the Control key.</p>
+<table>
+<tr><td><kbd>F5</kbd> / <kbd>Enter</kbd></td><td>show the slide</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>hide the slide</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F5</kbd></td><td>blank slide</td></tr>
+<tr><td><kbd>F12</kbd></td><td>blackout</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd> / <kbd>←</kbd> <kbd>→</kbd></td><td>turn in the hall / in the preview (see “Active”)</td></tr>
+<tr><td><kbd>⌘</kbd>+<kbd>→</kbd> <kbd>⌘</kbd>+<kbd>←</kbd></td><td>next / previous verse</td></tr>
+<tr><td><kbd>⌘</kbd>+<kbd>↓</kbd> <kbd>⌘</kbd>+<kbd>↑</kbd></td><td>next / previous chapter</td></tr>
+<tr><td><kbd>F2</kbd></td><td>focus the Plan</td></tr>
+<tr><td><kbd>F3</kbd> / <kbd>Ctrl</kbd>+<kbd>F3</kbd></td><td>search / search results</td></tr>
+<tr><td><kbd>F4</kbd></td><td>quick selection</td></tr>
+<tr><td><kbd>F6</kbd></td><td>focus the verses or text</td></tr>
+<tr><td><kbd>F7</kbd> <kbd>F8</kbd> <kbd>F9</kbd></td><td>quick selection of book, chapter, verse</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F9</kbd></td><td>common background on/off</td></tr>
+<tr><td><kbd>F11</kbd></td><td>slide snapshot</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>media player / play-pause</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd></td><td>common background / slide background</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>songbook: edit or view mode</td></tr>
+<tr><td><kbd>PageDown</kbd> <kbd>PageUp</kbd></td><td>presenter clicker: next / back in the hall</td></tr>
+<tr><td><kbd>⌘</kbd>+<kbd>,</kbd></td><td>settings</td></tr>
+</table>
+</section>
+
+<section id="trouble">
+<h2>Troubleshooting</h2>
+<h3>The app does not open</h3>
+<ul>
+<li>macOS says the <b>developer cannot be verified</b> or <b>Apple could not verify</b> the app — open it with right-click → “Open” (macOS 11–14) or via “Privacy &amp; Security” → “Open Anyway” (macOS 15+).</li>
+<li>macOS says the app <b>is damaged</b> and should be moved to the Trash — this is how macOS marks files from the internet. In Terminal: <code>xattr -dr com.apple.quarantine "/Applications/Слово.app"</code>, then open it again.</li>
+<li>Every case in detail — <a href="https://github.com/roman885-85/slovo/blob/main/Документація/ЗАПУСК.md#english">launch guide</a>.</li>
+</ul>
+<h3>macOS permissions</h3>
+<ul>
+<li><b>Local Network</b> — for the remote, the tablet and NDI. If you once clicked “Don’t Allow”: “System Settings” → “Privacy &amp; Security” → “Local Network” → turn on “Слово”.</li>
+<li><b>Incoming connections</b> (firewall) — “Allow”, otherwise the remote cannot connect.</li>
+<li><b>Screen Recording</b> — for the Screen tab and stream sound in NDI: “Privacy &amp; Security” → “Screen &amp; System Audio Recording” → turn on “Слово”, then restart the app.</li>
+<li><b>Folder access</b> to Documents, Desktop, Downloads or a removable drive — “Allow” when you open files from there.</li>
+</ul>
+<h3>The remote or tablet cannot see the app</h3>
+<ul>
+<li>The computer and the device are on the same Wi-Fi network; a guest network or “client isolation” in the router gets in the way.</li>
+<li>Check that the remote is on: <span class="menu">Settings… → Remote API</span>; the address and state are in <span class="menu">Browser remote…</span>.</li>
+<li>Try the numeric address instead of the name <code>slovo.local</code>.</li>
+</ul>
+<h3>The update does not install</h3>
+<ul>
+<li>“Read-only volume” — the app was started straight from Downloads or from a disk image. Move “Слово.app” to Applications and start it from there.</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>The slide is on the wrong monitor — <span class="menu">Settings… → General → Monitor</span>.</li>
+<li><span class="menu">Help → Diagnostics…</span> checks the app and saves a report to a file — you can send it to the developer.</li>
+<li>Questions and bugs — <a href="https://github.com/roman885-85/slovo/issues">GitHub Issues</a>.</li>
+</ul>
+</section>

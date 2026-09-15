@@ -241,7 +241,7 @@ final class NativeBookColumn: NSView {
             list.headerTitles = [
                 state.text("LVBiblesPath->Column1", form: "SettingsForm", default: "Сокращ."),
                 state.text("LVBiblesPath->Column0", form: "SettingsForm", default: "Название"),
-                "Глав",
+                OurWords.t("Глав"),
             ]
         }
         list.reload()

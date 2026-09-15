@@ -159,7 +159,13 @@ enum SlovoMenu {
 
         case .help:
             return [
-                NativeMenuEntry(title: caption("N6", "Помощь"), action: { actions.openHelp() }),
+                NativeMenuEntry(title: caption("N6", "Помощь"), key: "?", modifiers: .command,
+                                action: { actions.openHelp() }),
+                NativeMenuEntry(title: OurWords.t("Горячие клавиши"), action: { NativeHelpWindow.show(topic: "keys") }),
+                NativeMenuEntry(title: OurWords.t("Если что-то не так"), action: { NativeHelpWindow.show(topic: "trouble") }),
+                NativeMenuEntry(title: OurWords.t("Как запустить на macOS (GitHub)"),
+                                action: { actions.openLaunchGuide() }),
+                NativeMenuEntry(title: OurWords.t("Документация на GitHub"), action: { actions.openOnlineDocs() }),
                 NativeMenuEntry(title: OurWords.t("Пульт в браузере…"),
                                 action: { NativeBrowserRemoteWindow.show(state: state) }),
                 NativeMenuEntry(title: OurWords.t("Программы для Android…"),

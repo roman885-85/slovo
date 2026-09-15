@@ -110,6 +110,11 @@ body.view-only main { grid-template-columns:1fr; }
   #tabs { flex-wrap:wrap; }
   #tabs button { flex:1 0 25%; padding:10px 6px; }
   .wide { display:none; }
+  /* Шапка на телефоні: стан — окремим рядком, кнопки під ним. Із кнопкою мови
+     в один ряд стан стискався до однієї літери. */
+  header { flex-wrap:wrap; row-gap:6px; }
+  header #status { flex:1 0 100%; }
+  header button { flex:1 0 auto; }
   /* Шість кнопок залу в ряд на телефоні не вміщаються — два ряди по три. */
   footer { flex-wrap:wrap; }
   footer .big { flex:1 0 30%; }

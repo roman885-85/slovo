@@ -78,8 +78,11 @@ final class NativeScreenWorkspace: NSView {
     private func applyCaptions() {
         title.stringValue = OurWords.t("Что показать в зале")
         reloadButton.title = OurWords.t("Обновить список")
+        reloadButton.toolTip = OurWords.t("Обновить список мониторов и окон")
         showButton.title = OurWords.t("Показать")
+        showButton.toolTip = OurWords.t("Показать слайд")
         hideButton.title = OurWords.t("Скрыть")
+        hideButton.toolTip = OurWords.t("Скрыть слайд")
         refresh()
     }
 

@@ -16,6 +16,16 @@
 **Завантажити:** [останній випуск](../../releases/latest) — програма для
 macOS (Intel і Apple Silicon) і дві програми для Android.
 
+| Коротко | |
+| --- | --- |
+| Мови інтерфейсу | українська, English, русский, Deutsch — за мовою системи (для інших мов — англійська); у пульті, веб-пульті й планшеті — українська й англійська з перемикачем |
+| Переклади з інтернету | ресурси «Слова», «Цитата з Біблії» (GitHub), реєстр MyBible (~2800), eBible.org (~1300 вільних перекладів понад тисячею мов) |
+| Пісенники з інтернету | ресурси «Слова», SoftProjector (українські, російські, англійські, чеські, словацькі, німецькі) |
+| Імпорт своїх даних | VisioBible, «Цитата з Біблії» (тека чи `.zip`), MyBible `.SQLite3`, MySword `.bbl.mybible`, пісенники `.vbm`, `.songbook`, `.sps`, `.txt`; шаблони `.sch`; фони; PDF і PowerPoint |
+| Виводи | проектор, NDI, веб-сторінки для OBS; пульт на Android, планшет оператора, пульт у браузері |
+| Сумісність із VisioBible | той самий порядок роботи й гарячі клавіші; модулі, пісенники `.vbm`, шаблони `.sch`, файли перекладу `.lng`, налаштування й Remote API — [докладно](#сумісність-із-visiobible) |
+| Довідка | у самій програмі, українською й англійською, без інтернету; [як запустити на Mac](Документація/ЗАПУСК.md) — усі помилки й дозволи |
+
 ## Як це працює
 
 Оператор вибирає вірш, куплет, слайд чи картинку — вони з'являються в
@@ -129,6 +139,33 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 - Модулі перекладів і пісенників окремо, гарячі клавіші, монітори, шляхи.
 - Програма сама перевіряє оновлення і ставить нову версію, показуючи хід
   оновлення; переклади й дані лишаються на місці.
+- **Довідка** в самій програмі (меню «Довідка», ⌘?) — українською й
+  англійською, без інтернету: кожна вкладка, гарячі клавіші, «Якщо щось не
+  так». До кнопок і налаштувань — спливні підказки.
+
+## Сумісність із VisioBible
+
+«Слово» повторює VisioBible не лише виглядом, а й порядком роботи та
+форматами даних: хто працював у VisioBible, знаходить усе на звичних місцях,
+а його переклади, пісенники й шаблони переходять без ручного перетворення.
+
+| Що | Як у «Слові» |
+| --- | --- |
+| Вікно й порядок роботи | ті самі частини вікна — вкладки режимів, План, Історія, передпоказ, «Керування» з шаблоном і фонами; ті самі меню; одне клацання — передпоказ, подвійне, Enter чи F5 — у зал; одна пара стрілок гортає передпоказ, друга — зал |
+| Гарячі клавіші | набори «VB Version 2.2», «2.3» і «2.4»: F5 — показати, Esc — сховати, F2 — План, F3 — пошук, F4 і F7–F9 — швидкий вибір, F11 — знімок, F12 — затемнення, Ctrl+F5 — порожній слайд та інші; файл `hotkeys.ini` того самого вигляду |
+| Переклади Біблії | модулі «Цитата з Біблії» (BibleQuote), якими користується VisioBible, — теки з `bibleqt.ini` і `.zip`; редактор невідповідностей нумерації перекладів |
+| Пісенники | читає й записує пісенники VisioBible `.vbm`; редактор пісень; кольори частин пісні (куплет, приспів, міст) і альтернативні назви частин |
+| Шаблони й фони | шаблони слайда `.sch` із теки `Templates` разом із мініатюрами й фонами; фони з `BackGrounds` |
+| Імпорт | майстер імпорту бере теку з даними VisioBible цілком: модулі, пісенники, шаблони, фони |
+| Налаштування | `Slovo.ini` — ті самі секції й ключі, що в налаштуваннях VisioBible (слайд, адреса місця Писання, назва пісні, медіа, NDI, Remote API, монітор); вікно «Параметри» з тими самими вкладками |
+| Переклад інтерфейсу | файли перекладу VisioBible `Language/*.lng` і вікно «Переклад інтерфейсу» для їх правки; власні підписи «Слова» — у тому ж файлі окремою секцією |
+| Remote API | протокол VisioBible для сторінок і пристроїв — WebSocket, TCP (8101) і UDP (8100) з тими самими командами й пакетами; сторінки з теки `RemoteAPI` (титри для OBS, монітори у фоє) під'єднуються без змін |
+| NDI | трансляція слайда з прозорим фоном і тими самими режимами частоти кадрів |
+
+Не переносяться теми оформлення VCL (`.vsf`) і довідка `.chm` — вони існують
+лише для Windows; налаштування іншої програми майстер імпорту не переносить.
+Сумісність зроблено за файлами даних і описом VisioBible; «Слово» не містить
+її коду й не пов'язане з її авторами.
 
 ## Перший запуск
 
@@ -137,7 +174,9 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 2. Програма підписана тимчасовим підписом, тож перший запуск — так: на
    macOS 11–14 правою кнопкою на «Слово.app» → «Відкрити» → «Відкрити»; на
    macOS 15 і новіших — спробуйте відкрити, потім «Системні параметри» →
-   «Приватність і безпека» → «Усе одно відкрити».
+   «Приватність і безпека» → «Все одно відкрити». Покроково, з усіма
+   помилками й дозволами, які просить macOS, — **[як запустити на
+   Mac](Документація/ЗАПУСК.md)**.
 3. На першому запуску програма запропонує завантажити переклади, пісенники,
    фони й шаблони з GitHub (з вибором) або імпортувати свої.
 
@@ -207,7 +246,7 @@ Releases.
 
 ## Стан
 
-Версія 0.89. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
+Версія 0.90. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
 
@@ -260,6 +299,16 @@ contains no VisioBible code and is not affiliated with its authors.
 **Download:** [latest release](../../releases/latest) — the macOS app (Intel
 and Apple Silicon) and two Android apps.
 
+| At a glance | |
+| --- | --- |
+| Interface languages | Ukrainian, English, Russian, German — following the system (English for any other language); the remote, browser remote and tablet have Ukrainian and English with a switch |
+| Translations online | Slovo resources, Bible Quote (GitHub), the MyBible registry (~2800), eBible.org (~1300 free translations in over a thousand languages) |
+| Songbooks online | Slovo resources, SoftProjector (Ukrainian, Russian, English, Czech, Slovak, German) |
+| Importing your data | VisioBible, Bible Quote (folder or `.zip`), MyBible `.SQLite3`, MySword `.bbl.mybible`, songbooks `.vbm`, `.songbook`, `.sps`, `.txt`; `.sch` templates; backgrounds; PDF and PowerPoint |
+| Outputs | projector, NDI, web pages for OBS; Android remote, operator tablet, browser remote |
+| VisioBible compatibility | the same workflow and shortcuts; modules, `.vbm` songbooks, `.sch` templates, `.lng` translation files, settings and Remote API — [details](#visiobible-compatibility) |
+| Help | built into the app, Ukrainian and English, offline; [how to launch on a Mac](Документація/ЗАПУСК.md#english) — every error and permission |
+
 ## How it works
 
 The operator picks a verse, song part, slide or picture — it appears in the
@@ -301,6 +350,33 @@ shown.
   and made the main plan with one button during the service.
 - **Updates** — the program checks for new versions and installs them showing
   the progress; translations and data stay in place.
+- **Help** inside the app (Help menu, ⌘?) — Ukrainian and English, offline:
+  every tab, keyboard shortcuts, troubleshooting; tooltips on buttons and
+  settings.
+
+## VisioBible compatibility
+
+Slovo follows VisioBible not only in looks but in workflow and data formats:
+someone used to VisioBible finds everything in its usual place, and their
+translations, songbooks and templates move over without manual conversion.
+
+| What | In Slovo |
+| --- | --- |
+| Window and workflow | the same window parts — mode tabs, Plan, History, preview, Control with template and backgrounds; the same menus; a single click prepares, a double click, Enter or F5 shows; one pair of arrow keys turns the preview, the other the hall |
+| Shortcuts | the “VB Version 2.2”, “2.3” and “2.4” sets: F5 show, Esc hide, F2 Plan, F3 search, F4 and F7–F9 quick selection, F11 snapshot, F12 blackout, Ctrl+F5 blank slide and more; a `hotkeys.ini` file of the same shape |
+| Bible translations | Bible Quote modules used by VisioBible — folders with `bibleqt.ini` and `.zip`; the translation numbering discrepancy editor |
+| Songbooks | reads and writes VisioBible `.vbm` songbooks; song editor; song part colours (verse, chorus, bridge) and alternative part names |
+| Templates and backgrounds | `.sch` slide templates from the `Templates` folder with their thumbnails and backgrounds; backgrounds from `BackGrounds` |
+| Import | the import wizard takes a whole VisioBible data folder: modules, songbooks, templates, backgrounds |
+| Settings | `Slovo.ini` uses the same sections and keys as VisioBible settings (slide, Scripture reference, song title, media, NDI, Remote API, monitor); the Settings window has the same tabs |
+| Interface translation | VisioBible translation files `Language/*.lng` and the Interface translation window to edit them; Slovo’s own captions live in the same file in a separate section |
+| Remote API | VisioBible’s protocol for pages and devices — WebSocket, TCP (8101) and UDP (8100) with the same commands and packets; pages from the `RemoteAPI` folder (OBS captions, lobby monitors) connect unchanged |
+| NDI | slide streaming with a transparent background and the same frame rate modes |
+
+Not carried over: VCL themes (`.vsf`) and `.chm` help — they exist only on
+Windows; the import wizard does not move another program’s settings.
+Compatibility is built from VisioBible’s data files and documentation; Slovo
+contains none of its code and is not affiliated with its authors.
 
 ## Import formats
 
@@ -321,7 +397,9 @@ shown.
    it and move “Слово.app” wherever you like.
 2. The app has an ad-hoc signature, so open it the first time like this: on
    macOS 11–14 right-click “Слово.app” → Open → Open; on macOS 15 and later try
-   to open it, then System Settings → Privacy & Security → Open Anyway.
+   to open it, then System Settings → Privacy & Security → Open Anyway. Step by
+   step, with every error and the permissions macOS asks for — **[how to launch
+   on a Mac](Документація/ЗАПУСК.md#english)**.
 3. On the first launch the program offers to download translations,
    songbooks, backgrounds and templates from GitHub (with a choice) or to
    import your own.

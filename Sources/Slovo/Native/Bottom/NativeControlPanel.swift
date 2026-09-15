@@ -111,6 +111,11 @@ final class NativeControlPanel: NSView {
     private var stepTitleKeys: [String] = []
     private var showButton: NativeBottomLabelButton!
     private var hideButton: NativeBottomLabelButton!
+    /// «Активна»: стрілки й перегортання одразу виводять у зал (як досі).
+    /// Вимкнено — стрілки лише готують слайд у передпоказі, у зал —
+    /// «Показати» або Enter. Власник (15.09.2026). Стоїть у рядку підпису
+    /// панелі — його ставить `NativeBottomRow`.
+    let activeBox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let separator = NSView(frame: .zero)
     private let template = NativeBottomThumbnail(frame: .zero)
     private let slideBackground = NativeBottomThumbnail(frame: .zero)
@@ -142,19 +147,53 @@ final class NativeControlPanel: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Ширина панелі, за якої кожен підпис кнопки видно цілком. Її бере
+    /// `NativeBottomRow` замість сталої: «Поточний» і англійські підписи в
+    /// сталих 68 точках обрізалися.
+    var preferredWidth: CGFloat {
+        let widths = measuredWidths()
+        return max(NativeBottomMetrics.controlMinWidth,
+                   widths.columns.reduce(0, +) + 3 * 2 + 8 + widths.show)
+    }
+
+    /// Кнопки з підписами — для самоперевірки: чи влазить кожен підпис.
+    var labelButtonsForCheck: [NSButton] { stepButtons + [showButton, hideButton] }
+
+    private var measuredKey = ""
+    private var measured: (columns: [CGFloat], show: CGFloat) = ([68, 68, 68], 108)
+
+    /// Ширина кожного з трьох стовпців кнопок переходу й кнопок
+    /// «Показати»/«Сховати» — за їхніми підписами. Стовпці різні: «Глава» і
+    /// «Вірш» коротші за «Поточний» і «Знімок», і рівняти всі по найдовшому
+    /// означало б віддати передпоказу на 60 точок менше. Міряється лише
+    /// тоді, коли підписи змінилися (інша мова).
+    private func measuredWidths() -> (columns: [CGFloat], show: CGFloat) {
+        let key = labelButtonsForCheck.map(\.title).joined(separator: "|")
+        guard key != measuredKey else { return measured }
+        var columns: [CGFloat] = [56, 56, 56]
+        for (index, button) in stepButtons.enumerated() {
+            columns[index % 3] = max(columns[index % 3], ceil(button.fittingSize.width) + 2)
+        }
+        var show: CGFloat = 96
+        for button in [showButton!, hideButton!] { show = max(show, ceil(button.fittingSize.width) + 2) }
+        measured = (columns, show)
+        measuredKey = key
+        return measured
+    }
+
     override func layout() {
         super.layout()
-        let step: CGFloat = 68
+        let widths = measuredWidths()
         let gap: CGFloat = 3
         for (index, button) in stepButtons.enumerated() {
-            let column = CGFloat(index % 3)
+            let column = index % 3
             let line = CGFloat(index / 3)
-            button.frame = NSRect(x: column * (step + gap), y: line * (21 + gap),
-                                  width: step, height: 21)
+            let x = widths.columns.prefix(column).reduce(0, +) + CGFloat(column) * gap
+            button.frame = NSRect(x: x, y: line * (21 + gap), width: widths.columns[column], height: 21)
         }
-        let navWidth = step * 3 + gap * 2
-        showButton.frame = NSRect(x: navWidth + 8, y: 0, width: 108, height: 21)
-        hideButton.frame = NSRect(x: navWidth + 8, y: 24, width: 108, height: 21)
+        let navWidth = widths.columns.reduce(0, +) + gap * 2
+        showButton.frame = NSRect(x: navWidth + 8, y: 0, width: widths.show, height: 21)
+        hideButton.frame = NSRect(x: navWidth + 8, y: 24, width: widths.show, height: 21)
 
         let barY: CGFloat = 48
         separator.frame = NSRect(x: 0, y: barY, width: bounds.width, height: 1)
@@ -214,6 +253,23 @@ final class NativeControlPanel: NSView {
                                        prominent: false) { [weak self] in self?.state.isLive = false }
         addSubview(showButton)
         addSubview(hideButton)
+
+        activeBox.controlSize = .small
+        activeBox.font = .systemFont(ofSize: 11)
+        activeBox.state = state.arrowsShowLive ? .on : .off
+        activeBox.target = self
+        activeBox.action = #selector(activeChanged)
+    }
+
+    @objc private func activeChanged() {
+        state.arrowsShowLive = activeBox.state == .on
+    }
+
+    /// Підпис і підказка «Активна» — мовою, що зараз обрана.
+    private func applyActiveCaption() {
+        activeBox.title = OurWords.t("Активная")
+        activeBox.toolTip = OurWords.t("Включено — стрелки и перелистывание сразу выводят слайд в зал. Выключено — стрелки только готовят слайд в предпросмотре, а в зал его выводят «Показать» или Enter.")
+        activeBox.state = state.arrowsShowLive ? .on : .off
     }
 
     private func wireThumbnails() {
@@ -235,6 +291,7 @@ final class NativeControlPanel: NSView {
         for (index, button) in stepButtons.enumerated() {
             button.apply(title: OurWords.t(stepTitleKeys[index]), hint: OurWords.t(stepHintKeys[index]))
         }
+        applyActiveCaption()
         let current = state.currentTemplate
         // У свого шаблону з Конструктора немає готової картинки на диску:
         // авторські шаблони лежать теками з `thumbs/scene1.jpg`, а свій —
@@ -270,6 +327,11 @@ final class NativeControlPanel: NSView {
                          hint: state.hint("SBShowOutScr", default: OurWords.t("Показать слайд")))
         hideButton.apply(title: state.text("SBHideOutScr", default: "Скрыть"),
                          hint: state.hint("SBHideOutScr", default: "Скрыть слайд"))
+        // Інша мова — інші підписи, а з ними й ширина всієї панелі.
+        if labelButtonsForCheck.map(\.title).joined(separator: "|") != measuredKey {
+            needsLayout = true
+            superview?.needsLayout = true
+        }
         refreshLive()
     }
 

@@ -86,6 +86,7 @@ enum NativeForm {
             content.alignment = .centerY
             for view in views { content.addArrangedSubview(view) }
             addSubview(content)
+            NativeForm.inheritHint(title, in: views)
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
@@ -126,6 +127,7 @@ enum NativeForm {
             addSubview(title)
             self.rows = rows
             for row in rows { addSubview(row) }
+            NativeForm.inheritHint(caption, in: rows)
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
@@ -234,9 +236,33 @@ enum NativeForm {
         for child in view.subviews { refreshValues(in: child) }
     }
 
+    /// Підказка з підпису ряду чи групи — спискам, повзункам і перемикачам,
+    /// у яких своєї немає. Список «1280×720» без слова «Розмір кадру» поруч
+    /// під мишею не пояснював нічого; прапорці ж підписані самі й отримують
+    /// пояснення окремо, там, де воно потрібне.
+    static func inheritHint(_ caption: String, in views: [NSView]) {
+        let text = caption.trimmingCharacters(in: CharacterSet(charactersIn: ": ").union(.whitespaces))
+        guard !text.isEmpty else { return }
+        func walk(_ view: NSView) {
+            if view.identifier == choiceIdentifier {
+                for radio in view.subviews where (radio.toolTip ?? "").isEmpty { radio.toolTip = text }
+                return
+            }
+            if view is NSPopUpButton || view is NSSlider || view is NSSegmentedControl {
+                if (view.toolTip ?? "").isEmpty { view.toolTip = text }
+                return
+            }
+            for child in view.subviews { walk(child) }
+        }
+        views.forEach(walk)
+    }
+
+    private static let choiceIdentifier = NSUserInterfaceItemIdentifier("NativeForm.choice")
+
     /// Переключатель из нескольких положений — `TRadioGroup` оригинала.
     static func choice(_ titles: [String], _ tie: Tie<Int>) -> NSView {
         let stack = NSStackView()
+        stack.identifier = choiceIdentifier
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 2

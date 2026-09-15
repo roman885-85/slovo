@@ -55,6 +55,7 @@ final class NativeFocusBar: NSView {
 
     private func applyCaptions() {
         toggle.title = OurWords.t("Приближение")
+        toggle.toolTip = OurWords.t("Нажмите по живому экрану — этот кусок страницы станет во весь экран")
         centerButton.title = OurWords.t("В центр")
         centerButton.toolTip = OurWords.t("Вернуть взгляд на середину страницы")
         zoom.toolTip = OurWords.t("Во сколько раз приблизить")

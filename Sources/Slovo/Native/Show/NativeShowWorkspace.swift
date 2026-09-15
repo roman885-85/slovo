@@ -202,9 +202,10 @@ final class NativeShowWorkspace: NSView, NativeListSource {
     /// Стрелки и Enter в режимах показа работают со страницами, а не со
     /// стихами. Разбор нажатия остаётся один на всю программу: две разные
     /// ловушки клавиш неминуемо разошлись бы в мелочах.
-    static func handleStep(mode: AppState.WorkMode, delta: Int) -> Bool {
+    /// `live: false` — лише передпоказ: знято галочку «Активна».
+    static func handleStep(mode: AppState.WorkMode, delta: Int, live: Bool = true) -> Bool {
         guard let workspace = workspace(for: mode) else { return false }
-        workspace.step(by: delta)
+        workspace.step(by: delta, live: live)
         return true
     }
 
@@ -229,12 +230,12 @@ final class NativeShowWorkspace: NSView, NativeListSource {
 
     /// Стрелки листают показ — так же, как стихи в Библии.
     @discardableResult
-    func step(by delta: Int) -> Bool {
+    func step(by delta: Int, live: Bool = true) -> Bool {
         guard model.step(by: delta) else { return false }
         syncLists()
         refresh()
         // Пока показ идёт в зале, листание меняет и то, что видят люди.
-        if state?.media.still != nil { show() }
+        if live, state?.media.still != nil { show() }
         return true
     }
 
@@ -312,6 +313,8 @@ final class NativeShowWorkspace: NSView, NativeListSource {
             ? OurWords.t("Убрать картинку из списка")
             : OurWords.t("Убрать презентацию из списка")
         close.toolTip = OurWords.t("Очистить список")
+        back.toolTip = OurWords.t("Предыдущая страница")
+        forward.toolTip = OurWords.t("Следующая страница")
         for item in [open, drop, close, back, forward, showButton!, hideButton!] {
             toolbar.addArrangedSubview(item)
         }
@@ -400,6 +403,15 @@ final class NativeShowWorkspace: NSView, NativeListSource {
                 : OurWords.t("Убрать презентацию из списка")
         }
         if items.count > 2 { items[2].toolTip = OurWords.t("Очистить список") }
+        if items.count > 4 {
+            items[3].toolTip = OurWords.t("Предыдущая страница")
+            items[4].toolTip = OurWords.t("Следующая страница")
+        }
+        showButton.toolTip = OurWords.t("Показать слайд")
+        hideButton.toolTip = OurWords.t("Скрыть слайд")
+        // Підказка слайд-шоу теж мовою, що зараз обрана: раніше вона
+        // лишалася тією, що була при побудові.
+        if showTimeButton != nil { applySlideshowCaption() }
         needsLayout = true
     }
 

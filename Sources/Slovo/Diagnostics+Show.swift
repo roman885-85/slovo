@@ -1031,6 +1031,7 @@ extension Diagnostics {
             extendSelection: { _, _ in },
             selectAll: {},
             isLinked: { true },
+            isActive: { false },
             show: {},
             blackout: { blackouts += 1 })
 
@@ -1043,6 +1044,7 @@ extension Diagnostics {
             return ArrowNavigator.handle(event, actions: actions)
         }
 
+        // «Активна» тут знята нарочно: пульт доповідача гортає зал і так.
         let forward = press(121, "\u{F72D}")     // PageDown
         let back = press(116, "\u{F72C}")        // PageUp
         let dot = press(47, ".")

@@ -115,6 +115,7 @@ final class NativeModeTabs: NSView {
         for mode in AppState.WorkMode.allCases {
             tabs[mode]?.title = NativeTopCaptions.modeTitle(mode, in: language)
         }
+        slider.toolTip = OurWords.t("Размер шрифта списков (или Ctrl и колесо мыши)")
         needsLayout = true
     }
 

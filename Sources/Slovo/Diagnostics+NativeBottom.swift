@@ -35,6 +35,7 @@ extension Diagnostics {
         checks.append(contentsOf: bottomPreview(row, state, host))
         checks.append(contentsOf: bottomPlan(row, host))
         checks.append(contentsOf: bottomHistory(row))
+        checks.append(contentsOf: bottomControlLabels(row, state))
 
         row.removeFromSuperview()
         window.contentView = nil
@@ -73,9 +74,10 @@ extension Diagnostics {
                                            preview.width, preview.height, ratio)))
 
         let control = row.control.frame.width
-        checks.append(Check(area: "Нижній ряд", name: "«Керування» тієї самої ширини, що в описі",
-                            status: abs(control - NativeBottomMetrics.controlWidth) < 1 ? .ok : .failed,
-                            detail: "ширина \(Int(control)), в описі \(Int(NativeBottomMetrics.controlWidth))"))
+        checks.append(Check(area: "Нижній ряд", name: "«Керування» тієї ширини, що просять підписи",
+                            status: abs(control - row.control.preferredWidth) < 1
+                                && control >= NativeBottomMetrics.controlMinWidth ? .ok : .failed,
+                            detail: "ширина \(Int(control)), треба \(Int(row.control.preferredWidth))"))
 
         // Ширина окна ходит от 1120 до целого экрана, и оба края надо пройти:
         // в узком окне у Плана пропадали кнопки, а в широком лишние триста
@@ -109,11 +111,18 @@ extension Diagnostics {
                                     + "простір пішов у порожнечу праворуч від слайда"))
 
         // 1108 — наименьшая ширина окна из описи (1120) минус поля ящика.
-        // 960 в жизни не встречается, но проходит другую ветвь раскладки —
-        // ту, где списки ужимаются; без неё половина арифметики не проверена.
+        // Второй замер — самое узкое окно, в которое ещё помещаются все
+        // панели на своих нижних пределах: там списки ужаты до упора, а живой
+        // экран спрятан, — без него половина арифметики не проверена. Раньше
+        // тут стояло 960, но «Керування» теперь берёт ширину по подписям
+        // (українською 362 замість 340), и в 960 минимумы уже не
+        // помещаются физически — это был бы замер невозможного окна.
+        let tightest = ceil(NativeBottomMetrics.planMinWidth + NativeBottomMetrics.historyMinWidth
+            + row.control.preferredWidth + NativeBottomMetrics.previewMinWidth
+            + NativeBottomMetrics.dividerWidth * 2 + NativeBottomMetrics.gap)
         var floors: [String] = []
         var kept = true
-        for width in [CGFloat(1108), 960] {
+        for width in [CGFloat(1108), tightest] {
             let got = widths(at: width)
             kept = kept
                 && got.plan >= NativeBottomMetrics.planMinWidth - 0.5
@@ -363,6 +372,7 @@ extension Diagnostics {
         // Історія — так само, як План (власник, 15.09.2026: «когда по истории
         // нажимаешь, то сразу идет вывод на проектор»).
         if desk.history.records.count > 1 {
+            let order = desk.history.records.map(\.id)
             let before = desk.historyActivationsForCheck
             row.history.list.click(item: 1)
             let afterClick = desk.historyActivationsForCheck
@@ -376,6 +386,13 @@ extension Diagnostics {
                                 status: ok ? .ok : .failed,
                                 detail: "після клацання виведень +\(afterClick - before), після подвійного +\(afterDouble - afterClick), "
                                     + "після Enter +\(afterReturn - afterDouble)"))
+            // Показ відкладений, поки розділ читається, — чекаємо.
+            wait(untilTrue: { false }, seconds: 1.5)
+            let kept = desk.history.records.map(\.id) == order
+            checks.append(Check(area: "Нижній ряд", name: "Показ із Історії не міняє Історію",
+                                status: kept ? .ok : .failed,
+                                detail: kept ? "записів \(order.count), порядок той самий"
+                                             : "було \(order.count) записів, стало \(desk.history.records.count); перший запис інший: \(desk.history.records.first?.id != order.first)"))
         } else {
             checks.append(Check(area: "Нижній ряд", name: "Запис Історії: клацання виділяє, подвійне клацання і Enter виводять",
                                 status: .skipped, detail: "в Історії менше двох записів"))
@@ -537,5 +554,80 @@ extension Diagnostics {
             seen.insert(index)
             return NativeRow(text: captions[index], singleLine: true)
         }
+    }
+    /// Власник: «в главном меню не все надписи видно целиком (керування)».
+    /// Кожен підпис має влазити у свою кнопку — українською, англійською й
+    /// російською; галочка «Активна» стоїть у рядку підпису панелі й перемикає
+    /// настройку.
+    private static func bottomControlLabels(_ row: NativeBottomRow, _ state: AppState) -> [Check] {
+        var checks: [Check] = []
+        let languageBefore = state.languageCode
+        var clipped: [String] = []
+        for language in ["uk", "en", "ru"] {
+            state.setLanguage(code: language)
+            Signals.shared.send(.language)
+            row.needsLayout = true
+            row.layoutSubtreeIfNeeded()
+            for button in row.control.labelButtonsForCheck
+            where ceil(button.fittingSize.width) > button.frame.width + 0.5 {
+                clipped.append("\(language): «\(button.title)» \(Int(button.fittingSize.width))>\(Int(button.frame.width))")
+            }
+            let box = row.control.activeBox
+            if box.superview == nil || box.frame.width + 0.5 < ceil(box.fittingSize.width)
+                || box.frame.maxX > row.control.frame.maxX + 0.5 || box.title.isEmpty {
+                clipped.append("\(language): «\(box.title)» не на місці")
+            }
+            if abs(row.control.frame.width - row.control.preferredWidth) >= 1 {
+                clipped.append("\(language): панель \(Int(row.control.frame.width)), треба \(Int(row.control.preferredWidth))")
+            }
+        }
+        state.setLanguage(code: languageBefore)
+        Signals.shared.send(.language)
+        row.layoutSubtreeIfNeeded()
+        checks.append(Check(area: "Нижній ряд", name: "Підписи «Керування» видно цілком (uk, en, ru)",
+                            status: clipped.isEmpty ? .ok : .failed,
+                            detail: clipped.isEmpty ? "кнопки й «Активна» вміщають підписи" : clipped.joined(separator: "; ")))
+
+        // Галочка перемикає настройку, і стрілки слухаються її.
+        let before = state.arrowsShowLive
+        let box = row.control.activeBox
+        if box.state != (before ? .on : .off) { box.state = before ? .on : .off }
+        box.performClick(nil)
+        let flipped = state.arrowsShowLive == !before
+        box.performClick(nil)
+        let restored = state.arrowsShowLive == before
+
+        var live: [Bool] = []
+        var active = true
+        let actions = ArrowNavigator.Actions(
+            stepVerse: { _, isLive in live.append(isLive) },
+            extendSelection: { _, isLive in live.append(isLive) },
+            selectAll: {}, isLinked: { true }, isActive: { active },
+            show: { live.append(true) }, blackout: {})
+        func press(_ code: UInt16) {
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                               timestamp: 0, windowNumber: 0, context: nil,
+                                               characters: " ", charactersIgnoringModifiers: " ",
+                                               isARepeat: false, keyCode: code) else { return }
+            _ = ArrowNavigator.handle(event, actions: actions)
+        }
+        // Увімкнено: ↓ іде в зал, → — лише передпоказ (пари «зв'язано»).
+        press(125); press(124)
+        let onRule = live == [true, false]
+        live.removeAll()
+        active = false
+        // Знято: жодна стрілка в зал не йде; Enter — іде.
+        press(125); press(124); press(126); press(123)
+        let offArrows = live == [false, false, false, false]
+        live.removeAll()
+        press(36)
+        let enterShows = live == [true]
+        checks.append(Check(area: "Нижній ряд", name: "Галочка «Активна» керує виводом стрілками",
+                            status: flipped && restored && onRule && offArrows && enterShows ? .ok : .failed,
+                            detail: "клацання міняє настройку: \(flipped && restored ? "так" : "ні"); "
+                                + "увімкнено — стрілка в зал: \(onRule ? "так" : "ні"); "
+                                + "знято — стрілки лише передпоказ: \(offArrows ? "так" : "ні"); "
+                                + "Enter виводить: \(enterShows ? "так" : "ні")"))
+        return checks
     }
 }

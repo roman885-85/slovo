@@ -44,7 +44,8 @@ final class NativeSettingsUpdateTab {
         let program = NativeForm.Group(OurWords.t("Программа"), [
             NativeForm.Row("", [versionLabel]),
             NativeForm.Row("", [
-                NativeForm.button(OurWords.t("Проверить обновление на GitHub"), hint: nil) { [weak self] in self?.check() },
+                NativeForm.button(OurWords.t("Проверить обновление на GitHub"),
+                                  hint: OurWords.t("Спросить GitHub сейчас, вышла ли новая версия, и предложить её установить")) { [weak self] in self?.check() },
                 checkResult,
             ]),
         ])

@@ -86,7 +86,8 @@ final class NativeSettingsHotkeysTab {
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBUseRCPointer", "Использовать Wireless Presenter R400"),
                                  NativeForm.Tie(get: { [store] in store.settings.options.useRCPointer },
-                                                set: { [store] in store.settings.options.useRCPointer = $0 })),
+                                                set: { [store] in store.settings.options.useRCPointer = $0 }),
+                                 hint: OurWords.t("Настройка пульта Logitech R400 из VisioBible; листать пультом доповідача можно и без неё")),
             ]),
         ])
     }

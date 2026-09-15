@@ -464,9 +464,16 @@ extension Diagnostics {
             wait(untilTrue: { answer != nil }, seconds: 30)
             return answer ?? .failure(.network("час вийшов"))
         }
+        // Скільки разів прийшов проміжний хід завантаження (0 < частка < 1).
+        // Нуль на великому файлі — смужка у вікні ресурсів стоїть на місці.
+        final class Ticks: @unchecked Sendable { var count = 0 }
+        let ticks = Ticks()
         func install(_ item: ResourceItem, hub: ResourceHub) -> ResourceHub.Outcome? {
             var outcome: ResourceHub.Outcome?
-            hub.install([item], progress: { _ in }, completion: { outcome = $0 })
+            ticks.count = 0
+            hub.install([item], progress: { step in
+                if let fraction = step.fraction, fraction > 0, fraction < 1 { ticks.count += 1 }
+            }, completion: { outcome = $0 })
             wait(untilTrue: { outcome != nil }, seconds: 180)
             return outcome
         }
@@ -523,9 +530,10 @@ extension Diagnostics {
                           let chapter = try? module.chapters(ofBook: book).first else { return 0 }
                     return chapter.verses.count
                 }()
-                let ok = outcome.installed.count == 1 && opened.modules.count == 1 && verses > 0
+                let movingBar = source != .eBible || ticks.count > 0
+                let ok = outcome.installed.count == 1 && opened.modules.count == 1 && verses > 0 && movingBar
                 checks.append(Check(area: area, name: "Установлення з мережі: " + label, status: ok ? .ok : .failed,
-                                    detail: "«\(item.title)» (\(item.size / 1024) КБ) за \(String(format: "%.1f", Date().timeIntervalSince(started))) с; "
+                                    detail: "хід завантаження: \(ticks.count) разів; «\(item.title)» (\(item.size / 1024) КБ) за \(String(format: "%.1f", Date().timeIntervalSince(started))) с; "
                                         + "бібліотека бачить модулів \(opened.modules.count), віршів у першому розділі \(verses)"
                                         + (outcome.failures.isEmpty ? "" : "; " + outcome.failures.map { $0.1 }.joined(separator: "; "))))
             }

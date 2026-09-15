@@ -59,24 +59,24 @@ final class MenuActions: NSObject {
         state.setLanguage(code: code)
     }
 
+    /// Довідка — своє вікно в пакеті, українською й англійською, без
+    /// інтернету (`NativeHelpWindow`). Документація на GitHub — окремим пунктом.
     @objc func openHelp() {
-        // Довідка — документація на GitHub: вона одна для всіх і завжди свіжа.
-        if let online = URL(string: "https://github.com/roman885-85/slovo#readme") {
-            NSWorkspace.shared.open(online)
-            return
+        NativeHelpWindow.show()
+    }
+
+    @objc func openOnlineDocs() {
+        let english = NativeHelpWindow.language(for: OurWords.language) == "en"
+        if let url = URL(string: "https://github.com/roman885-85/slovo" + (english ? "#english" : "#readme")) {
+            NSWorkspace.shared.open(url)
         }
-        guard let url = state.helpFileURL else {
-            let alert = NSAlert()
-            alert.messageText = OurWords.t("Справка не найдена")
-            alert.informativeText = OurWords.t("В папке данных нет файла справки. Он лежит в подпапке Help вместе с модулями.")
-            alert.addButton(withTitle: OurWords.t("Закрыть"))
-            alert.runModal()
-            return
-        }
-        // Файлы .chm macOS открыть не умеет — тогда хотя бы покажем в Finder.
-        if !NSWorkspace.shared.open(url) {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        }
+    }
+
+    /// Інструкція із запуску на GitHub: Gatekeeper, помилки, дозволи — зі знімками.
+    @objc func openLaunchGuide() {
+        let english = NativeHelpWindow.language(for: OurWords.language) == "en"
+        let path = "https://github.com/roman885-85/slovo/blob/main/%D0%94%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D1%96%D1%8F/%D0%97%D0%90%D0%9F%D0%A3%D0%A1%D0%9A.md"
+        if let url = URL(string: path + (english ? "#english" : "")) { NSWorkspace.shared.open(url) }
     }
 
     /// Показывает отчёт самопроверки и кладёт его же в файл — чтобы можно

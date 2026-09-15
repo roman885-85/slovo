@@ -851,8 +851,35 @@ final class DeskModel: ObservableObject {
             record = HistoryRecord(kind: .text, reference: slide.reference, quote: quote)
         }
 
+        // Показ, що прийшов із самої Історії, Історію не міняє: запис не
+        // з'являється вгорі вдруге і не переїжджає. Власник (15.09.2026): «при
+        // переходах по пунктам истории, когда открываешь пункт на проектор,
+        // этот пункт попадает в начало как новая история — такого не должно
+        // быть». Наступний показ (стрілка, інший вірш) пишеться як завжди.
+        if let replay = historyReplay {
+            historyReplay = nil
+            if Self.sameMoment(replay, record) { return }
+        }
         history.remember(record)
         scheduleHistoryAutosave()
+    }
+
+    /// Запис Історії, який щойно відкрили для показу; перший показ після
+    /// цього, якщо він про те саме місце, в Історію не пишеться.
+    private var historyReplay: HistoryRecord?
+
+    /// Те саме місце: для Біблії — книга, розділ і вірші (переклад може бути
+    /// іншим), для пісні — пісенник, пісня й частина, для тексту — сам текст.
+    static func sameMoment(_ a: HistoryRecord, _ b: HistoryRecord) -> Bool {
+        guard a.kind == b.kind else { return false }
+        switch a.kind {
+        case .bible:
+            return a.bookIndex == b.bookIndex && a.chapter == b.chapter && Set(a.verses) == Set(b.verses)
+        case .song:
+            return a.songBookFileName == b.songBookFileName && a.songIndex == b.songIndex && a.partIndex == b.partIndex
+        case .text:
+            return a.quote == b.quote && a.reference == b.reference
+        }
     }
 
     /// «Пункты истории можно удалять» — контекстное меню и клавиша Del.
@@ -882,6 +909,7 @@ final class DeskModel: ObservableObject {
     func activate(_ record: HistoryRecord, state: AppState, show: Bool = false) {
         historyActivationsForCheck += 1
         historySelection = record.id
+        historyReplay = show ? record : nil
         switch record.kind {
         case .bible:
             // «При переключении на другой Библейский модуль… или выбор его из

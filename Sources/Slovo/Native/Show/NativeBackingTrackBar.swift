@@ -91,6 +91,7 @@ final class NativeBackingTrackBar: NSView {
         stopButton.toolTip = OurWords.t("Стоп")
         loopButton.toolTip = OurWords.t("Повторять по кругу")
         volume.toolTip = OurWords.t("Громкость фонограммы")
+        position.toolTip = OurWords.t("Место воспроизведения: потяните, чтобы перемотать")
         refresh()
     }
 

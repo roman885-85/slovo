@@ -145,10 +145,16 @@ final class NativeResourcesView: NSView, NativeListSource {
         kindControl.selectedSegment = 0
         kindControl.target = self
         kindControl.action = #selector(kindChosen)
+        kindControl.toolTip = OurWords.t("Что загружать: переводы, песенники или фоны и шаблоны — у каждого свои источники")
         addSubview(kindControl)
         fillSources()
         source.target = self
         source.action = #selector(sourceChosen)
+        source.toolTip = OurWords.t("Откуда загружать")
+        newButton.toolTip = OurWords.t("Отметить всё, чего ещё нет на этом компьютере")
+        updatesButton.toolTip = OurWords.t("Отметить установленное, у чего вышла новая версия")
+        noneButton.toolTip = OurWords.t("Снять все отметки")
+        takeButton.toolTip = OurWords.t("Загрузить и установить отмеченное")
         addSubview(source)
         search.placeholderString = OurWords.t("Поиск: название, сокращение или язык (uk, ru, en…)")
         search.target = self

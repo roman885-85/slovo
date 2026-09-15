@@ -54,7 +54,8 @@ final class NativeSettingsMediaTab {
             ]),
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBShowVideoOnPreview", "Отображать видео в окне предпросмотра"),
-                                 tie(\.showVideoOnPreview)),
+                                 tie(\.showVideoOnPreview),
+                                 hint: OurWords.t("Видео видно и в предпросмотре, а не только в зале")),
             ]),
             // Настройка наша: у автора кадр возникает и пропадает разом.
             // В зале резкая смена читается как сбой, поэтому плавность есть,
@@ -134,7 +135,8 @@ final class NativeSettingsMediaTab {
         return NativeForm.Group(OurWords.t("NDI для Wi-Fi"), [
             NativeForm.Row("", [NativeForm.check(OurWords.t("Второй источник «Слово Wi-Fi» — уменьшенный кадр"),
                                                  NativeForm.Tie(get: { [store] in store.settings.options.ndiWiFiEnabled ?? false },
-                                                                set: { [store] in store.settings.options.ndiWiFiEnabled = $0 }))]),
+                                                                set: { [store] in store.settings.options.ndiWiFiEnabled = $0 }),
+                                                 hint: OurWords.t("Ещё один источник NDI с меньшим кадром и частотой — для приёмников по Wi-Fi"))]),
             NativeForm.Row(OurWords.t("Размер кадра"), width: 200, [
                 NativeForm.popup(["960×540", "640×360", "480×270"],
                                  NativeForm.Tie(get: { [store] in
@@ -180,7 +182,8 @@ final class NativeSettingsMediaTab {
         return NativeForm.Group(OurWords.t("Видео по Wi-Fi (HLS)"), [
             NativeForm.Row("", [NativeForm.check(OurWords.t("Раздавать кадр зала потоком H.264"),
                                                  NativeForm.Tie(get: { [store] in store.settings.options.webVideoEnabled ?? false },
-                                                                set: { [store] in store.settings.options.webVideoEnabled = $0 }))]),
+                                                                set: { [store] in store.settings.options.webVideoEnabled = $0 }),
+                                                 hint: OurWords.t("Поток HLS по адресу ниже: Safari, VLC, OBS открывают его по Wi-Fi, задержка 2–4 с"))]),
             NativeForm.Row(OurWords.t("Размер кадра"), width: 200, [
                 NativeForm.popup(["1280×720", "960×540", "640×360"],
                                  NativeForm.Tie(get: { [store] in
@@ -215,11 +218,14 @@ final class NativeSettingsMediaTab {
     private var ndi: NativeForm.Group {
         NativeForm.Group(state.vb("GBNdi", "NDI трансляция"), [
             NativeForm.Row("", [NativeForm.check(state.vb("CBNdiEnable", "Включить трансляцию"),
-                                                 tie(\.ndiEnabled))]),
+                                                 tie(\.ndiEnabled),
+                                                 hint: OurWords.t("Слайд уходит в сеть источником NDI — для OBS, vMix и других программ трансляции"))]),
             NativeForm.Row("", [NativeForm.check(state.vb("CBNdiTransparentBackGr", "Прозрачный фон"),
-                                                 tie(\.ndiTransparentBackground))]),
+                                                 tie(\.ndiTransparentBackground),
+                                                 hint: OurWords.t("Текст без фона — титры поверх картинки трансляции"))]),
             NativeForm.Row("", [NativeForm.check(state.vb("CBNdiSendVideo", "Отображать Видео"),
-                                                 tie(\.ndiSendVideo))]),
+                                                 tie(\.ndiSendVideo),
+                                                 hint: OurWords.t("Передавать в NDI и видео из медиаплеера"))]),
             // Настройка наша: у автора трансляция без звука. Звук снимается с
             // выхода самой программы — macOS спросит разрешение один раз.
             NativeForm.Row("", [NativeForm.check(OurWords.t("Передавать звук"),

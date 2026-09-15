@@ -37,7 +37,8 @@ final class ImportIntroPage: NSView, ImportPageRefreshing {
             + "Настройки чужой программы не переносятся — у «Слова» свои. Каждый модуль перед переносом открывается, "
             + "и в библиотеку не попадает то, что программа не прочитает."), size: 11, secondary: true)
 
-        let reveal = NativeForm.button(OurWords.t("Показать в Finder")) { [weak self] in
+        let reveal = NativeForm.button(OurWords.t("Показать в Finder"),
+                                       hint: OurWords.t("Открыть в Finder папку, куда программа кладёт данные")) { [weak self] in
             guard let self else { return }
             try? self.model.destination.prepare()
             NSWorkspace.shared.activateFileViewerSelecting([self.model.destination.dataRoot])

@@ -81,6 +81,12 @@ if [ -d Resources/OurWords ]; then
   cp -R Resources/OurWords "$APP/Contents/Resources/OurWords"
   echo "словари наших подписей: $(ls Resources/OurWords/*.json 2>/dev/null | wc -l | tr -d ' ') языков"
 fi
+# Довідка українською й англійською — файлами, як і словники.
+rm -rf "$APP/Contents/Resources/Help"
+if [ -d Resources/Help ]; then
+  cp -R Resources/Help "$APP/Contents/Resources/Help"
+  echo "довідка: $(ls Resources/Help/*.html | wc -l | tr -d ' ') файли"
+fi
 rm -rf "$APP/Contents/_CodeSignature"
 # Остаток прерванной подписи (*.cstemp) ломает любую следующую: «invalid or
 # unsupported format for signature» — и пакет оставался неподписанным вовсе.

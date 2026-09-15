@@ -1,0 +1,178 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Оболонка довідки: вікно «Довідка» підставляє сюди розділи з uk.html і
+     en.html, мову ({{LANG}}) і розділ, який відкрити ({{TOPIC}}). Зміст,
+     пошук і перемикач мови — тут, без інтернету. -->
+<style>
+:root { color-scheme: light dark; --bg:#fbfbfa; --side:#f1f0ee; --text:#1d1d1f; --muted:#6e6e73; --line:#dcdad6; --accent:#b4531f; --mark:#ffe59a; --kbd:#ffffff; }
+@media (prefers-color-scheme: dark) { :root { --bg:#1e1e1f; --side:#262627; --text:#ececec; --muted:#9a9a9f; --line:#3a3a3c; --accent:#f0a46b; --mark:#6b5a1e; --kbd:#333335; } }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font: 14px/1.55 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; }
+#side { position:fixed; top:0; bottom:0; left:0; width:230px; background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+#side header { padding:14px 14px 8px; }
+#side h1 { font-size:15px; margin:0 0 10px; }
+#langs { display:flex; gap:0; margin-bottom:10px; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+#langs button { flex:1; border:0; background:transparent; color:var(--text); font:inherit; font-size:12px; padding:4px 0; cursor:pointer; }
+#langs button.on { background:var(--accent); color:#fff; }
+#search { width:100%; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; }
+#toc { overflow:auto; padding:4px 8px 14px; flex:1; }
+#toc a { display:block; padding:4px 8px; border-radius:6px; color:var(--text); text-decoration:none; }
+#toc a:hover { background:rgba(127,127,127,.14); }
+#toc a.on { background:rgba(180,83,31,.16); color:var(--accent); font-weight:600; }
+#toc a.none { opacity:.35; }
+main { margin-left:230px; padding:22px 34px 60px; max-width:900px; }
+section { padding-bottom:10px; border-bottom:1px solid var(--line); margin-bottom:22px; scroll-margin-top:12px; }
+section.hidden { display:none; }
+h2 { font-size:21px; margin:0 0 10px; }
+h3 { font-size:15px; margin:16px 0 6px; }
+li { margin:3px 0; }
+a { color:var(--accent); }
+code { font: 12px ui-monospace, Menlo, monospace; background:rgba(127,127,127,.14); padding:1px 4px; border-radius:4px; }
+kbd { font: 12px -apple-system, sans-serif; background:var(--kbd); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; white-space:nowrap; }
+table { border-collapse:collapse; margin:8px 0; width:100%; }
+td { border-top:1px solid var(--line); padding:5px 8px; vertical-align:top; }
+td:first-child { white-space:nowrap; width:1%; }
+.menu { font-weight:600; }
+.tip { background:rgba(180,83,31,.10); border-left:3px solid var(--accent); padding:8px 12px; border-radius:4px; }
+mark { background:var(--mark); color:inherit; border-radius:2px; }
+#empty { color:var(--muted); display:none; }
+.lang { display:none; }
+.lang.on { display:block; }
+</style>
+</head>
+<body data-lang="{{LANG}}" data-topic="{{TOPIC}}">
+<nav id="side">
+<header>
+<h1 id="title">Довідка «Слова»</h1>
+<div id="langs"><button data-l="uk">Українська</button><button data-l="en">English</button></div>
+<input id="search" type="search" autocomplete="off">
+</header>
+<div id="toc"></div>
+</nav>
+<main>
+<p id="empty"></p>
+<div class="lang" id="lang-uk"><!--SECTIONS-uk--></div>
+<div class="lang" id="lang-en"><!--SECTIONS-en--></div>
+</main>
+<script>
+const words = {
+  uk: { title: "Довідка «Слова»", search: "Пошук у довідці", empty: "Нічого не знайдено." },
+  en: { title: "Slovo Help", search: "Search help", empty: "Nothing found." }
+};
+let lang = document.body.dataset.lang === "en" ? "en" : "uk";
+const toc = document.getElementById("toc");
+const search = document.getElementById("search");
+
+function sections() { return [...document.querySelectorAll("#lang-" + lang + " section")]; }
+
+function buildToc() {
+  toc.innerHTML = "";
+  for (const s of sections()) {
+    const a = document.createElement("a");
+    a.href = "#" + s.id;
+    a.textContent = s.querySelector("h2").textContent;
+    a.dataset.id = s.id;
+    toc.appendChild(a);
+  }
+}
+
+function setLang(code) {
+  lang = code;
+  document.querySelectorAll(".lang").forEach(e => e.classList.toggle("on", e.id === "lang-" + code));
+  document.querySelectorAll("#langs button").forEach(b => b.classList.toggle("on", b.dataset.l === code));
+  document.getElementById("title").textContent = words[code].title;
+  search.placeholder = words[code].search;
+  document.getElementById("empty").textContent = words[code].empty;
+  document.documentElement.lang = code;
+  buildToc();
+  filter();
+  markCurrent();
+}
+
+function clearMarks(root) {
+  root.querySelectorAll("mark").forEach(m => m.replaceWith(document.createTextNode(m.textContent)));
+  root.normalize();
+}
+
+function markText(root, needle) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.nodeValue.toLowerCase().includes(needle)) hits.push(node);
+  }
+  for (const node of hits) {
+    const text = node.nodeValue, low = text.toLowerCase();
+    const frag = document.createDocumentFragment();
+    let at = 0, i;
+    while ((i = low.indexOf(needle, at)) >= 0) {
+      frag.appendChild(document.createTextNode(text.slice(at, i)));
+      const m = document.createElement("mark");
+      m.textContent = text.slice(i, i + needle.length);
+      frag.appendChild(m);
+      at = i + needle.length;
+    }
+    frag.appendChild(document.createTextNode(text.slice(at)));
+    node.replaceWith(frag);
+  }
+}
+
+// Пошук ховає розділи, де слова немає, і підсвічує знайдене.
+function filter() {
+  const needle = search.value.trim().toLowerCase();
+  let shown = 0;
+  for (const s of sections()) {
+    clearMarks(s);
+    const hit = !needle || s.textContent.toLowerCase().includes(needle);
+    s.classList.toggle("hidden", !hit);
+    const link = toc.querySelector('a[data-id="' + s.id + '"]');
+    if (link) link.classList.toggle("none", !hit);
+    if (hit) { shown++; if (needle) markText(s, needle); }
+  }
+  document.getElementById("empty").style.display = shown ? "none" : "block";
+}
+
+function markCurrent() {
+  let current = null;
+  for (const s of sections()) {
+    if (s.classList.contains("hidden")) continue;
+    if (s.getBoundingClientRect().top < 120) current = s.id;
+  }
+  if (!current) { const first = sections().find(s => !s.classList.contains("hidden")); current = first && first.id; }
+  toc.querySelectorAll("a").forEach(a => a.classList.toggle("on", a.dataset.id === current));
+}
+
+function openTopic(id) {
+  const s = document.querySelector("#lang-" + lang + " section#" + CSS.escape(id));
+  if (s) { s.scrollIntoView(); markCurrent(); }
+}
+
+document.querySelectorAll("#langs button").forEach(b => b.addEventListener("click", () => {
+  const visible = sections().find(s => !s.classList.contains("hidden") && s.getBoundingClientRect().bottom > 60);
+  setLang(b.dataset.l);
+  if (visible) openTopic(visible.id);
+}));
+search.addEventListener("input", () => { filter(); window.scrollTo(0, 0); markCurrent(); });
+window.addEventListener("scroll", markCurrent, { passive: true });
+toc.addEventListener("click", e => {
+  const a = e.target.closest("a"); if (!a) return;
+  e.preventDefault(); openTopic(a.dataset.id);
+});
+document.addEventListener("click", e => {
+  const a = e.target.closest("main a[href^='#']"); if (!a) return;
+  e.preventDefault(); search.value = ""; filter(); openTopic(a.getAttribute("href").slice(1));
+});
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") { e.preventDefault(); search.focus(); search.select(); }
+});
+
+setLang(lang);
+if (document.body.dataset.topic) openTopic(document.body.dataset.topic);
+// Для самоперевірки: скільки розділів кожною мовою.
+window.slovoHelpInfo = () => ({ lang, uk: document.querySelectorAll("#lang-uk section").length,
+  en: document.querySelectorAll("#lang-en section").length, toc: toc.querySelectorAll("a").length });
+</script>
+</body>
+</html>

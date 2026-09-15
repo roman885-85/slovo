@@ -175,6 +175,12 @@ final class AppState: ObservableObject {
     /// `LinkPreviewAndSlide` оригинала: какая пара стрелок листает только
     /// предпросмотр, а какая — и предпросмотр, и слайд в зале.
     @Published var arrowsLinked = true
+    /// Галочка «Активна» панелі «Керування» (за умовчанням увімкнена).
+    /// Увімкнено — стрілки гортають і слайд у залі, як досі. Знято — лише
+    /// передпоказ, а в зал слайд виводять «Показати» або Enter.
+    @Published var arrowsShowLive = true {
+        didSet { Defaults.arrowsShowLive = arrowsShowLive }
+    }
     /// Пока true, смена стиха уходит и в зал. Ставится на время двойного
     /// щелчка, Enter и «связанной» пары стрелок.
     private var followLive = false
@@ -359,7 +365,10 @@ final class AppState: ObservableObject {
                                  guard let self else { return }
                                  // В показе картинок и презентаций стрелки
                                  // листают страницы: стихов там нет.
-                                 guard !NativeShowWorkspace.handleStep(mode: self.mode, delta: delta) else { return }
+                                 // Там обидві пари гортають і зал, поки «Активна»
+                                 // увімкнена; пульт доповідача (`live`) — завжди.
+                                 guard !NativeShowWorkspace.handleStep(mode: self.mode, delta: delta,
+                                                                       live: live || self.arrowsShowLive) else { return }
                                  self.stepVerse(by: delta, live: live)
                              },
                              extendSelection: { [weak self] delta, live in
@@ -367,6 +376,7 @@ final class AppState: ObservableObject {
                              },
                              selectAll: { [weak self] in self?.selectAllVerses() },
                              isLinked: { [weak self] in self?.arrowsLinked ?? true },
+                             isActive: { [weak self] in self?.arrowsShowLive ?? true },
                              show: { [weak self] in self?.showCurrent() },
                              blackout: { [weak self] in self?.showBlackScreen() }))
 
@@ -847,13 +857,6 @@ final class AppState: ObservableObject {
     // MARK: - Интерфейс
 
     private var dataRoot: URL { modulesFolder.deletingLastPathComponent() }
-
-    /// Своя довідка — «ЧИТАТИ.md» у пакеті. Довідка VisioBible (`.chm`,
-    /// `RemoteAPI_*.txt`) більше не шукається.
-    var helpFileURL: URL? {
-        let own = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/ЧИТАТИ.md")
-        return FileManager.default.fileExists(atPath: own.path) ? own : nil
-    }
 
     private func loadLanguages() {
         // Свои и правленые переводы лежат в папке «Слова»; склейка отдаёт их
@@ -1359,6 +1362,7 @@ final class AppState: ObservableObject {
         if let shows = Defaults.showsCommonBackground { showsCommonBackground = shows }
         if let long = Defaults.tabNamesLong { tabNamesLong = long }
         if let linked = Defaults.arrowsLinked { arrowsLinked = linked }
+        if let active = Defaults.arrowsShowLive, active != arrowsShowLive { arrowsShowLive = active }
 
         if let raw = Defaults.lastBookClass, let value = BookClass(rawValue: raw) {
             bookClass = value
@@ -2702,6 +2706,10 @@ enum Defaults {
     static var arrowsLinked: Bool? {
         get { store.object(forKey: "arrowsLinked") as? Bool }
         set { store.set(newValue, forKey: "arrowsLinked") }
+    }
+    static var arrowsShowLive: Bool? {
+        get { store.object(forKey: "arrowsShowLive") as? Bool }
+        set { store.set(newValue, forKey: "arrowsShowLive") }
     }
     static var lastSongBook: String? {
         get { store.string(forKey: "lastSongBook") }

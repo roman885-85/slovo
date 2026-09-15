@@ -26,6 +26,9 @@ final class ArrowNavigator {
         /// Ctrl+A — вся глава на один слайд.
         let selectAll: () -> Void
         let isLinked: () -> Bool
+        /// Галочка «Активна» панелі «Керування». Знято — стрілки лише
+        /// гортають передпоказ, а в зал слайд іде через «Показати» чи Enter.
+        let isActive: () -> Bool
         /// Enter — «показать текущий стих в зале», как в оригинале.
         let show: () -> Void
         /// Кнопка «затемнить» на пульте докладчика — то же, что F12.
@@ -118,7 +121,11 @@ final class ArrowNavigator {
         default:  return false
         }
         let forward = event.keyCode == 125 || event.keyCode == 124
-        let live = linked ? vertical : !vertical
+        // «Активна» знято — жодна пара стрілок у зал не виводить (власник:
+        // «стрелками переключается позиция, на предпросмотре видно, но на
+        // проектор не идет»). Пульт доповідача вище це не зачіпає: у того,
+        // хто говорить, «Показати» під рукою немає.
+        let live = actions.isActive() && (linked ? vertical : !vertical)
 
         if shift {
             actions.extendSelection(forward ? 1 : -1, live)

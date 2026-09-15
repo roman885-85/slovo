@@ -60,10 +60,12 @@ final class NativeSettingsSlideTab {
             NativeForm.Row(OurWords.t("Выводить:"), width: 120, [
                 NativeForm.check(OurWords.t("на проектор"), NativeForm.Tie(
                     get: { store.settings.options.pointerProjector ?? true },
-                    set: { value in store.settings.options.pointerProjector = value })),
+                    set: { value in store.settings.options.pointerProjector = value }),
+                    hint: OurWords.t("Показывать указку в зале на проекторе")),
                 NativeForm.check(OurWords.t("в NDI"), NativeForm.Tie(
                     get: { store.settings.options.pointerNDI ?? true },
-                    set: { value in store.settings.options.pointerNDI = value })),
+                    set: { value in store.settings.options.pointerNDI = value }),
+                    hint: OurWords.t("Передавать указку в трансляцию NDI")),
             ]),
             NativeForm.Row("", stretch: true, [
                 NativeForm.label(OurWords.t("Указку ведут мышью по зеркалу проектора в нижнем ряду или пальцем по слайду на телефоне.")),
@@ -175,7 +177,8 @@ final class NativeSettingsSlideTab {
                            [style(\.refSec)]),
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBRefsSeparated", "Пробел между адресами"),
-                                 tie(\.refsSeparated)),
+                                 tie(\.refsSeparated),
+                                 hint: OurWords.t("Отделять пробелом адреса двух переводов на слайде")),
             ]),
         ])
     }
@@ -209,15 +212,19 @@ final class NativeSettingsSlideTab {
             // Запасні підписи — формулювання автора з SettingsForm, а не
             // свої: без установленої VisioBible видно саме їх.
             NativeForm.Row("", [NativeForm.check(state.vb("CBNumPP", "Номер по порядку"),
-                                                 tie(\.songNumberPP))]),
+                                                 tie(\.songNumberPP),
+                                                 hint: OurWords.t("Показывать в названии песни её номер по порядку в песеннике"))]),
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBNumInCollect", "Номер в сборнике"),
-                                 tie(\.songNumberInCollection)),
+                                 tie(\.songNumberInCollection),
+                                 hint: OurWords.t("Показывать в названии песни номер из печатного сборника")),
                 NativeForm.check(state.vb("CBNumInCollectInBrackets", "(Всегда в скобках)"),
-                                 tie(\.songNumberInBrackets)),
+                                 tie(\.songNumberInBrackets),
+                                 hint: OurWords.t("Номер из сборника — всегда в скобках")),
             ]),
             NativeForm.Row("", [NativeForm.check(state.vb("CBDotAfterNum", "Точка после номера"),
-                                                 tie(\.songDotAfterNumber))]),
+                                                 tie(\.songDotAfterNumber),
+                                                 hint: OurWords.t("Ставить точку после номера песни в названии"))]),
         ])
     }
 

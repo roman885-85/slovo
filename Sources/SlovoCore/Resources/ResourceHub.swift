@@ -213,33 +213,15 @@ public final class ResourceHub: @unchecked Sendable {
     /// Завантажити zip у тимчасовий файл. Синхронно — ми вже у фоні.
     private func download(_ item: ResourceItem, progress: @escaping @Sendable (Double?) -> Void) -> Result<URL, ResourceError> {
         guard let url = URL(string: item.url) else { return .failure(.network(item.url)) }
-        let done = DispatchSemaphore(value: 0)
-        var result: Result<URL, ResourceError> = .failure(.network(""))
-        let watcher = DownloadWatcher(progress: progress)
+        // Завдання без замикання завершення: із замиканням URLSession не кличе
+        // `didWriteData` делегата, і смужка у вікні ресурсів стояла на місці
+        // всю завантаження (власник: «полоска загрузки стоит на месте»).
+        let watcher = DownloadWatcher(url: url, progress: progress)
         let session = URLSession(configuration: self.session.configuration, delegate: watcher, delegateQueue: nil)
-        let task = session.downloadTask(with: url) { location, response, error in
-            defer { done.signal() }
-            if let error { result = .failure(.network(error.localizedDescription)); return }
-            // Файл із диска (`file://`) відповідає не HTTP — і це теж успіх:
-            // так ставлять ресурси з теки, і так їх перевіряє самоперевірка.
-            let status = (response as? HTTPURLResponse)?.statusCode ?? (url.isFileURL ? 200 : 0)
-            guard let location, status == 200 else {
-                result = .failure(.network(OurWords.t("сервер ответил %s", "\(status)")))
-                return
-            }
-            let kept = FileManager.default.temporaryDirectory
-                .appendingPathComponent("slovo-resource-" + UUID().uuidString + ".zip")
-            do {
-                try FileManager.default.moveItem(at: location, to: kept)
-                result = .success(kept)
-            } catch {
-                result = .failure(.network(error.localizedDescription))
-            }
-        }
-        task.resume()
-        done.wait()
+        session.downloadTask(with: url).resume()
+        watcher.done.wait()
         session.finishTasksAndInvalidate()
-        return result
+        return watcher.result
     }
 
     /// Розпакувати й покласти на місце: переклад і пісенник — у теку
@@ -363,13 +345,49 @@ extension ResourceHub {
     }
 }
 
-/// Хід завантаження — у частках, коли сервер сказав розмір.
+/// Завантаження одного ресурсу: хід — у частках, коли сервер сказав розмір,
+/// файл — у тимчасову теку, кінець — семафором.
 private final class DownloadWatcher: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let url: URL
     private let progress: @Sendable (Double?) -> Void
-    init(progress: @escaping @Sendable (Double?) -> Void) { self.progress = progress }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
+    let done = DispatchSemaphore(value: 0)
+    private(set) var result: Result<URL, ResourceError> = .failure(.network(""))
+    private var finished = false
+
+    init(url: URL, progress: @escaping @Sendable (Double?) -> Void) {
+        self.url = url
+        self.progress = progress
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         progress(totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : nil)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // Файл із диска (`file://`) відповідає не HTTP — і це теж успіх:
+        // так ставлять ресурси з теки, і так їх перевіряє самоперевірка.
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? (url.isFileURL ? 200 : 0)
+        guard status == 200 else {
+            result = .failure(.network(OurWords.t("сервер ответил %s", "\(status)")))
+            return
+        }
+        // Файл у `location` живе лише до виходу з цього методу.
+        let kept = FileManager.default.temporaryDirectory
+            .appendingPathComponent("slovo-resource-" + UUID().uuidString + ".zip")
+        do {
+            try FileManager.default.moveItem(at: location, to: kept)
+            result = .success(kept)
+        } catch {
+            result = .failure(.network(error.localizedDescription))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { result = .failure(.network(error.localizedDescription)) }
+        guard !finished else { return }
+        finished = true
+        progress(1)
+        done.signal()
     }
 }

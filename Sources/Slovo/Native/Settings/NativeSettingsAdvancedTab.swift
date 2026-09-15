@@ -155,7 +155,8 @@ final class NativeSettingsAdvancedTab: NSObject, NativeListSource, NativeSetting
         NativeForm.Group("", [
             NativeForm.Row("", [NativeForm.check(
                 state.vb("CBFastInputUseBackSpace", "Искать по BackSpace в \"Быстр. выборе\""),
-                boolTie(\.fastInputUseBackSpace))]),
+                boolTie(\.fastInputUseBackSpace),
+                hint: OurWords.t("Стирание символа в поле быстрого выбора сразу повторяет поиск"))]),
             NativeForm.Row("", [NativeForm.check(
                 state.vb("CBSeparatorTenVerses", "Раздел. линией по 10 стихов"),
                 boolTie(\.separatorTenVerses),

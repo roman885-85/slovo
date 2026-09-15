@@ -35,6 +35,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         list.onLeadClick = { [weak self] index in self?.toggle(at: index) }
         kinds.target = self
         kinds.action = #selector(kindChosen)
+        kinds.toolTip = OurWords.t("Какой список показать: переводы Библии или песенники")
         kinds.selectedSegment = 0
         kinds.segmentStyle = .texturedRounded
         // Підписи — одразу: доти вони ставилися лише після першого
@@ -106,10 +107,12 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         return NativeForm.Group(state.vb("Label1", OurWords.t("Текстовые модули:")), [
             NativeForm.Row("", [kinds]),
             NativeForm.Row("", [
-                NativeForm.button(state.vbHint("SBCheckAll", OurWords.t("Пометить все")), hint: nil) { [weak self] in
+                NativeForm.button(state.vbHint("SBCheckAll", OurWords.t("Пометить все")),
+                                  hint: OurWords.t("Включить все модули открытого списка")) { [weak self] in
                     self?.setShownSection(enabled: true)
                 },
-                NativeForm.button(state.vbHint("SBUnCheckAll", OurWords.t("Снять пометку со всех")), hint: nil) { [weak self] in
+                NativeForm.button(state.vbHint("SBUnCheckAll", OurWords.t("Снять пометку со всех")),
+                                  hint: OurWords.t("Выключить все модули открытого списка")) { [weak self] in
                     self?.setShownSection(enabled: false)
                 },
                 status,
@@ -131,10 +134,12 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
             NativeForm.Row("", [
                 NativeForm.check(state.vb("CBLoadAllBooks", OurWords.t("Загружать Тексты в память")),
                                  NativeForm.Tie(get: { [store] in store.settings.options.loadAllBooks },
-                                                set: { [store] in store.settings.options.loadAllBooks = $0 })),
+                                                set: { [store] in store.settings.options.loadAllBooks = $0 }),
+                                 hint: OurWords.t("Держать тексты модулей в памяти целиком: переходы быстрее, памяти нужно больше")),
                 NativeForm.check(state.vb("CBLazyLoad", OurWords.t("Отложенная загрузка модулей")),
                                  NativeForm.Tie(get: { [store] in store.settings.options.lazyLoadModules },
-                                                set: { [store] in store.settings.options.lazyLoadModules = $0 })),
+                                                set: { [store] in store.settings.options.lazyLoadModules = $0 }),
+                                 hint: OurWords.t("Читать модуль только тогда, когда его открыли: быстрее запуск")),
             ]),
         ])
     }

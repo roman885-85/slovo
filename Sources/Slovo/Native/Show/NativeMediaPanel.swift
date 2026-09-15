@@ -309,6 +309,8 @@ final class NativeMediaPanel: NSView {
         }
         repeatButton.toolTip = hint("PSBVideoRepeate", "Повтор")
         muteButton.toolTip = hint("PngSBAudioMute", "Без звука")
+        position.toolTip = OurWords.t("Место воспроизведения: потяните, чтобы перемотать")
+        volume.toolTip = OurWords.t("Громкость")
     }
 
     // MARK: - Действия
