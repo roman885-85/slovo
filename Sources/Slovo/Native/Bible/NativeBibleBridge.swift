@@ -130,6 +130,7 @@ final class NativeBibleBridge {
         var chapterCount = 0
         var loadingChapters = false
         var selectedChapter = 0
+        var chaptersRevision = 0
         var selectedVerses: [Int] = []
         var scrollTicket = 0
         var fontSize: Double = 13
@@ -165,6 +166,7 @@ final class NativeBibleBridge {
             chapterCount = state.chapters.count
             loadingChapters = state.isLoadingChapters
             selectedChapter = state.selectedChapterNumber
+            chaptersRevision = state.chaptersRevision
             selectedVerses = state.selectedVerseNumbers
             scrollTicket = state.scrollToCurrentVerse
             fontSize = state.listFontSize
@@ -199,14 +201,17 @@ final class NativeBibleBridge {
             }
             if selectedBook != old.selectedBook { kinds.append(.bookSelection) }
             if chapterCount != old.chapterCount || loadingChapters != old.loadingChapters
-                || selectedBook != old.selectedBook || primary != old.primary {
+                || selectedBook != old.selectedBook || primary != old.primary
+                || chaptersRevision != old.chaptersRevision {
                 kinds.append(.chapters)
             }
             if selectedChapter != old.selectedChapter { kinds.append(.chapterSelection) }
-            // Склад віршів — це переклад, книга і розділ. Плюс число розділів:
-            // книга розбирається у фоні, і до кінця розбору розділи порожні.
+            // Склад віршів — це переклад, книга і розділ. Плюс самі розділи:
+            // книга розбирається у фоні, і прочитані розділи приходять тоді,
+            // коли переклад, книга й розділ уже ті самі.
             if primary != old.primary || selectedBook != old.selectedBook
-                || selectedChapter != old.selectedChapter || chapterCount != old.chapterCount {
+                || selectedChapter != old.selectedChapter || chapterCount != old.chapterCount
+                || chaptersRevision != old.chaptersRevision {
                 kinds.append(.verses)
             }
             if selectedVerses != old.selectedVerses || scrollTicket != old.scrollTicket {

@@ -36,6 +36,27 @@ extension Diagnostics {
                             status: own.isEmpty ? .ok : .failed,
                             detail: own.isEmpty ? "Slovo.ini, hotkeys.ini, ЧИТАТИ.md є" : "бракує: " + own.joined(separator: ", ")))
 
+        // Фони за умовчанням — як у повній збірці власника (15.09): загальний —
+        // хрест, фон слайда — Black.jpg; файли — у BackGrounds ресурсів.
+        let defaultsName = "Фони за умовчанням — як у повній збірці (хрест і Black.jpg)"
+        if let url = IniSettings.locateConfig(), let ini = try? IniSettings(fileAt: url) {
+            let common = ini.string("CommonBackgrFileName", in: "settings") ?? ""
+            let slide = ini.string("SlideBackgrFileName", in: "settings") ?? ""
+            let root = state.modulesFolder.deletingLastPathComponent()
+            func present(_ relative: String) -> Bool {
+                !relative.isEmpty && fm.fileExists(atPath: root.appendingPathComponent(relative.replacingOccurrences(of: "\\", with: "/")).path)
+            }
+            var trouble: [String] = []
+            if common != "BackGrounds\\606958597094a-depositphotos_9766771_xl-2015.jpg" { trouble.append("загальний фон «\(common)»") }
+            if slide != "BackGrounds\\Black.jpg" { trouble.append("фон слайда «\(slide)»") }
+            let filesNote = present(common) && present(slide) ? "файли на місці в \(root.lastPathComponent)"
+                : "файлів у теці даних нема (збірка «лише програма» до завантаження фонів)"
+            checks.append(Check(area: area, name: defaultsName, status: trouble.isEmpty ? .ok : .failed,
+                                detail: trouble.isEmpty ? "у Slovo.ini: \(common), \(slide); \(filesNote); зараз: загальний «\((state.commonBackgroundPath as NSString?)?.lastPathComponent ?? "—")», слайда «\((state.slideBackgroundPath as NSString?)?.lastPathComponent ?? "—")»"
+                                                        : trouble.joined(separator: "; ")))
+        } else {
+            checks.append(Check(area: area, name: defaultsName, status: .skipped, detail: "Slovo.ini не знайдено"))
+        }
         // 4. Пісенники .vbm у теці модулів → .songbook один раз; оригінали — в архів.
         // Джерело — збірник, який бібліотека справді відкриває (у власника є
         // битий UNTTP.vbm — його не беремо); `.vbm` для проби збираємо самі.

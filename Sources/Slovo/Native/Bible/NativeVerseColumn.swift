@@ -16,6 +16,9 @@ final class NativeVerseColumn: NSView {
     private var viewButtons: [NativeIconButton] = []
     private let separator = NativeHairline()
     private let rows = NativeVerseRows()
+
+    /// Текст першого рядка списку — самоперевірці.
+    var firstVerseTextForCheck: String? { rows.rowCount > 0 ? rows.row(at: 0).text : nil }
     private let list: NativeList
     let quick = NativeQuickField()
     private weak var state: AppState?

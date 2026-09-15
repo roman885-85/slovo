@@ -575,6 +575,17 @@ final class AppState: ObservableObject {
                 let url = dataRoot.appendingPathComponent(relative.replacingOccurrences(of: "\\", with: "/"))
                 if FileManager.default.fileExists(atPath: url.path) { commonBackgroundPath = url.path }
             }
+            // Фон слайда за умовчанням — як у повній збірці власника («Картинка
+            // фона по умолчанию, как в последней полной версии»): загальний —
+            // хрест, фон слайда — Black.jpg. Лише поки людина фону не вибирала.
+            if (Defaults.slideBackground ?? "").isEmpty, slideBackgroundPath == nil,
+               let relative = config.string("SlideBackgrFileName", in: "settings") {
+                let url = dataRoot.appendingPathComponent(relative.replacingOccurrences(of: "\\", with: "/"))
+                if FileManager.default.fileExists(atPath: url.path) {
+                    slideBackgroundPath = url.path
+                    applyBackgrounds()
+                }
+            }
         }
         allModules = order(loaded.modules, using: config)
         rebuildTabTitles()
@@ -979,6 +990,7 @@ final class AppState: ObservableObject {
     /// Поэтому: разобранную книгу отдаём сразу, неразобранную читаем в фоне.
     private func reloadChapters() {
         guard let module = primaryModule, books.indices.contains(selectedBookIndex) else {
+            chaptersRevision &+= 1
             chapters = []
             return
         }
@@ -997,11 +1009,16 @@ final class AppState: ObservableObject {
         // окремо у `visibleBooks`, тож позиція тут і номер книги збігаються.)
         let requested = selectedBookIndex
         let wanted = book.index
+        let moduleID = primaryModuleID
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let parsed = (try? module.chapters(ofBook: book)) ?? []
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    // Номер книги в різних перекладах той самий — без звірки
+                    // перекладу розбір попереднього, що запізнився, ліг би
+                    // поверх нового.
                     guard let self, self.selectedBookIndex == requested,
+                          self.primaryModuleID == moduleID,
                           self.books.indices.contains(requested),
                           self.books[requested].index == wanted else { return }
                     self.isLoadingChapters = false
@@ -1011,7 +1028,17 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Скільки разів мінявся склад розділів.
+    ///
+    /// Вікну — ознака, що вірші треба перечитати. Самих лише перекладу, книги
+    /// й номера розділу для цього мало: книгу нового перекладу читають у фоні,
+    /// і коли розділи приходять, усі три величини вже ті самі. Список віршів
+    /// лишався з тексту колишнього перекладу, а в передпоказ і в зал ішов
+    /// новий (0.86, перемикання на смузі перекладів).
+    private(set) var chaptersRevision = 0
+
     private func applyChapters(_ parsed: [Chapter]) {
+        chaptersRevision &+= 1
         chapters = parsed
         if !chapters.contains(where: { $0.number == selectedChapterNumber }) {
             selectedChapterNumber = chapters.first?.number ?? 1

@@ -16,7 +16,57 @@ extension Diagnostics {
         checks.append(contentsOf: nativeBibleRows(state))
         checks.append(contentsOf: nativeBibleBridge(state))
         checks.append(contentsOf: nativeBibleColumns(state))
+        checks.append(nativeTranslationSwitchVerses(state))
         return checks
+    }
+
+    /// Перемикання перекладу: у списку віршів — текст нового перекладу.
+    ///
+    /// Книгу нового перекладу читають у фоні; поки розділів не було, список
+    /// перечитувався з колишніх, а коли вони приходили — вже не перечитувався.
+    /// Оператор бачив Синодальний, а в зал ішов Турконяк (0.86, смуга
+    /// перекладів). Беремо переклад, де відкрита книга ще не прочитана.
+    private static func nativeTranslationSwitchVerses(_ state: AppState) -> Check {
+        let area = "Біблія у вікні AppKit"
+        let name = "Зміна перекладу: список віршів показує новий переклад"
+        guard let book = state.currentBook else {
+            return Check(area: area, name: name, status: .skipped, detail: "книгу не відкрито")
+        }
+        let was = state.primaryModuleID
+        let fresh = state.allModules.first { module in
+            module.identifier != was && module.books.contains { $0.index == book.index }
+                && module.cachedChapters(ofBook: module.books.first { $0.index == book.index }!) == nil
+        }
+        guard let fresh else {
+            return Check(area: area, name: name, status: .skipped,
+                         detail: "немає другого перекладу з непрочитаною книгою «\(book.fullName)»")
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        let verse = NativeVerseColumn(state: state)
+        verse.frame = NSRect(x: 0, y: 0, width: 640, height: 660)
+        window.contentView?.addSubview(verse)
+        NativeBibleBridge.shared.start(state: state)
+        defer {
+            state.primaryModuleID = was
+            wait(untilTrue: { !state.isLoadingChapters }, seconds: 5)
+            NativeBibleBridge.shared.sync()
+            verse.removeFromSuperview()
+        }
+
+        let before = verse.firstVerseTextForCheck ?? ""
+        state.primaryModuleID = fresh.identifier
+        NativeBibleBridge.shared.sync()
+        let wasLoading = state.isLoadingChapters
+        wait(untilTrue: { !state.isLoadingChapters }, seconds: 8)
+        // Відкладена звірка моста йде наступним проходом циклу подій.
+        wait(untilTrue: { false }, seconds: 0.3)
+        let wanted = state.currentChapter?.verses.first?.text ?? ""
+        let shown = verse.firstVerseTextForCheck ?? ""
+        let ok = !wanted.isEmpty && shown == wanted
+        return Check(area: area, name: name, status: ok ? .ok : .failed,
+                     detail: "\(was) → \(fresh.identifier) (книга читалась у фоні: \(wasLoading ? "так" : "ні")); "
+                         + "було «\(before.prefix(28))», у списку «\(shown.prefix(28))», у перекладі «\(wanted.prefix(28))»")
     }
 
     // MARK: - Джерела рядків
