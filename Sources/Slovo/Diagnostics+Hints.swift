@@ -24,6 +24,7 @@ extension Diagnostics {
             Signals.shared.send(.language)
             var bare: [String] = []
             var foreign: [String] = []
+            var blank: [String] = []
             for mode in AppState.WorkMode.allCases {
                 state.mode = mode
                 Signals.shared.send(.mode)
@@ -31,6 +32,16 @@ extension Diagnostics {
                 root.layoutSubtreeIfNeeded()
                 for (control, label) in hintedControls(in: root) {
                     let place = "\(mode.rawValue): \(label)"
+                    // Кнопка, на якій немає ні значка, ні слова: у випадного
+                    // списку видно не його власний значок, а перший пункт меню.
+                    if let popup = control as? NSPopUpButton {
+                        let face = popup.pullsDown ? popup.itemArray.first : popup.selectedItem
+                        if face?.image == nil, (face?.title ?? "").isEmpty, !blank.contains(place) { blank.append(place) }
+                    } else if let button = control as? NSButton, !(control is NSSegmentedControl),
+                              button.image == nil, button.title.isEmpty, button.attributedTitle.length == 0,
+                              !blank.contains(place) {
+                        blank.append(place)
+                    }
                     guard let tip = control.toolTip, !tip.isEmpty else {
                         if !bare.contains(where: { $0.hasSuffix(": " + label) }) { bare.append(place) }
                         continue
@@ -40,6 +51,11 @@ extension Diagnostics {
                         foreign.append("\(place) «\(tip)»")
                     }
                 }
+            }
+            if language == "uk" {
+                checks.append(Check(area: "Підказки", name: "Кнопки мають значок або підпис",
+                                    status: blank.isEmpty ? .ok : .failed,
+                                    detail: blank.isEmpty ? "у всіх режимах" : "порожні: " + blank.joined(separator: "; ")))
             }
             checks.append(Check(area: "Підказки", name: "Елементи керування мають підказки (\(language))",
                                 status: bare.isEmpty ? .ok : .failed,

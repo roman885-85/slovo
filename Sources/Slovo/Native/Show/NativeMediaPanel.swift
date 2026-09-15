@@ -275,8 +275,13 @@ final class NativeMediaPanel: NSView {
 
     private func rebuildTracks() {
         let menu = NSMenu()
-        // Первый пункт у выпадающей кнопки — её собственный значок.
-        menu.addItem(NSMenuItem())
+        // Первый пункт у выпадающей кнопки — её собственный значок. Пустой
+        // пункт кнопка и рисовала: значок, заданный самой кнопке, у
+        // выпадающего списка не виден — владелец: «в плеере есть кнопка без
+        // обозначения».
+        let face = NSMenuItem()
+        face.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)
+        menu.addItem(face)
         if model.audioTracks.isEmpty {
             let item = NSMenuItem(title: message("TextMessages64", "Аудио дорожка"),
                                   action: nil, keyEquivalent: "")

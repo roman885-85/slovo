@@ -249,7 +249,7 @@ Releases.
 
 ## Стан
 
-Версія 0.91. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
+Версія 0.92. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
 

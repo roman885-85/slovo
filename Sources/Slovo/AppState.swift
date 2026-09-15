@@ -116,10 +116,36 @@ final class AppState: ObservableObject {
     var showsSongSlide: Bool { mode == .songs }
 
     /// Свій шаблон виводу з урахуванням того, що на слайді: пісням — їхній,
-    /// коли призначено, інакше спільний.
-    func ownPreset(for kind: OutputKind) -> SlidePreset? {
-        if showsSongSlide, let own = presets.preset(for: kind, songs: true) { return own }
+    /// коли призначено, інакше спільний. `songs` — для залу: там важить не
+    /// відкрита вкладка, а те, звідки слайд вивели (`liveIsSong`).
+    func ownPreset(for kind: OutputKind, songs: Bool? = nil) -> SlidePreset? {
+        if songs ?? showsSongSlide, let own = presets.preset(for: kind, songs: true) { return own }
         return presets.preset(for: kind)
+    }
+
+    /// Чи слайд у залі — пісня. Ставиться в мить виводу й до наступного
+    /// виводу не міняється.
+    ///
+    /// Власник: «если не погасить проектор, то при переключении между
+    /// вкладками, экран переключает стиль слайда выбранной вкладки сразу на
+    /// проектор. Нужно чтобы… на екране ничего не менялось, пока не будет
+    /// включен выбранный слайд». Шаблон залу вибирався за відкритою вкладкою:
+    /// перейшли з Біблії на Пісні — і вірш у залі перемалювався шаблоном пісень.
+    private(set) var liveIsSong = false
+    /// Підписи слайда в залі, зняті в мить виводу: назва пісні й назви
+    /// перекладів. Інакше вибір іншої пісні чи перекладу в передпоказі
+    /// одразу міняв би підписи під слайдом, що вже стоїть у залі.
+    private var liveCaptions: (song: String, first: String, firstShort: String, second: String, secondShort: String)
+        = ("", "", "", "", "")
+
+    /// Слайд іде в зал: запам'ятати, звідки він і з якими підписами.
+    private func markLive() {
+        liveIsSong = mode == .songs
+        liveCaptions = (shownSong?.song.title ?? "",
+                        primaryModule?.displayName ?? "",
+                        primaryModule.map { tabTitle(for: $0) } ?? "",
+                        secondModule?.displayName ?? "",
+                        secondModule.map { tabTitle(for: $0) } ?? "")
     }
 
     /// Шаблон, который сейчас правят в Конструкторе: зал показывает его, не
@@ -141,8 +167,11 @@ final class AppState: ObservableObject {
     /// человек менял, а на микшере оставалось прежнее.
     func preset(for kind: OutputKind) -> SlidePreset? {
         let target: OutputKind = kind == .ndi ? .screen : kind
-        var chosen = (target == .screen || target == .preview) ? (livePreset ?? ownPreset(for: target))
-                                                                : ownPreset(for: target)
+        // Зал, трансляція й сторінки малюють те, що ВИВЕДЕНО, — шаблоном тієї
+        // вкладки, з якої вивели. Передпоказ — тим, що зараз відкрито.
+        let songs = target == .preview ? showsSongSlide : liveIsSong
+        var chosen = (target == .screen || target == .preview) ? (livePreset ?? ownPreset(for: target, songs: songs))
+                                                                : ownPreset(for: target, songs: songs)
         // Переход, выбранный в «Параметрах», главнее перехода шаблона: иначе
         // выбор в настройках не менял ничего, пока в зале стоит свой шаблон
         // (владелец: «половина эффектов не работает»).
@@ -1467,7 +1496,13 @@ final class AppState: ObservableObject {
     /// Строки, которые шаблон Конструктора расставляет по своим объектам:
     /// сам стих, второй перевод, адрес, название песни, имена переводов.
     private func refreshSlideTexts() {
-        slideTexts = texts(for: liveSlide)
+        slideTexts = ConstructorSample(
+            slide: liveSlide,
+            songTitle: liveCaptions.song,
+            moduleNameFirst: liveCaptions.first,
+            moduleShortNameFirst: liveCaptions.firstShort,
+            moduleNameSecond: liveCaptions.second,
+            moduleShortNameSecond: liveCaptions.secondShort)
     }
 
     /// Тексты объектов шаблона для данного слайда: стих, адрес, названия
@@ -1727,6 +1762,7 @@ final class AppState: ObservableObject {
             // Сперва новый слайд, потом снятие кадра: снятие кадра само
             // пересобирает выводы, и делать это со вчерашним слайдом нельзя.
             liveSlide = ready
+            markLive()
             hallTakesText()
             if !isLive { isLive = true }
         }
@@ -1772,6 +1808,7 @@ final class AppState: ObservableObject {
         // Сперва новый слайд, потом снятие кадра: снятие кадра само
         // пересобирает выводы, и делать это со вчерашним слайдом нельзя.
         liveSlide = slide
+        markLive()
         hallTakesText()
         if !isLive { isLive = true }
         pushToOutputs()
@@ -1945,6 +1982,7 @@ final class AppState: ObservableObject {
             // без этого кадр плеера оставался поверх слайда. Сперва слайд,
             // потом кадр — см. `showCurrent`.
             liveSlide = slide
+            markLive()
             hallTakesText()
             // «В историю заносятся адреса всех стихов, которые были ПОКАЗАНЫ
             // в окне слайда» — значит при скрытом показе писать нечего: зал
@@ -2604,10 +2642,12 @@ final class AppState: ObservableObject {
             resumeFromHiddenStates()
             refreshSlide()
             liveSlide = slide
+            markLive()
             pushToOutputs()
             return
         }
         liveSlide = slide
+        markLive()
         isBlackout = true
         isLive = true
         // «Затемнение — это чёрный экран» без оговорок: кадр видео поверх
@@ -2619,6 +2659,7 @@ final class AppState: ObservableObject {
     /// Ctrl+F5 — фон без текста: пауза в подаче, но экран не гаснет.
     func showBlankSlide() {
         liveSlide = slide
+        markLive()
         isBlackout = false
         isTextHidden = true
         isLive = true

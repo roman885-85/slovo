@@ -30,7 +30,71 @@ extension Diagnostics {
         checks.append(contentsOf: showAround(state))
         checks.append(contentsOf: ndiVideoSection(state: state))
         checks.append(contentsOf: showListSection(state: state))
+        checks.append(hallStyleStaysCheck(state))
         return checks
+    }
+
+    /// Власник: «если не погасить проектор, то при переключении между
+    /// вкладками, экран переключает стиль слайда выбранной вкладки сразу на
+    /// проектор… пока не будет включен выбранный слайд».
+    ///
+    /// Пісням призначаємо свій шаблон, відмінний від спільного; вірш — у зал;
+    /// перемикаємо вкладку на «Пісні» — зал мусить лишитися спільним, а
+    /// передпоказ — стати пісенним. Виводимо пісню — зал бере шаблон пісень;
+    /// назад на Біблію — зал так і лишається пісенним, поки не вивели вірш.
+    static func hallStyleStaysCheck(_ state: AppState) -> Check {
+        let area = "Показ"
+        let name = "Перемикання вкладки не міняє шаблон слайда в залі"
+        let common = state.presets.preset(for: .screen)
+        guard let songsPreset = state.presets.presets.first(where: { $0.id != common?.id }) else {
+            return Check(area: area, name: name, status: .skipped, detail: "немає свого шаблону, відмінного від спільного")
+        }
+        guard let library = state.songLibrary,
+              let book = library.books.lazy.compactMap({ library.book($0.id) }).first(where: { !$0.songs.isEmpty }),
+              let song = book.songs.first(where: { !$0.parts.isEmpty }) else {
+            return Check(area: area, name: name, status: .skipped, detail: "немає пісенника з піснями")
+        }
+        let wasMode = state.mode
+        let wasLive = state.isLive
+        let wasSongs = state.presets.preset(for: .screen, songs: true)
+        defer {
+            state.applyPreset(wasSongs, forSongs: true)
+            state.mode = wasMode
+            state.isLive = wasLive
+            Signals.shared.send(.mode)
+        }
+        state.applyPreset(songsPreset, forSongs: true)
+        state.mode = .bible
+        Signals.shared.send(.mode)
+        state.showCurrent()
+        let bibleHall = state.preset(for: .screen)?.id
+        let bibleSlide = state.liveSlide
+
+        state.mode = .songs
+        Signals.shared.send(.mode)
+        let afterSwitchHall = state.preset(for: .screen)?.id
+        let afterSwitchNDI = state.preset(for: .ndi)?.id
+        let afterSwitchPreview = state.preset(for: .preview)?.id
+        let slideKept = state.liveSlide == bibleSlide
+
+        state.showSongPart(song, song.parts[0])
+        state.showCurrent()
+        let songHall = state.preset(for: .screen)?.id
+
+        state.mode = .bible
+        Signals.shared.send(.mode)
+        let backHall = state.preset(for: .screen)?.id
+
+        let ok = bibleHall == common?.id && afterSwitchHall == common?.id && afterSwitchNDI == common?.id
+            && afterSwitchPreview == songsPreset.id && slideKept
+            && songHall == songsPreset.id && backHall == songsPreset.id
+        func title(_ id: UUID?) -> String {
+            id == nil ? "авторський" : (id == songsPreset.id ? "пісенний «\(songsPreset.name)»" : "спільний «\(common?.name ?? "?")»")
+        }
+        return Check(area: area, name: name, status: ok ? .ok : .failed,
+                     detail: "вірш у залі: \(title(bibleHall)); перейшли на «Пісні» — зал \(title(afterSwitchHall)), NDI \(title(afterSwitchNDI)), "
+                        + "передпоказ \(title(afterSwitchPreview)), слайд у залі той самий: \(slideKept ? "так" : "ні"); "
+                        + "вивели пісню — зал \(title(songHall)); назад на Біблію — зал \(title(backHall))")
     }
 
     // MARK: - Вокруг показа
