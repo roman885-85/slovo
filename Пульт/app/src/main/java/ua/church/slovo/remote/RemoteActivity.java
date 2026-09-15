@@ -308,7 +308,14 @@ public final class RemoteActivity extends Activity {
     // MARK: Меню
 
     private static final int MENU_CONNECTION = 1, MENU_VOLUME = 2, MENU_AWAKE = 3,
-        MENU_REVERSED = 4, MENU_POINTER = 5, MENU_RESET = 6, MENU_ZOOM_OFF = 7;
+        MENU_REVERSED = 4, MENU_POINTER = 5, MENU_RESET = 6, MENU_ZOOM_OFF = 7, MENU_LANGUAGE = 8;
+
+    /// Мова інтерфейсу (див. `Lang`) — до того, як вікно візьме ресурси.
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        applyOverrideConfiguration(Lang.override(base, null));
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -320,6 +327,7 @@ public final class RemoteActivity extends Activity {
         menu.add(0, MENU_POINTER, 4, R.string.menu_pointer);
         menu.add(0, MENU_ZOOM_OFF, 5, R.string.menu_zoom_off);
         menu.add(0, MENU_RESET, 6, R.string.menu_reset);
+        menu.add(0, MENU_LANGUAGE, 7, R.string.menu_language);
         return true;
     }
 
@@ -351,6 +359,9 @@ public final class RemoteActivity extends Activity {
                 return true;
             case MENU_RESET:
                 confirmReset();
+                return true;
+            case MENU_LANGUAGE:
+                Lang.showChooser(this);
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -973,7 +984,7 @@ public final class RemoteActivity extends Activity {
             try {
                 byte[] bytes;
                 try (InputStream stream = getContentResolver().openInputStream(uri)) {
-                    if (stream == null) throw new java.io.IOException("порожній файл");
+                    if (stream == null) throw new java.io.IOException(Lang.t("порожній файл", "empty file"));
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     byte[] chunk = new byte[65536];
                     int count;
@@ -1045,7 +1056,7 @@ public final class RemoteActivity extends Activity {
                 main.post(() -> status.setText(getString(R.string.photo_sending, n, uris.size())));
                 try {
                     PhotoShrink.Result photo = PhotoShrink.prepare(getContentResolver(), uris.get(i), 2560);
-                    JSONObject answer = current.upload("Фото " + stamp + "-" + n + "." + photo.extension,
+                    JSONObject answer = current.upload(Lang.t("Фото ", "Photo ") + stamp + "-" + n + "." + photo.extension,
                                                        photo.bytes, false);
                     if (first < 0 && answer != null) first = answer.optInt("page", -1);
                     sent++;

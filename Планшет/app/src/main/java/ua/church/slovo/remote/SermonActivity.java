@@ -149,8 +149,8 @@ public final class SermonActivity extends Activity {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        Configuration scaled = UiScale.override(base);
-        if (scaled != null) applyOverrideConfiguration(scaled);
+        // Мова інтерфейсу (див. `Lang`) і масштаб — одним налаштуванням.
+        applyOverrideConfiguration(Lang.override(base, UiScale.override(base)));
     }
 
     @Override
@@ -1252,7 +1252,7 @@ public final class SermonActivity extends Activity {
     private void copy(Uri uri, File target) throws IOException {
         try (InputStream in = getContentResolver().openInputStream(uri);
              OutputStream out = new FileOutputStream(target)) {
-            if (in == null) throw new IOException("файл не відкривається");
+            if (in == null) throw new IOException(Lang.t("файл не відкривається", "the file does not open"));
             byte[] chunk = new byte[65536];
             int count;
             while ((count = in.read(chunk)) > 0) out.write(chunk, 0, count);

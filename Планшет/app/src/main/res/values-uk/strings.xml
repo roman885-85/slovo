@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Рядки планшета. Спільні рядки (з'єднання, Біблія, указка) — з пульта
+     для телефона; тут лише свої й ті, що в планшета звучать інакше. -->
+<!-- Українська: для пристроїв українською й російською (Lang, власник: «если локализация не русская и не украинская — английский»). -->
+<resources>
+    <string name="app_name">Планшет Слова</string>
+    <!-- Куди веде вікно з'єднання, коли комп'ютер знайдено. -->
+
+    <string name="t_tab_bible">Біблія</string>
+    <string name="t_tab_songs">Пісні</string>
+    <string name="t_tab_presentation">Презентація</string>
+    <string name="t_tab_media">Медіа</string>
+    <string name="t_tab_pictures">Зображення</string>
+    <string name="t_tab_screen">Екран</string>
+    <string name="t_tab_text">Текст</string>
+
+    <string name="t_plan">План</string>
+    <string name="t_history">Історія</string>
+    <string name="t_plan_add">＋ Додати вибране</string>
+    <string name="t_up">↑ Вище</string>
+    <string name="t_down">↓ Нижче</string>
+    <string name="t_remove">✕ Прибрати</string>
+    <string name="t_history_empty">Історія порожня — сюди потрапляє все, що показано в залі</string>
+    <string name="t_plan_empty">План порожній. «＋ Додати вибране» кладе сюди те, що вибрано ліворуч.</string>
+
+    <string name="t_blank">Порожній</string>
+    <string name="t_hall">Зал</string>
+    <string name="t_hall_video">У залі відео: %1$s</string>
+    <string name="t_hall_black">Зал затемнено</string>
+    <string name="t_hall_empty">У залі нічого не показано</string>
+    <string name="t_preview">Передпоказ: %1$s</string>
+
+    <string name="t_search_hint">Пошук за словами</string>
+    <string name="t_search_go">Знайти</string>
+    <string name="t_search_close">До книг</string>
+    <string name="t_searching">Шукаю «%1$s»…</string>
+    <string name="t_search_none">За «%1$s» нічого не знайдено</string>
+    <string name="t_search_slow">Програма ще шукає «%1$s» — спробуйте ще раз за хвилину</string>
+    <string name="t_search_found">«%1$s»: %2$d. Дотик — у передпоказ, довгий дотик — у зал</string>
+
+    <string name="t_songbook">Пісенник</string>
+    <string name="t_song_filter">Номер або слова назви</string>
+    <string name="t_parts">Частини пісні — дотик виводить у зал</string>
+    <string name="t_songs_loading">Завантажую пісні…</string>
+
+    <string name="t_media_empty">Список плеєра порожній — файли додають на комп\'ютері</string>
+    <string name="t_play">▶ Грати</string>
+    <string name="t_pause">⏸ Пауза</string>
+    <string name="t_stop">⏹ Стоп</string>
+    <string name="t_to_begin">⏮ Спочатку</string>
+    <string name="t_mute">Без звуку</string>
+    <string name="t_to_screen">На екран</string>
+    <string name="t_repeat">Повтор</string>
+    <string name="t_volume">Гучність</string>
+    <string name="t_nothing_open">Нічого не відкрито</string>
+
+    <string name="t_pictures_empty">Картинок немає. «Фото з планшета» додає їх сюди</string>
+    <string name="t_add_photos">Фото з планшета</string>
+    <string name="t_add_file">Файл з планшета</string>
+
+    <string name="t_screen_refresh">Оновити</string>
+    <string name="t_screen_stop">Зупинити показ</string>
+    <string name="t_screen_empty">Джерел немає. Можливо, програмі потрібен дозвіл на запис екрана: Системні параметри → Приватність і безпека → Запис екрана</string>
+    <string name="t_screen_running">Показ іде: %1$s</string>
+
+    <string name="t_text_title_hint">Заголовок (необов\'язково)</string>
+    <string name="t_text_body_hint">Текст оголошення</string>
+    <string name="t_text_preview">У передпоказ</string>
+    <string name="t_text_show">Показати в залі</string>
+    <string name="t_text_pages">Сторінка %1$d з %2$d</string>
+
+    <!-- Порожній показ: на планшеті кнопка зветься інакше, ніж на телефоні. -->
+    <string name="show_empty">Презентацію не відкрито. «Файл з планшета» відкриє PDF або PowerPoint із планшета, а на комп\'ютері — вкладка «Презентація»</string>
+    <string name="t_decks">Презентації</string>
+    <string name="t_pages">Слайди</string>
+
+    <!-- План проповіді: складається заздалегідь, без зв'язку з програмою. -->
+    <string name="menu_sermon">План проповіді…</string>
+    <string name="s_title">План проповіді</string>
+    <string name="s_plan_name_hint">Назва плану, напр. «Неділя, 14 вересня»</string>
+    <string name="s_plans">Плани</string>
+    <string name="s_library">Переклади й пісенники</string>
+    <string name="s_upload">⬆ Завантажити в «Слово»</string>
+    <string name="s_tab_file">Файл</string>
+    <string name="s_plan_empty">План порожній. Додайте ліворуч вірші, пісні, файли чи текст</string>
+    <string name="s_add_verses">＋ Додати вірші в план</string>
+    <string name="s_add_chapter">＋ Увесь розділ</string>
+    <string name="s_pick_verses">Торкніться віршів — ще раз знімає позначку</string>
+    <string name="s_no_bibles">У бібліотеці планшета ще немає перекладів. «Переклади й пісенники» вгорі → зі «Слова», з GitHub або з файла</string>
+    <string name="s_no_songbooks">У бібліотеці планшета ще немає пісенників. «Переклади й пісенники» вгорі → зі «Слова» або з файла (.vbm)</string>
+    <string name="s_add_song">＋ Додати пісню в план</string>
+    <string name="s_file_hint">Презентація (PDF, PowerPoint), картинка чи відео. Файл копіюється на планшет і на служінні їде в «Слово» разом із планом</string>
+    <string name="s_pick_file">Вибрати файл…</string>
+    <string name="s_text_add">＋ Додати текст у план</string>
+    <string name="s_new_plan">＋ Новий план</string>
+    <string name="s_delete_plan">Видалити цей план</string>
+    <string name="s_delete_plan_confirm">Видалити план «%1$s»?</string>
+    <string name="s_plan_items">%1$s · пунктів: %2$d</string>
+    <string name="s_untitled">План без назви</string>
+    <string name="s_library_title">Бібліотека планшета</string>
+    <string name="s_library_empty">Бібліотека порожня — додайте переклад чи пісенник</string>
+    <string name="s_from_slovo">Зі «Слова»</string>
+    <string name="s_from_github">З GitHub</string>
+    <string name="s_from_file">З файла</string>
+    <string name="s_delete_module">Прибрати «%1$s» з планшета?</string>
+    <string name="s_delete">Прибрати</string>
+    <string name="s_source_slovo">зі «Слова»</string>
+    <string name="s_source_github">з GitHub</string>
+    <string name="s_source_file">з файла</string>
+    <string name="s_kind_bible">Біблія</string>
+    <string name="s_kind_songs">Пісенник</string>
+    <string name="s_need_connection">Спершу підключіться до «Слова»: меню планшета → «Підключення…»</string>
+    <string name="s_loading">Завантажую «%1$s»…</string>
+    <string name="s_loaded">Додано: %1$s</string>
+    <string name="s_failed">Не вдалося: %1$s</string>
+    <string name="s_github_loading">Читаю список модулів на GitHub…</string>
+    <string name="s_slovo_loading">Питаю «Слово», що в нього є…</string>
+    <string name="s_choose">Що взяти на планшет</string>
+    <string name="s_take">Взяти</string>
+    <string name="s_nothing_new">Нового для планшета немає — усе вже в бібліотеці</string>
+    <string name="s_uploading">Надсилаю план у «Слово»…</string>
+    <string name="s_importing">Ставлю в «Слово» «%1$s»…</string>
+    <string name="s_sending_file">Надсилаю файл «%1$s»…</string>
+    <string name="s_uploaded">План у «Слові»: пунктів %1$d. Керуйте показом із планшета</string>
+    <string name="s_upload_empty">План порожній — надсилати нічого</string>
+    <string name="s_unsupported_file">Це не модуль: потрібен .zip («Цитата з Біблії»), .SQLite3 (MyBible) або .vbm (пісенник)</string>
+    <string name="s_file_missing">Файл «%1$s» пропав з планшета — пункт пропущено</string>
+    <string name="s_sermon_on">План проповіді: %1$s</string>
+    <string name="s_sermon_end">Повернути план служіння</string>
+
+    <!-- Планшет запущено на телефоні. -->
+    <string name="phone_title">Планшет Слова на телефоні</string>
+    <string name="phone_message">Програму зроблено для планшета: на телефоні їй тісно, і частина можливостей незручна. Для повноцінної роботи запускайте її на планшеті. Зараз вона відкриється в розкладці для телефона.</string>
+    <string name="phone_ok">Зрозуміло</string>
+    <string name="phone_content">Вміст</string>
+
+    <!-- Мій перегляд: як показувати зал на планшеті. -->
+    <string name="menu_view">Мій перегляд…</string>
+    <string name="view_title">Мій перегляд</string>
+    <string name="view_hall">Як у залі — картинкою</string>
+    <string name="view_text">Текстом — зручно читати</string>
+    <string name="view_dark">Темне</string>
+    <string name="view_light">Світле</string>
+    <string name="view_sepia">Сепія</string>
+    <string name="view_size">Розмір тексту: %1$d</string>
+    <string name="view_note">Картинки й презентації завжди видно такими, як на стіні</string>
+    <!-- Підказки й пояснення (власник: «добавить подсказки к действиям»). -->
+    <string name="t_hints">Підказки</string>
+    <string name="t_hints_on">Підказки ввімкнено. Довгий дотик на будь-якій кнопці — що вона робить</string>
+    <string name="t_hints_off">Підказки сховано. Ввімкнути знову — «Підказки» вгорі</string>
+    <string name="t_sermon_open">📋 Скласти план проповіді</string>
+    <string name="t_zoom_back">↺ Вихідний вигляд</string>
+    <string name="t_hint_bible">Дотик по вірші — він у передпоказі. Довгий дотик — одразу в зал. Кілька дотиків — кілька віршів.</string>
+    <string name="t_hint_songs">Виберіть пісню, потім торкніться частини — вона одразу в залі.</string>
+    <string name="t_hint_presentation">Торкніться слайда — він у залі. «Файл з планшета» відкриває PDF чи PowerPoint.</string>
+    <string name="t_hint_media">Файли плеєра додають на комп\'ютері. «На екран» — показувати відео в залі.</string>
+    <string name="t_hint_pictures">Торкніться картинки — вона в залі. «Фото з планшета» додає нові.</string>
+    <string name="t_hint_screen">Виберіть монітор чи вікно — зал покаже його наживо.</string>
+    <string name="t_hint_text">Наберіть оголошення. «У передпоказ» — лише для вас, «Показати в залі» — на стіну.</string>
+    <string name="t_hint_hall">Ведіть пальцем по залу — указка. Двома пальцями — наближення.</string>
+    <string name="t_hint_plan">Торкніться пункту — він одразу в залі.</string>
+    <string name="t_hint_bottom">«Назад» / «Далі» — сусідній вірш, куплет чи слайд · «Показати» — передпоказ у зал · «Сховати» — прибрати слайд</string>
+    <string name="x_prev">Попередній вірш, куплет чи слайд</string>
+    <string name="x_next">Наступний вірш, куплет чи слайд</string>
+    <string name="x_show">Вивести в зал те, що в передпоказі</string>
+    <string name="x_hide">Прибрати слайд із залу — фон лишається</string>
+    <string name="x_black">Затемнити зал повністю; ще раз — повернути</string>
+    <string name="x_blank">Порожній слайд: фон без тексту</string>
+    <string name="x_plan_add">Додати в План те, що зараз вибрано ліворуч</string>
+    <string name="x_up">Посунути вибраний пункт вище</string>
+    <string name="x_down">Посунути вибраний пункт нижче</string>
+    <string name="x_remove">Прибрати вибраний пункт</string>
+    <string name="x_tab_plan">План служіння: торкніться пункту — він у залі</string>
+    <string name="x_tab_history">Історія: усе, що вже було в залі</string>
+    <string name="x_menu">Підключення, екран, наближення, план проповіді, мій перегляд, мова</string>
+    <string name="x_hints">Показати чи сховати підказки на екрані</string>
+    <string name="x_sermon">Скласти план проповіді заздалегідь і завантажити його в «Слово»</string>
+    <string name="x_zoom_back">Прибрати наближення — зал знову цілий</string>
+    <string name="x_search">Знайти вірші за словами</string>
+    <string name="x_search_close">Повернутися до книг і розділів</string>
+    <string name="x_bible_show">Вивести вибрані вірші в зал</string>
+    <string name="x_bible_clear">Зняти позначки з віршів</string>
+    <string name="x_translation">Змінити переклад Біблії</string>
+    <string name="x_play">Грати або поставити на паузу</string>
+    <string name="x_to_begin">Перемотати на початок</string>
+    <string name="x_stop">Зупинити</string>
+    <string name="x_mute">Вимкнути чи увімкнути звук</string>
+    <string name="x_to_screen">Показувати відео в залі чи ні</string>
+    <string name="x_repeat">Повторювати файл по колу</string>
+    <string name="x_add_file">Відкрити в програмі презентацію чи PDF з планшета</string>
+    <string name="x_add_photos">Надіслати в програму фото з планшета</string>
+    <string name="x_screen_refresh">Оновити список моніторів і вікон</string>
+    <string name="x_screen_stop">Зупинити показ екрана</string>
+    <string name="x_text_preview">Показати текст лише в передпоказі</string>
+    <string name="x_text_show">Вивести текст у зал</string>
+    <string name="x_songbook">Вибрати інший пісенник</string>
+    <string name="s_plans_count">Мої плани (%1$d)</string>
+    <string name="s_step_1">① Додайте пункти</string>
+    <string name="s_step_2">② Перевірте порядок</string>
+    <string name="s_step_3">③ Завантажте в «Слово»</string>
+    <string name="s_hint_bible">Виберіть переклад, книгу й розділ, торкніться потрібних віршів — і «＋ Додати вірші в план».</string>
+    <string name="s_hint_songs">Виберіть пісенник і пісню — і «＋ Додати пісню в план».</string>
+    <string name="s_hint_text">Заголовок і текст оголошення — і «＋ Додати текст у план».</string>
+    <string name="s_hint_order">Торкніться пункту, щоб вибрати, — потім «↑ Вище», «↓ Нижче» чи «✕ Прибрати».</string>
+    <string name="s_plan_count">У плані: %1$d</string>
+    <string name="s_online">«Слово» на зв\'язку</string>
+    <string name="s_offline">«Слово» не відповідає — перевірте Wi-Fi і програму на комп\'ютері</string>
+    <string name="s_checking">Перевіряю зв\'язок зі «Словом»…</string>
+    <string name="s_uploaded_help">План проповіді тепер головний у «Слові». Гортайте «Далі» / «Назад» або торкайтеся пунктів у колонці «План». Коли закінчите — «Повернути план служіння».</string>
+    <string name="x_plans">Відкрити інший план або почати новий</string>
+    <string name="x_library">Переклади Біблії й пісенники на планшеті — звідки брати вірші й пісні</string>
+    <string name="x_upload">Надіслати план у «Слово»: він стане головним на час проповіді</string>
+    <string name="x_back">Назад до пульта</string>
+    <string name="menu_scale">Масштаб інтерфейсу…</string>
+    <string name="scale_title">Масштаб інтерфейсу: менше — більше вміщається</string>
+    <string name="scale_auto">Авто (зараз %1$d%%)</string>
+    <string name="scale_cancel">Скасувати</string>
+</resources>

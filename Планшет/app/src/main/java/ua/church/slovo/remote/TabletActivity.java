@@ -261,8 +261,8 @@ public final class TabletActivity extends Activity {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        Configuration scaled = UiScale.override(base);
-        if (scaled != null) applyOverrideConfiguration(scaled);
+        // Мова інтерфейсу (див. `Lang`) і масштаб — одним налаштуванням.
+        applyOverrideConfiguration(Lang.override(base, UiScale.override(base)));
     }
 
     @Override
@@ -544,6 +544,7 @@ public final class TabletActivity extends Activity {
         popup.getMenu().add(0, 4, 3, R.string.menu_sermon);
         popup.getMenu().add(0, 5, 4, R.string.menu_view);
         popup.getMenu().add(0, 6, 5, R.string.menu_scale);
+        popup.getMenu().add(0, 7, 6, R.string.menu_language);
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 4:
@@ -554,6 +555,9 @@ public final class TabletActivity extends Activity {
                     return true;
                 case 6:
                     showScaleDialog();
+                    return true;
+                case 7:
+                    Lang.showChooser(this);
                     return true;
                 case 1:
                     startActivity(new Intent(this, ConnectActivity.class));
@@ -814,6 +818,17 @@ public final class TabletActivity extends Activity {
         }
         shown.append(state.liveText);
         personalView.setText(shown);
+        // Довгий куплет більший за зал: посередині (Gravity.CENTER) його початок
+        // ховався вгорі без прокрутки. Не влазить — ставимо згори й даємо
+        // прокручувати пальцем; влазить — знову посередині.
+        personalView.scrollTo(0, 0);
+        personalView.post(() -> {
+            android.text.Layout layout = personalView.getLayout();
+            int room = personalView.getHeight() - personalView.getTotalPaddingTop() - personalView.getTotalPaddingBottom();
+            boolean tall = layout != null && room > 0 && layout.getHeight() > room;
+            personalView.setGravity(tall ? (Gravity.TOP | Gravity.CENTER_HORIZONTAL) : Gravity.CENTER);
+            personalView.setMovementMethod(tall ? new android.text.method.ScrollingMovementMethod() : null);
+        });
     }
 
     /// «Мій перегляд…»: картинкою чи текстом, оформлення й розмір. Діє одразу.
@@ -1987,7 +2002,7 @@ public final class TabletActivity extends Activity {
             try {
                 byte[] bytes;
                 try (InputStream stream = getContentResolver().openInputStream(uri)) {
-                    if (stream == null) throw new java.io.IOException("порожній файл");
+                    if (stream == null) throw new java.io.IOException(Lang.t("порожній файл", "empty file"));
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     byte[] chunk = new byte[65536];
                     int count;
@@ -2031,7 +2046,7 @@ public final class TabletActivity extends Activity {
                 main.post(() -> status.setText(getString(R.string.photo_sending, n, uris.size())));
                 try {
                     PhotoShrink.Result photo = PhotoShrink.prepare(getContentResolver(), uris.get(i), 2560);
-                    JSONObject answer = current.upload("Фото " + stamp + "-" + n + "." + photo.extension, photo.bytes, false);
+                    JSONObject answer = current.upload(Lang.t("Фото ", "Photo ") + stamp + "-" + n + "." + photo.extension, photo.bytes, false);
                     if (first < 0 && answer != null) first = answer.optInt("page", -1);
                     sent++;
                 } catch (Exception error) {

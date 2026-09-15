@@ -22,10 +22,18 @@ public final class ConnectActivity extends Activity {
     private EditText pin;
     private int foundCount;
 
+    /// Мова інтерфейсу (див. `Lang`) — до того, як вікно візьме ресурси.
+    @Override
+    protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(base);
+        applyOverrideConfiguration(Lang.override(base, null));
+    }
+
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         setContentView(R.layout.activity_connect);
+        findViewById(R.id.language).setOnClickListener(v -> Lang.showChooser(this));
         settings = new Settings(this);
 
         foundList = findViewById(R.id.foundList);

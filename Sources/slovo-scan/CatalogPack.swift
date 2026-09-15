@@ -73,28 +73,34 @@ func runCatalogPack(app: URL, out: URL, base: String) -> Int32 {
         let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         var kind: ResourceItem.Kind
         var title = name, subtitle = ""
+        var language: String?
         if isDirectory {
             guard let module = try? BibleModule(directory: entry) else { failures.append("\(name): не модуль"); continue }
             kind = .bible
             title = module.info.name.isEmpty ? name : module.info.name
             subtitle = [module.info.shortName, module.info.language ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+            language = languageCode(declared: module.info.language, sample: title + " " + textSample(of: module))
         } else {
             switch entry.pathExtension.lowercased() {
             case "songbook", "vbm":
                 guard let book = try? SongBook(fileAt: entry) else { failures.append("\(name): не пісенник"); continue }
                 kind = .songbook
                 title = book.title.isEmpty ? name : book.title
+                let lyrics = book.songs.prefix(12).flatMap { $0.parts.map(\.text) }.joined(separator: " ")
+                language = languageCode(declared: nil, sample: title + " " + lyrics)
                 subtitle = "\(book.songs.count) " + OurWords.t("песен") + (book.shortName.isEmpty ? "" : " · " + book.shortName)
             case "sqlite3", "sqlite":
                 guard let module = try? MyBibleModule(fileAt: entry) else { continue }
                 kind = .bible
                 title = module.info.name.isEmpty ? name : module.info.name
                 subtitle = module.info.shortName
+                language = languageCode(declared: module.info.language, sample: title + " " + textSample(of: module))
             case "mybible":
                 guard MySwordModule.isBibleModuleName(name), let module = try? MySwordModule(fileAt: entry) else { continue }
                 kind = .bible
                 title = module.info.name.isEmpty ? name : module.info.name
                 subtitle = module.info.shortName
+                language = languageCode(declared: module.info.language, sample: title + " " + textSample(of: module))
             default:
                 continue
             }
@@ -106,7 +112,7 @@ func runCatalogPack(app: URL, out: URL, base: String) -> Int32 {
         // — той самий ресурс, і перехід на свій формат не робить із нього новий.
         items.append(ResourceItem(id: kind == .songbook ? "songbook:" + stem : "bible:" + name, kind: kind,
                                   title: title, subtitle: subtitle, size: size, version: digest(of: zipName),
-                                  url: link(zipName), fileName: name))
+                                  url: link(zipName), fileName: name, language: language))
         print("  \(kind.rawValue)  \(name)  \(size / 1024) КБ")
     }
 
@@ -134,4 +140,48 @@ func runCatalogPack(app: URL, out: URL, base: String) -> Int32 {
     }
     print("каталог: \(items.count) ресурсів, \(failures.count) пропущено" + (failures.isEmpty ? "" : ": " + failures.joined(separator: "; ")))
     return 0
+}
+
+
+// MARK: - Мова ресурсу
+
+/// Кілька віршів першого розділу — за ними впізнається мова, коли в модулі
+/// її не вказано.
+func textSample(of module: TextModule) -> String {
+    guard let book = module.books.first(where: { $0.index >= 40 }) ?? module.books.first,
+          let chapter = (try? module.chapters(ofBook: book))?.first else { return "" }
+    return chapter.verses.prefix(20).map(\.text).joined(separator: " ")
+}
+
+/// Код мови для пошуку у вікні ресурсів («uk», «ru», «en»).
+///
+/// У своєму каталозі мови не було зовсім, і пошук «uk» знаходив два
+/// переклади з п'ятдесяти шести (0.87). Вказану в модулі мову беремо першою;
+/// інакше — за літерами, яких немає в сусідніх абетках.
+func languageCode(declared: String?, sample: String) -> String? {
+    if let raw = declared?.trimmingCharacters(in: .whitespaces).lowercased(), raw.count >= 2 {
+        let code = String(raw.prefix(2))
+        let aliases = ["ua": "uk", "by": "be"]
+        if code.allSatisfy({ $0.isASCII && $0.isLetter }) { return aliases[code] ?? code }
+    }
+    let text = sample.lowercased()
+    func has(_ letters: String) -> Bool { text.contains { letters.contains($0) } }
+    let scalars = text.unicodeScalars
+    if scalars.contains(where: { (0x0590...0x05FF).contains($0.value) }) { return "he" }
+    if scalars.contains(where: { (0x0370...0x03FF).contains($0.value) || (0x1F00...0x1FFF).contains($0.value) }) { return "el" }
+    let cyrillic = scalars.filter { (0x0400...0x04FF).contains($0.value) }.count
+    let latin = scalars.filter { ("a"..."z").contains(Character($0)) }.count
+    if cyrillic > latin {
+        if has("әұһ") { return "kk" }
+        if has("өүң") { return "ky" }
+        if has("қғҳ") { return "uz" }
+        if has("ў") { return has("і") ? "be" : "uz" }
+        if has("їєґ") { return "uk" }
+        if has("і") && !has("ыэъ") { return "uk" }
+        return "ru"
+    }
+    guard latin > 0 else { return nil }
+    if has("ąęłńśźż") { return "pl" }
+    if has("äöüß") { return "de" }
+    return "en"
 }

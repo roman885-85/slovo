@@ -453,8 +453,8 @@ final class NativeShowWorkspace: NSView, NativeListSource {
         panel.allowedFileTypes = model.kind.extensions
         panel.prompt = state?.text("BBOk", default: "Ок") ?? "Ок"
         panel.message = model.kind == .pictures
-            ? OurWords.t("Выберите картинки или папку с ними")
-            : OurWords.t("Выберите презентацию или PDF")
+            ? OurWords.t("Выберите картинки или папку с ними") + " (.jpg, .png, .heic, .gif, .webp, .bmp, .tif)"
+            : OurWords.t("Выберите презентацию или PDF") + " (.pdf, .pptx, .ppsx, .potx, .pptm, .ppsm)"
         // Презентаций и PDF тоже можно взять сразу несколько: список копится.
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }

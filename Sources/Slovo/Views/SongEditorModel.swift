@@ -676,7 +676,7 @@ final class SongEditorModel: ObservableObject {
     func importBibleQuote() {
         guard confirmDiscardChanges() else { return }
         guard let source = SongPrompt.openFile(title: captions.message(33, "Импорт Песенника"),
-                                               message: "Файл biblequote.ini модуля-песенника",
+                                               message: OurWords.t("Файл bibleqt.ini модуля-песенника или папка с ним"),
                                                extensions: ["ini"], allowsDirectories: true) else { return }
         // «Здесь возможно ввести символ или строку, которыми помечаются
         // припевы в BibleQuote модуле… Ручной ввод необходим, т.к. признак

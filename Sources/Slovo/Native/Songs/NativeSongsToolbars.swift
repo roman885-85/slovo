@@ -51,6 +51,12 @@ extension NativeSongsWorkspace {
         return item
     }
 
+    /// Пункт меню з поясненням, що саме він бере (формат файла).
+    func hinted(_ item: NSMenuItem, _ hint: String) -> NSMenuItem {
+        item.toolTip = hint
+        return item
+    }
+
     /// Підменю з готовою назвою.
     func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
         let menu = emptyMenu()
@@ -131,20 +137,20 @@ extension NativeSongsWorkspace {
         })
         menu.addItem(.separator())
         menu.addItem(submenu(caption("OpenImportDialog", "Импортировать Песенник из..."), [
-            item(caption("NImportModuleBQ", "Импортировать из BibleQuote модуля")) { [weak self] in
+            hinted(item(caption("NImportModuleBQ", "Импортировать из BibleQuote модуля")) { [weak self] in
                 self?.model.importBibleQuote()
                 self?.bridge.sync()
-            },
-            item(caption("NImportModuleSoftProject", "Импортировать из SoftProjector модуля")) { [weak self] in
+            }, OurWords.t("Модуль-песенник «Цитата из Библии»: папка с bibleqt.ini")),
+            hinted(item(caption("NImportModuleSoftProject", "Импортировать из SoftProjector модуля")) { [weak self] in
                 self?.model.importSoftProjector()
                 self?.bridge.sync()
-            },
+            }, OurWords.t("Песенник SoftProjector: файл .sps")),
         ]))
-        menu.addItem(item(caption("NImportModuleFromText", "Импортировать Песенник из текстового файла"),
+        menu.addItem(hinted(item(caption("NImportModuleFromText", "Импортировать Песенник из текстового файла"),
                           enabled: model.hasBook) { [weak self] in
             self?.model.importFromTextFile()
             self?.bridge.sync()
-        })
+        }, OurWords.t("Текстовый файл .txt в том виде, в каком его выгружает «Экспортировать Песенник в текстовый файл»")))
         menu.addItem(item(caption("NExportModuleAsText", "Экспортировать Песенник в текстовый файл"),
                           enabled: model.hasBook) { [weak self] in
             self?.model.exportToTextFile()

@@ -221,7 +221,7 @@ final class SermonPlan {
         try (OutputStream out = new FileOutputStream(temp)) {
             out.write(json.toString().getBytes(StandardCharsets.UTF_8));
         }
-        if (!temp.renameTo(target)) throw new IOException("Не вдалося записати план");
+        if (!temp.renameTo(target)) throw new IOException(Lang.t("Не вдалося записати план", "Could not save the plan"));
     }
 
     /// Прибрати план разом із копіями його файлів.

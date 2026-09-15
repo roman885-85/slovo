@@ -225,6 +225,7 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
         panel.prompt = state.vb("BBOk", "Ок")
         panel.message = state.vb("NImportFromMyBible", "Импортировать из MyBible модуля")
             + " / " + state.vb("NImportFromMySword", "Импортировать из MySword модуля")
+            + " (.SQLite3, .sqlite, .bbl.mybible)"
         guard panel.runModal() == .OK else { return }
         add(panel.urls, title: state.vb("TextMessages27", "Импорт модуля"))
     }

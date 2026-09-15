@@ -144,8 +144,14 @@ public struct ResourceCatalog: Codable, Sendable {
             guard let url = link else { continue }
             let language = entry["lng"] as? String
             let updated = entry["upd"] as? String ?? ""
+            // Опис у реєстрі буває в кілька рядків («…Турконяка (1997-2007)\n76
+            // книг»): рядок списку ресурсів розраховано на один — назва лізла
+            // на сусідній рядок. Складаємо в один.
+            let title = (entry["des"] as? String ?? abbreviation)
+                .components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }.joined(separator: " ")
             items.append(ResourceItem(id: "mb:" + abbreviation, kind: .bible,
-                                      title: entry["des"] as? String ?? abbreviation,
+                                      title: title.isEmpty ? abbreviation : title,
                                       subtitle: [abbreviation, updated].filter { !$0.isEmpty }.joined(separator: " · "),
                                       size: Self.size(entry["siz"] as? String), version: updated,
                                       url: url, fileName: abbreviation + ".SQLite3", language: language))

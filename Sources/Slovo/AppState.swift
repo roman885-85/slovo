@@ -865,8 +865,8 @@ final class AppState: ObservableObject {
             // Файлів перекладу VisioBible немає (чиста установка «Слова»): мова —
             // з убудованих, українська за умовчанням. Раніше тут був просто вихід,
             // наш словник лишався російським, а з ним і весь інтерфейс.
-            let code = Defaults.languageCode ?? "uk"
-            OurWords.language = Self.builtInLanguages.contains { $0.code == code } ? code : "uk"
+            let code = Defaults.languageCode ?? Self.systemDefaultLanguage()
+            OurWords.language = Self.builtInLanguages.contains { $0.code == code } ? code : "en"
             return
         }
         languageCatalog = catalog
@@ -875,7 +875,7 @@ final class AppState: ObservableObject {
         // записана в налаштуваннях: інакше правка перекладу скинула б вибір.
         // Поки людина нічого не обирала — українська: це мова програми за
         // умовчанням, окремого вікна вибору при першому запуску немає.
-        let wanted = language?.code ?? Defaults.languageCode ?? "uk"
+        let wanted = language?.code ?? Defaults.languageCode ?? Self.systemDefaultLanguage()
         language = catalog.language(code: wanted) ?? catalog.language(code: "uk") ?? catalog.languages.first
         OurWords.language = language?.code ?? wanted
         applyOurWordOverrides()
@@ -887,6 +887,19 @@ final class AppState: ObservableObject {
     private func applyOurWordOverrides() {
         let section = language?.forms[OurWords.sectionName] ?? [:]
         OurWords.applyOverrides(section.mapValues(\.caption))
+    }
+
+    /// Мова інтерфейсу, поки людина її не вибирала.
+    ///
+    /// Власник: «Если текущая локализация не русская и не украинская, то
+    /// выставлять язык по умолчанию английский… ко всем программам, включая
+    /// основную». Українська система — українська, російська — російська,
+    /// будь-яка інша — англійська.
+    nonisolated static func systemDefaultLanguage(preferred: [String] = Locale.preferredLanguages) -> String {
+        let first = (preferred.first ?? "").lowercased()
+        if first.hasPrefix("uk") { return "uk" }
+        if first.hasPrefix("ru") { return "ru" }
+        return "en"
     }
 
     /// Мови, які «Слово» знає саме, без файлів перекладу VisioBible: підписи

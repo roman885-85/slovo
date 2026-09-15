@@ -77,7 +77,13 @@ section { min-width:0; }
 #viewPanel { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:6px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--head); font-size:14px; }
 #viewPanel[hidden] { display:none; }
 /* Мій перегляд: текстовий слайд у своєму оформленні поверх картинки залу. */
-#personal { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; overflow:auto; padding:16px 24px; text-align:center; white-space:pre-line; line-height:1.3; }
+/* Посередині — автоматичними полями, а не justify-content:center: у того
+   довгий текст вилазив угору за край і не прокручувався — початку куплета
+   не було видно зовсім (0.87). Поля «auto» стискаються до нуля, коли тексту
+   більше, ніж місця, і тоді він прокручується від першого рядка. */
+#personal { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:flex-start; overflow:auto; padding:16px 24px; text-align:center; white-space:pre-line; line-height:1.3; }
+#personal > :first-child { margin-top:auto; }
+#personal > :last-child { margin-bottom:auto; }
 #personal .ref { font-size:.6em; margin-bottom:.4em; }
 footer { display:flex; padding:4px; }
 #black.on { color:var(--danger); }
@@ -116,6 +122,7 @@ body.view-only main { grid-template-columns:1fr; }
   <button id="hintsButton" title="Показати чи сховати підказки на сторінці">Підказки</button>
   <button id="androidButton" title="Встановити «Пульт Слова» чи «Планшет Слова» на телефон або планшет з Android"><span class="wide">Програми для </span>Android</button>
   <button id="pinButton" title="Увести пароль, якщо його задано в програмі (Параметри → Remote API)">Пароль</button>
+  <button id="langButton" title="Мова сторінки: українська чи англійська">English</button>
 </header>
 <nav id="tabs"></nav>
 <main>
@@ -240,9 +247,144 @@ body.view-only main { grid-template-columns:1fr; }
 // і та сама раскладка, що в планшета. Сторінку віддає сама програма, тож
 // усі запити — на свою ж адресу.
 
-const MODES = [["bible","Біблія"],["songs","Пісні"],["presentation","Презентація"],["media","Медіа"],
-               ["pictures","Зображення"],["screen","Екран"],["text","Текст"]];
+// Мова сторінки. Власник: «переключаемый английский интерфейс»; «если
+// текущая локализация не русская и не украинская, то английский». Вибір
+// кнопкою браузер пам'ятає; поки не вибирали — за мовою браузера.
+let lang = "";
+try { lang = localStorage.getItem("slovo-lang") || ""; } catch (e) {}
+if (lang !== "uk" && lang !== "en") {
+  const first = ((navigator.languages && navigator.languages[0]) || navigator.language || "").toLowerCase();
+  lang = first.startsWith("uk") || first.startsWith("ru") ? "uk" : "en";
+}
+const L = (uk, en) => lang === "en" ? en : uk;
+const EN = {
+  "Слово — пульт у браузері": "Slovo — browser remote",
+  "Підключаюся…": "Connecting…",
+  "Показати чи сховати підказки на сторінці": "Show or hide the hints on the page",
+  "Підказки": "Hints",
+  "Встановити «Пульт Слова» чи «Планшет Слова» на телефон або планшет з Android": "Install Slovo Remote or Slovo Tablet on an Android phone or tablet",
+  "Програми для": "Apps for",
+  "Увести пароль, якщо його задано в програмі (Параметри → Remote API)": "Enter the password if one is set in the program (Settings → Remote API)",
+  "Пароль": "Password",
+  "Пошук за словами": "Search by words",
+  "Знайти вірші за словами": "Find verses by words",
+  "Знайти": "Find",
+  "Клацніть вірш — він у передпоказі (з Shift — кілька підряд). Подвійне клацання — одразу в зал.": "Click a verse to preview it (Shift selects several). Double-click shows it in the hall.",
+  "До книг": "Back to books",
+  "Показати в залі": "Show in hall",
+  "Скинути": "Clear",
+  "Пісенник": "Songbook",
+  "Номер або слова назви": "Number or title words",
+  "Клацніть пісню, потім частину внизу — вона одразу в залі.": "Click a song, then a part below — it goes straight to the hall.",
+  "Частини пісні — клацання виводить у зал": "Song parts — a click shows it in the hall",
+  "Відкрити в програмі PDF чи PowerPoint з цього пристрою": "Open a PDF or PowerPoint file from this device in the program",
+  "Файл з комп'ютера…": "File from this device…",
+  "Клацніть слайд — він у залі. «Файл з комп'ютера…» відкриває PDF чи PowerPoint.": "Click a slide to show it in the hall. “File from this device…” opens a PDF or PowerPoint.",
+  "Перемотати на початок": "Rewind to the start",
+  "⏮ Спочатку": "⏮ Start",
+  "Грати або поставити на паузу": "Play or pause",
+  "▶ Грати": "▶ Play",
+  "Зупинити": "Stop",
+  "⏹ Стоп": "⏹ Stop",
+  "Гучність": "Volume",
+  "Вимкнути чи увімкнути звук": "Mute or unmute",
+  "Без звуку": "Mute",
+  "Показувати відео в залі чи ні": "Show the video in the hall or not",
+  "На екран": "To screen",
+  "Повторювати файл по колу": "Repeat the file",
+  "Повтор": "Repeat",
+  "Файли плеєра додають у програмі. Клацніть файл — він грає; «На екран» — показувати відео в залі.": "Player files are added in the program. Click a file to play it; “To screen” shows the video in the hall.",
+  "Надіслати в програму фото з цього пристрою": "Send photos from this device to the program",
+  "Фото з комп'ютера…": "Photos from this device…",
+  "Клацніть картинку — вона в залі. «Фото з комп'ютера…» додає нові.": "Click a picture to show it in the hall. “Photos from this device…” adds new ones.",
+  "Оновити список моніторів і вікон": "Refresh the list of monitors and windows",
+  "Оновити": "Refresh",
+  "Зупинити показ екрана": "Stop showing the screen",
+  "Зупинити показ": "Stop showing",
+  "Клацніть монітор чи вікно — зал покаже його наживо.": "Click a monitor or window — the hall shows it live.",
+  "Заголовок (необов'язково)": "Title (optional)",
+  "Текст оголошення": "Announcement text",
+  "Показати текст лише в передпоказі": "Show the text in the preview only",
+  "У передпоказ": "To preview",
+  "Вивести текст у зал": "Show the text in the hall",
+  "Наберіть оголошення. «У передпоказ» — лише для вас, «Показати в залі» — на стіну.": "Type an announcement. “To preview” is for you only, “Show in hall” puts it on the wall.",
+  "Зал": "Hall",
+  "Як показувати зал на цьому екрані: картинкою чи крупним текстом": "How to show the hall on this screen: as a picture or as large text",
+  "Мій перегляд": "My view",
+  "Текстом — зручно читати": "As text — easy to read",
+  "Темне": "Dark",
+  "Світле": "Light",
+  "Сепія": "Sepia",
+  "Розмір": "Size",
+  "Картинки й презентації завжди видно такими, як на стіні": "Pictures and presentations always look as they do on the wall",
+  "Прибрати наближення — зал знову цілий": "Remove the zoom — the whole hall again",
+  "↺ Вихідний вигляд": "↺ Reset view",
+  "Ведіть по залу з натиснутою кнопкою миші чи пальцем — указка на стіні. Колесо миші чи два пальці — наближення.": "Drag over the hall with the mouse button held or a finger for a pointer on the wall. Mouse wheel or two fingers zoom.",
+  "План служіння: клацніть пункт — він у залі": "Service plan: click an item to show it in the hall",
+  "План": "Plan",
+  "Історія: усе, що вже було в залі": "History: everything already shown in the hall",
+  "Історія": "History",
+  "Додати в План те, що зараз вибрано ліворуч": "Add what is selected on the left to the Plan",
+  "＋ Додати вибране": "＋ Add selected",
+  "Прибрати вибраний пункт": "Remove the selected item",
+  "✕ Прибрати": "✕ Remove",
+  "Посунути вибраний пункт вище": "Move the selected item up",
+  "↑ Вище": "↑ Up",
+  "Посунути вибраний пункт нижче": "Move the selected item down",
+  "↓ Нижче": "↓ Down",
+  "Клацніть пункт — він одразу в залі. Потім «↑ Вище», «↓ Нижче» чи «✕ Прибрати» — для нього.": "Click an item to show it in the hall. Then “↑ Up”, “↓ Down” or “✕ Remove” apply to it.",
+  "«Назад» / «Далі» — сусідній вірш, куплет чи слайд · «Показати» — передпоказ у зал · «Сховати» — прибрати слайд · «Чорний екран» — затемнити зал": "“Back” / “Next” — neighbouring verse, part or slide · “Show” — preview to the hall · “Hide” — remove the slide · “Black screen” — darken the hall",
+  "Попередній вірш, куплет чи слайд": "Previous verse, part or slide",
+  "◀ Назад": "◀ Back",
+  "Наступний вірш, куплет чи слайд": "Next verse, part or slide",
+  "Далі ▶": "Next ▶",
+  "Вивести в зал те, що в передпоказі": "Show what is in the preview in the hall",
+  "Показати": "Show",
+  "Прибрати слайд із залу — фон лишається": "Remove the slide from the hall — the background stays",
+  "Сховати": "Hide",
+  "Затемнити зал повністю; ще раз — повернути": "Darken the hall completely; again to restore",
+  "Чорний екран": "Black screen",
+  "Порожній слайд: фон без тексту": "Empty slide: background without text",
+  "Порожній": "Empty",
+  "Програма просить пароль": "The program asks for a password",
+  "Той, що в Параметри → Remote API → «Пульт у браузері».": "The one in Settings → Remote API → “Browser remote”.",
+  "Підключитися": "Connect",
+  "Програми «Слова» для Android": "Slovo apps for Android",
+  "Закрити": "Close",
+  "Мова сторінки: українська чи англійська": "Page language: Ukrainian or English",
+  "Пульт Слова": "Slovo Remote",
+  "Планшет Слова": "Slovo Tablet"
+  };
+const T = text => lang === "en" ? (EN[text] || text) : text;
+
+const MODES = [["bible",L("Біблія","Bible")],["songs",L("Пісні","Songs")],["presentation",L("Презентація","Presentation")],["media",L("Медіа","Media")],
+               ["pictures",L("Зображення","Pictures")],["screen",L("Екран","Screen")],["text",L("Текст","Text")]];
 const $ = id => document.getElementById(id);
+
+// Незмінні написи сторінки — англійською, якщо вибрано її: текст вузлів,
+// підказки (title) і заповнювачі полів.
+function translatePage() {
+  document.documentElement.lang = lang;
+  if (lang !== "en") return;
+  document.title = T(document.title);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node => {
+    const text = node.nodeValue.trim();
+    if (text && EN[text]) node.nodeValue = node.nodeValue.replace(text, EN[text]);
+  });
+  document.querySelectorAll("[title], [placeholder]").forEach(element => {
+    if (element.title && EN[element.title]) element.title = EN[element.title];
+    if (element.placeholder && EN[element.placeholder]) element.placeholder = EN[element.placeholder];
+  });
+}
+translatePage();
+$("langButton").textContent = lang === "en" ? "Українська" : "English";
+$("langButton").onclick = () => {
+  try { localStorage.setItem("slovo-lang", lang === "en" ? "uk" : "en"); } catch (e) {}
+  location.reload();
+};
 let pin = "";
 try { pin = localStorage.getItem("slovo-pin") || ""; } catch (e) {}
 let state = {}, seq = -1, mode = "bible", followed = "", sideHistory = false, sideSelected = -1;
@@ -294,7 +436,7 @@ async function poll() {
       apply(fresh);
     } catch (error) {
       failures++;
-      if (error.message !== "PIN" && failures >= 2) $("status").textContent = "Немає зв'язку з програмою — пробую знову…";
+      if (error.message !== "PIN" && failures >= 2) $("status").textContent = L("Немає зв'язку з програмою — пробую знову…", "No connection to the program — retrying…");
       await new Promise(r => setTimeout(r, Math.min(5000, 800 * failures)));
     }
   }
@@ -305,7 +447,7 @@ function modeTitle(key) { const m = MODES.find(m => m[0] === key); return m ? m[
 function apply(fresh) {
   const before = state;
   state = fresh;
-  $("status").textContent = (fresh.name || "Слово") + " · на зв'язку" + (fresh.mode ? " · " + modeTitle(fresh.mode) : "");
+  $("status").textContent = (fresh.name || "Slovo") + L(" · на зв'язку", " · connected") + (fresh.mode ? " · " + modeTitle(fresh.mode) : "");
   $("black").classList.toggle("on", !!fresh.black);
   document.body.classList.toggle("view-only", !!fresh.viewOnly);
   if (fresh.mode && fresh.mode !== followed) {
@@ -316,7 +458,7 @@ function apply(fresh) {
   applyHall(fresh);
   const p = fresh.preview || {};
   const preview = p.text ? (p.reference ? p.reference + " — " + p.text : p.text) : (p.reference || "");
-  $("previewText").textContent = preview ? "Передпоказ: " + preview.replace(/\n/g, " ") : "";
+  $("previewText").textContent = preview ? L("Передпоказ: ", "Preview: ") + preview.replace(/\n/g, " ") : "";
   if (sideHistory) loadHistory(); else fillPlan();
   if (mode === "songs") {
     if ((fresh.songBook || "") !== songsBook) loadSongs();
@@ -406,7 +548,7 @@ let hallImage = null, hallSeq = -1, hallBusy = false, hallPending = false;
 function applyHall(fresh) {
   const h = fresh.hall || {};
   const slide = fresh.slide || {};
-  let caption = "Зал";
+  let caption = L("Зал", "Hall");
   if (h.kind === "text" && slide.reference) caption += " — " + slide.reference;
   else if ((h.kind === "still" || h.kind === "video") && h.title) caption += " — " + h.title;
   $("hallCaption").textContent = caption;
@@ -420,11 +562,11 @@ function applyHall(fresh) {
   rideWindow(zoomWindow(), !!pinchStart || performance.now() - wheelAt < 400);
   if (h.kind === "video" || h.kind === "black") {
     hallImage = null;
-    $("hallNote").textContent = h.kind === "video" ? "У залі відео: " + (h.title || "") : "Зал затемнено";
+    $("hallNote").textContent = h.kind === "video" ? L("У залі відео: ", "Video in the hall: ") + (h.title || "") : L("Зал затемнено", "The hall is darkened");
     drawHall();
     return;
   }
-  $("hallNote").textContent = h.kind === "empty" ? "У залі нічого не показано" : "";
+  $("hallNote").textContent = h.kind === "empty" ? L("У залі нічого не показано", "Nothing is shown in the hall") : "";
   // Картинку залу перезабираємо, лише коли вона справді інша: рух указки її
   // не міняє (пляму малюємо самі), а раніше будив нову картинку щоразу.
   const hallMark = typeof fresh.hallSeq === "number" ? fresh.hallSeq : fresh.seq;
@@ -695,7 +837,7 @@ $("translation").onchange = async () => {
 };
 
 async function openChapter(position, chapter, chosen) {
-  $("bibleNote").textContent = "Завантажую…";
+  $("bibleNote").textContent = L("Завантажую…", "Loading…");
   try {
     const json = await api("/api/bible/chapter?book=" + position + "&chapter=" + chapter);
     bookPos = position; chapterNo = json.chapter || chapter; verses = json.verses || []; picked = (chosen || []).slice();
@@ -712,13 +854,13 @@ function renderBible() {
   $("bibleActions").style.display = level === "verses" ? "" : "none";
   $("bibleNote").textContent = "";
   if (level === "books") {
-    $("biblePath").textContent = "Книги";
-    const names = { old: "Старий Заповіт", "new": "Новий Заповіт", other: "Інші книги" };
+    $("biblePath").textContent = L("Книги", "Books");
+    const names = { old: L("Старий Заповіт", "Old Testament"), "new": L("Новий Заповіт", "New Testament"), other: L("Інші книги", "Other books") };
     ["old", "new", "other"].forEach(t => {
       const part = books.filter(b => b.testament === t);
       if (!part.length) return;
       const head = row(list, names[t], "", false, null); head.style.cursor = "default"; head.style.color = "var(--dim)";
-      part.forEach(b => row(list, b.name, b.chapters + " розд.", b.position === bookPos, () => { bookPos = b.position; level = "chapters"; renderBible(); }));
+      part.forEach(b => row(list, b.name, b.chapters + L(" розд.", " ch."), b.position === bookPos, () => { bookPos = b.position; level = "chapters"; renderBible(); }));
     });
   } else if (level === "chapters") {
     $("biblePath").textContent = book ? book.name : "";
@@ -729,7 +871,7 @@ function renderBible() {
       grid.appendChild(b);
     }
   } else {
-    $("biblePath").textContent = (book ? book.name : "") + " · розділ " + chapterNo;
+    $("biblePath").textContent = (book ? book.name : "") + L(" · розділ ", " · chapter ") + chapterNo;
     let firstPicked = null;
     verses.forEach(v => {
       const li = row(list, "", "", picked.includes(v.number), event => toggleVerse(v.number, event.shiftKey));
@@ -743,7 +885,7 @@ function renderBible() {
     // підсвічене лишається за краєм екрана, і на вигляд «нічого не змінилося».
     if (scrollToPicked && firstPicked) firstPicked.scrollIntoView({ block: "center" });
     scrollToPicked = false;
-    $("bibleShow").textContent = picked.length ? "Показати в залі (" + picked.length + ")" : "Показати в залі";
+    $("bibleShow").textContent = picked.length ? L("Показати в залі (", "Show in hall (") + picked.length + ")" : L("Показати в залі", "Show in hall");
   }
 }
 
@@ -771,7 +913,7 @@ async function runSearch() {
   const query = $("searchText").value.trim();
   if (!query) return;
   $("searchBox").classList.add("shown"); $("bibleBox").classList.remove("shown");
-  $("searchList").innerHTML = ""; $("searchNote").textContent = "Шукаю «" + query + "»…";
+  $("searchList").innerHTML = ""; $("searchNote").textContent = L("Шукаю «" + query + "»…", "Searching for “" + query + "”…");
   await send("bible-search", { text: query });
   // Поки програма шукає — чекаємо (на зайнятому комп'ютері перший пошук
   // буває довшим за 20 с); «нічого не знайдено» — лише коли вона закінчила.
@@ -781,13 +923,13 @@ async function runSearch() {
       const hits = json.hits || [];
       hits.forEach(h => row($("searchList"), h.reference, h.text, false,
         () => send("search-hit", { index: h.index, live: false }), () => send("search-hit", { index: h.index, live: true })));
-      $("searchNote").textContent = hits.length ? "«" + query + "»: " + hits.length + ". Клацання — у передпоказ, подвійне — у зал"
-                                                  : "За «" + query + "» нічого не знайдено";
+      $("searchNote").textContent = hits.length ? L("«" + query + "»: " + hits.length + ". Клацання — у передпоказ, подвійне — у зал", "“" + query + "”: " + hits.length + ". Click to preview, double-click for the hall")
+                                                  : L("За «" + query + "» нічого не знайдено", "Nothing found for “" + query + "”");
       return;
     }
     await new Promise(r => setTimeout(r, 400));
   }
-  $("searchNote").textContent = "Програма ще шукає «" + query + "» — спробуйте ще раз за хвилину";
+  $("searchNote").textContent = L("Програма ще шукає «" + query + "» — спробуйте ще раз за хвилину", "The program is still searching for “" + query + "” — try again in a minute");
 }
 $("searchGo").onclick = runSearch;
 $("searchText").onkeydown = event => { if (event.key === "Enter") runSearch(); };
@@ -870,8 +1012,8 @@ function fillPresentation(force) {
     b.onclick = () => send("deck", { index: d.index });
     decks.appendChild(b);
   });
-  $("pageNote").textContent = (p.index >= 0) ? "Слайд " + (p.local + 1) + " з " + p.count + (p.onWall ? " · у залі" : "") + (p.title ? " — " + p.title : "")
-                                             : "Презентацію не відкрито. «Файл з комп'ютера…» відкриє PDF або PowerPoint";
+  $("pageNote").textContent = (p.index >= 0) ? L("Слайд ", "Slide ") + (p.local + 1) + L(" з ", " of ") + p.count + (p.onWall ? L(" · у залі", " · in the hall") : "") + (p.title ? " — " + p.title : "")
+                                             : L("Презентацію не відкрито. «Файл з комп'ютера…» відкриє PDF або PowerPoint", "No presentation is open. “File from this device…” opens a PDF or PowerPoint");
   const signature = JSON.stringify([p.pages, p.index]);
   if (!force && signature === presentationSignature) return;
   presentationSignature = signature;
@@ -884,7 +1026,7 @@ async function loadPictures() {
     const json = await api("/api/pictures");
     picturesCount = json.count;
     thumbGrid($("pictureGrid"), json.pages || [], json.index, async index => { await send("picture", { index }); loadPictures(); }, "pictures");
-    $("picturesNote").textContent = (json.pages || []).length ? "" : "Картинок немає. «Фото з комп'ютера…» додає їх сюди";
+    $("picturesNote").textContent = (json.pages || []).length ? "" : L("Картинок немає. «Фото з комп'ютера…» додає їх сюди", "No pictures. “Photos from this device…” adds them here");
   } catch (error) { $("picturesNote").textContent = error.message; }
 }
 
@@ -920,8 +1062,8 @@ function shrink(file) {
 $("fileButton").onclick = () => $("fileInput").click();
 $("fileInput").onchange = async () => {
   const file = $("fileInput").files[0]; if (!file) return;
-  $("status").textContent = "Надсилаю «" + file.name + "»…";
-  try { const json = await upload(file, false); $("status").textContent = "«" + file.name + "» відкрито: сторінок " + (json.pages || 0); }
+  $("status").textContent = L("Надсилаю «" + file.name + "»…", "Sending “" + file.name + "”…");
+  try { const json = await upload(file, false); $("status").textContent = L("«" + file.name + "» відкрито: сторінок ", "“" + file.name + "” opened, pages: ") + (json.pages || 0); }
   catch (error) { $("status").textContent = error.message; }
   $("fileInput").value = "";
 };
@@ -929,7 +1071,7 @@ $("photoButton").onclick = () => $("photoInput").click();
 $("photoInput").onchange = async () => {
   const files = [...$("photoInput").files].slice(0, 20); let first = -1;
   for (let i = 0; i < files.length; i++) {
-    $("status").textContent = "Надсилаю фото " + (i + 1) + " з " + files.length + "…";
+    $("status").textContent = L("Надсилаю фото ", "Sending photo ") + (i + 1) + L(" з ", " of ") + files.length + "…";
     try { const json = await upload(await shrink(files[i]), false); if (first < 0 && json.page >= 0) first = json.page; }
     catch (error) { $("status").textContent = error.message; }
   }
@@ -951,14 +1093,14 @@ async function loadMedia() {
     if (shown !== mediaShown) {
       mediaShown = shown;
       mediaDuration = json.duration || 0;
-      $("mPlay").textContent = json.playing ? "⏸ Пауза" : "▶ Грати";
+      $("mPlay").textContent = json.playing ? L("⏸ Пауза", "⏸ Pause") : L("▶ Грати", "▶ Play");
       if (!seeking) $("mSeek").value = mediaDuration > 0 ? Math.round(json.position / mediaDuration * 1000) : 0;
-      $("mTime").textContent = (json.title || "Нічого не відкрито") + (mediaDuration > 0 ? "   " + clock(json.position) + " / " + clock(mediaDuration) : "");
+      $("mTime").textContent = (json.title || L("Нічого не відкрито", "Nothing is open")) + (mediaDuration > 0 ? "   " + clock(json.position) + " / " + clock(mediaDuration) : "");
       if (document.activeElement !== $("mVolume")) $("mVolume").value = Math.round((json.volume || 0) * 100);
       $("mMute").classList.toggle("on", !!json.muted); $("mScreen").classList.toggle("on", !!json.toScreen); $("mRepeat").classList.toggle("on", !!json.repeats);
       const list = $("mediaList"); list.innerHTML = "";
       (json.playlist || []).forEach(item => row(list, item.name, "", item.index === json.index, async () => { await send("media-open", { index: item.index }); loadMedia(); }));
-      if (!(json.playlist || []).length) row(list, "Список плеєра порожній — файли додають на комп'ютері", "", false, null);
+      if (!(json.playlist || []).length) row(list, L("Список плеєра порожній — файли додають на комп'ютері", "The player list is empty — files are added on the computer"), "", false, null);
     }
   } catch (error) {}
   mediaTimer = setTimeout(loadMedia, 1000);
@@ -985,9 +1127,9 @@ async function loadScreen(attempt) {
       row(list, s.title, s.subtitle, now, async () => { await send("screen-start", { index: s.index }); loadScreen(0); });
     });
     if (!(json.sources || []).length) {
-      $("screenNote").textContent = "Джерел немає. Можливо, програмі потрібен дозвіл на запис екрана: Системні параметри → Приватність і безпека → Запис екрана";
+      $("screenNote").textContent = L("Джерел немає. Можливо, програмі потрібен дозвіл на запис екрана: Системні параметри → Приватність і безпека → Запис екрана", "No sources. The program may need screen recording permission: System Settings → Privacy & Security → Screen Recording");
       if (attempt < 3) setTimeout(() => loadScreen(attempt + 1), 1500);
-    } else $("screenNote").textContent = running ? "Показ іде: " + running : (json.note || "");
+    } else $("screenNote").textContent = running ? L("Показ іде: ", "Showing: ") + running : (json.note || "");
   } catch (error) { $("screenNote").textContent = error.message; }
 }
 $("screenReload").onclick = async () => { await send("screen-reload"); setTimeout(() => loadScreen(0), 1200); };
@@ -1001,7 +1143,7 @@ async function loadText() {
     const json = await api("/api/text");
     if (!$("textBody").value && !$("textTitle").value) { $("textTitle").value = json.title || ""; $("textBody").value = json.body || ""; }
     textPage = json.page || 0; textPages = json.pages || 0;
-    $("textPages").textContent = textPages ? "Сторінка " + (textPage + 1) + " з " + textPages : "";
+    $("textPages").textContent = textPages ? L("Сторінка ", "Page ") + (textPage + 1) + L(" з ", " of ") + textPages : "";
   } catch (error) {}
 }
 async function sendText(live) {
@@ -1030,7 +1172,7 @@ function fillPlan() {
   const list = $("sideList"); list.innerHTML = "";
   (state.plan || []).forEach((item, i) => row(list, item.title, item.subtitle, item.current || i === sideSelected,
     () => { sideSelected = i; send("plan", { index: i }); fillPlan(); }));
-  $("sideNote").textContent = (state.plan || []).length ? "" : "План порожній. «+ Поточне» кладе сюди те, що вибрано";
+  $("sideNote").textContent = (state.plan || []).length ? "" : L("План порожній. «＋ Додати вибране» кладе сюди те, що вибрано", "The plan is empty. “＋ Add selected” puts the selection here");
 }
 
 let historyAsked = -1;
@@ -1046,7 +1188,7 @@ async function loadHistory() {
       row(list, cut > 0 ? r.caption.slice(0, cut) : r.caption, cut > 0 ? r.caption.slice(cut + 2) : "", r.current || r.index === sideSelected,
           () => { sideSelected = r.index; send("history", { index: r.index }); });
     });
-    $("sideNote").textContent = (json.records || []).length ? "" : "Історія порожня — сюди потрапляє все, що показано в залі";
+    $("sideNote").textContent = (json.records || []).length ? "" : L("Історія порожня — сюди потрапляє все, що показано в залі", "History is empty — everything shown in the hall lands here");
   } catch (error) {}
 }
 
@@ -1085,8 +1227,8 @@ async function showAndroid() {
   const list = $("androidList"); list.innerHTML = "";
   const version = androidVersion();
   $("androidNote").textContent = version !== null
-    ? "Цей пристрій — Android " + version + ". Після завантаження торкніться файлу: Android спитає дозвіл встановлювати з браузера — погодьтеся."
-    : "Програми встановлюються на Android. Тут файл можна зберегти й перенести на телефон чи планшет.";
+    ? L("Цей пристрій — Android " + version + ". Після завантаження торкніться файлу: Android спитає дозвіл встановлювати з браузера — погодьтеся.", "This device runs Android " + version + ". After downloading, tap the file: Android asks to allow installs from the browser — agree.")
+    : L("Програми встановлюються на Android. Тут файл можна зберегти й перенести на телефон чи планшет.", "The apps install on Android. Here you can save the file and move it to a phone or tablet.");
   try {
     const json = await api("/api/apps");
     (json.apps || []).forEach(app => {
@@ -1094,18 +1236,18 @@ async function showAndroid() {
       const fits = version === null ? null : version >= need;
       const row = document.createElement("div"); row.className = "app";
       const text = document.createElement("div");
-      const title = document.createElement("b"); title.textContent = app.title + (app.version ? " " + app.version : "");
+      const title = document.createElement("b"); title.textContent = T(app.title) + (app.version ? " " + app.version : "");
       const note = document.createElement("small"); note.className = "note"; note.style.display = "block";
-      note.textContent = "Android " + app.minAndroid + " і новіші · " + Math.round((app.size || 0) / 1024) + " КБ"
-        + (fits === false ? " — цьому пристрою не підходить, потрібен Android " + app.minAndroid : "");
+      note.textContent = "Android " + app.minAndroid + L(" і новіші · ", " or newer · ") + Math.round((app.size || 0) / 1024) + L(" КБ", " KB")
+        + (fits === false ? L(" — цьому пристрою не підходить, потрібен Android ", " — not for this device, needs Android ") + app.minAndroid : "");
       text.appendChild(title); text.appendChild(note);
       const link = document.createElement("a");
       link.href = app.url; link.setAttribute("download", "");
-      link.textContent = fits ? "Встановити" : "Зберегти файл";
+      link.textContent = fits ? L("Встановити", "Install") : L("Зберегти файл", "Save file");
       if (fits === false) link.classList.add("off");
       row.appendChild(text); row.appendChild(link); list.appendChild(row);
     });
-    if (!(json.apps || []).length) $("androidNote").textContent = "У цій збірці програм для Android немає.";
+    if (!(json.apps || []).length) $("androidNote").textContent = L("У цій збірці програм для Android немає.", "This build has no Android apps.");
   } catch (error) { $("androidNote").textContent = error.message; }
 }
 $("androidButton").onclick = showAndroid;

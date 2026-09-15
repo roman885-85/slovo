@@ -41,7 +41,7 @@ final class PhotoShrink {
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         try (InputStream stream = resolver.openInputStream(uri)) {
-            if (stream == null) throw new IOException("файл не відкрився");
+            if (stream == null) throw new IOException(Lang.t("файл не відкрився", "the file did not open"));
             BitmapFactory.decodeStream(stream, null, bounds);
         }
         // Формат, якого цей телефон не розбирає (HEIC на старому Android), —
@@ -114,7 +114,7 @@ final class PhotoShrink {
 
     private static byte[] readAll(ContentResolver resolver, Uri uri) throws IOException {
         try (InputStream stream = resolver.openInputStream(uri)) {
-            if (stream == null) throw new IOException("файл не відкрився");
+            if (stream == null) throw new IOException(Lang.t("файл не відкрився", "the file did not open"));
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] chunk = new byte[65536];
             int count;

@@ -57,10 +57,10 @@ final class Api {
     /// постоянно теряет связь с программой»; «немає зв'язку» без причини не
     /// каже, де шукати — у програмі, у мережі чи в телефоні.
     static String describe(Exception error) {
-        if (error instanceof java.net.SocketTimeoutException) return "програма не відповіла вчасно";
-        if (error instanceof java.net.NoRouteToHostException) return "немає шляху до комп'ютера — інша мережа?";
-        if (error instanceof java.net.UnknownHostException) return "адресу не знайдено";
-        if (error instanceof java.net.ConnectException) return "з'єднання відхилено — «Слово» закрите чи пульт вимкнено";
+        if (error instanceof java.net.SocketTimeoutException) return Lang.t("програма не відповіла вчасно", "the program did not answer in time");
+        if (error instanceof java.net.NoRouteToHostException) return Lang.t("немає шляху до комп'ютера — інша мережа?", "no route to the computer — a different network?");
+        if (error instanceof java.net.UnknownHostException) return Lang.t("адресу не знайдено", "address not found");
+        if (error instanceof java.net.ConnectException) return Lang.t("з'єднання відхилено — «Слово» закрите чи пульт вимкнено", "connection refused — Slovo is closed or the remote is off");
         String message = error.getMessage();
         return message == null || message.isEmpty() ? error.getClass().getSimpleName() : message;
     }

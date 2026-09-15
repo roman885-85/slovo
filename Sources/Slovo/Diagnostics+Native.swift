@@ -257,8 +257,15 @@ extension Diagnostics {
         var trouble: [String] = []
         let declared = (Bundle.main.object(forInfoDictionaryKey: "CFBundleLocalizations") as? [String]) ?? []
         if !declared.contains("uk") { trouble.append("пакет не оголошує українську (CFBundleLocalizations: \(declared))") }
-        if Bundle.main.developmentLocalization != "uk" {
-            trouble.append("основна мова пакета «\(Bundle.main.developmentLocalization ?? "—")», а не uk")
+        // Основна мова пакета — англійська: її macOS бере, коли мова системи
+        // не українська, не російська й не німецька (власник: інакше — англійська).
+        if Bundle.main.developmentLocalization != "en" {
+            trouble.append("основна мова пакета «\(Bundle.main.developmentLocalization ?? "—")», а не en")
+        }
+        let rule = [(["uk-UA"], "uk"), (["uk"], "uk"), (["ru-UA"], "ru"), (["ru"], "ru"),
+                    (["en-US"], "en"), (["pl-PL", "uk"], "en"), (["de-DE"], "en"), ([], "en")]
+        for (languages, wanted) in rule where AppState.systemDefaultLanguage(preferred: languages) != wanted {
+            trouble.append("мова за умовчанням для \(languages) — \(AppState.systemDefaultLanguage(preferred: languages)), а не \(wanted)")
         }
         let system = Locale.preferredLanguages.first ?? "—"
         let chosen = Bundle.main.preferredLocalizations.first ?? "—"

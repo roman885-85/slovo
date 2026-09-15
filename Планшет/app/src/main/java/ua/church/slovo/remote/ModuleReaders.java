@@ -51,10 +51,10 @@ final class ModuleReaders {
     static String readSlovoBible(Library library, InputStream in) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8), 65536);
         String header = reader.readLine();
-        if (header == null || !header.startsWith("SLOVO-BIBLE")) throw new Refused("Це не переклад від «Слова»");
+        if (header == null || !header.startsWith("SLOVO-BIBLE")) throw new Refused(Lang.t("Це не переклад від «Слова»", "This is not a translation from Slovo"));
         String meta = reader.readLine();
         String[] m = meta == null ? new String[0] : meta.split("\t", -1);
-        if (m.length < 4 || !"M".equals(m[0])) throw new Refused("У відповіді немає опису перекладу");
+        if (m.length < 4 || !"M".equals(m[0])) throw new Refused(Lang.t("У відповіді немає опису перекладу", "The answer has no translation description"));
         String id = "slovo:" + m[1];
         Library.Writer writer = library.write(id, Library.BIBLE, m[2], m[3], "slovo", "");
         try {
@@ -72,7 +72,7 @@ final class ModuleReaders {
                     }
                 }
             }
-            if (writer.verses == 0) throw new Refused("Переклад прийшов порожнім");
+            if (writer.verses == 0) throw new Refused(Lang.t("Переклад прийшов порожнім", "The translation arrived empty"));
             writer.commit();
         } catch (IOException | RuntimeException error) {
             writer.abort();
@@ -89,7 +89,7 @@ final class ModuleReaders {
         try {
             unzip(zip, folder);
             File ini = findIni(folder, 0);
-            if (ini == null) throw new Refused("В архіві немає bibleqt.ini — це не модуль «Цитати з Біблії»");
+            if (ini == null) throw new Refused(Lang.t("В архіві немає bibleqt.ini — це не модуль «Цитати з Біблії»", "The archive has no bibleqt.ini — not a Bible Quote module"));
             return importBibleQuoteFolder(library, ini, id, source, zip.getPath());
         } finally {
             deleteTree(folder);
@@ -99,8 +99,8 @@ final class ModuleReaders {
     private static String importBibleQuoteFolder(Library library, File iniFile, String id, String source,
                                                  String original) throws IOException {
         Ini ini = parseIni(readAll(iniFile));
-        if (ini.books.isEmpty()) throw new Refused("У bibleqt.ini немає жодної книги");
-        if (!ini.isBible) throw new Refused("Це не Біблія (коментар, словник чи книга) — у план її не взяти");
+        if (ini.books.isEmpty()) throw new Refused(Lang.t("У bibleqt.ini немає жодної книги", "bibleqt.ini lists no books"));
+        if (!ini.isBible) throw new Refused(Lang.t("Це не Біблія (коментар, словник чи книга) — у план її не взяти", "Not a Bible (a commentary, dictionary or book) — it cannot go into a plan"));
         int[] canon = CanonicalBook.assign(ini.books);
         Library.Writer writer = library.write(id, Library.BIBLE, ini.name, ini.shortName, source, original);
         try {
@@ -115,7 +115,7 @@ final class ModuleReaders {
                 String html = decode(readAll(file), ini.charset);
                 parseBook(html, ini, book.chapters, index, drop, writer);
             }
-            if (writer.verses == 0) throw new Refused("У модулі не знайшлося жодного вірша");
+            if (writer.verses == 0) throw new Refused(Lang.t("У модулі не знайшлося жодного вірша", "No verses were found in the module"));
             writer.commit();
         } catch (IOException | RuntimeException error) {
             writer.abort();
@@ -432,7 +432,7 @@ final class ModuleReaders {
             db = SQLiteDatabase.openDatabase(file.getPath(), null,
                 SQLiteDatabase.OPEN_READONLY | SQLiteDatabase.NO_LOCALIZED_COLLATORS);
         } catch (RuntimeException error) {
-            throw new Refused("Файл не відкривається як модуль MyBible");
+            throw new Refused(Lang.t("Файл не відкривається як модуль MyBible", "The file does not open as a MyBible module"));
         }
         try {
             String name = info(db, "description");
@@ -464,12 +464,12 @@ final class ModuleReaders {
                         if (!text.isEmpty()) writer.verse(book, c.getInt(1), c.getInt(2), text);
                     }
                 }
-                if (writer.verses == 0) throw new Refused("У модулі не знайшлося жодного вірша");
+                if (writer.verses == 0) throw new Refused(Lang.t("У модулі не знайшлося жодного вірша", "No verses were found in the module"));
                 writer.commit();
             } catch (IOException | RuntimeException error) {
                 writer.abort();
                 if (error instanceof IOException) throw (IOException) error;
-                throw new Refused("Модуль MyBible не прочитався: " + error.getMessage());
+                throw new Refused(Lang.t("Модуль MyBible не прочитався: ", "The MyBible module could not be read: ") + error.getMessage());
             }
         } finally {
             db.close();
@@ -492,13 +492,13 @@ final class ModuleReaders {
     static String importVbm(Library library, byte[] data, String fileName, String source, String original)
             throws IOException {
         byte[] magic = "VisioBibleModule".getBytes(StandardCharsets.US_ASCII);
-        if (data.length <= 24) throw new Refused("«" + fileName + "»: це не пісенник .vbm");
+        if (data.length <= 24) throw new Refused("«" + fileName + Lang.t("»: це не пісенник .vbm", "»: not a .vbm songbook"));
         for (int i = 0; i < magic.length; i++) {
-            if (data[i] != magic[i]) throw new Refused("«" + fileName + "»: це не пісенник .vbm");
+            if (data[i] != magic[i]) throw new Refused("«" + fileName + Lang.t("»: це не пісенник .vbm", "»: not a .vbm songbook"));
         }
         long compressed = u32(data, 20);
         long start = data.length - 4 - compressed;
-        if (start <= 16 || start >= data.length) throw new Refused("«" + fileName + "»: файл пошкоджено");
+        if (start <= 16 || start >= data.length) throw new Refused("«" + fileName + Lang.t("»: файл пошкоджено", "»: the file is damaged"));
         byte[] body = inflate(data, (int) start, fileName);
         Reader reader = new Reader(body);
 
@@ -508,7 +508,7 @@ final class ModuleReaders {
         reader.string(); // дата редакції
         reader.string(); // коментар
         long count = reader.u32();
-        if (count < 0 || count > 100_000) throw new Refused("«" + fileName + "»: файл пошкоджено");
+        if (count < 0 || count > 100_000) throw new Refused("«" + fileName + Lang.t("»: файл пошкоджено", "»: the file is damaged"));
 
         // Ім'я файла — з регістром: під ним пісенник лежить і в програмі.
         String id = "songs:" + fileName;
@@ -523,7 +523,7 @@ final class ModuleReaders {
                 reader.string(); // примітка
                 reader.string(); // властивості
                 long parts = reader.u32();
-                if (parts < 0 || parts > 1000) throw new Refused("«" + fileName + "»: файл пошкоджено");
+                if (parts < 0 || parts > 1000) throw new Refused("«" + fileName + Lang.t("»: файл пошкоджено", "»: the file is damaged"));
                 writer.song(index, songTitle);
                 for (int part = 0; part < parts; part++) {
                     String kind = reader.string();
@@ -536,7 +536,7 @@ final class ModuleReaders {
         } catch (IOException | RuntimeException error) {
             writer.abort();
             if (error instanceof IOException) throw (IOException) error;
-            throw new Refused("«" + fileName + "»: файл пошкоджено");
+            throw new Refused("«" + fileName + Lang.t("»: файл пошкоджено", "»: the file is damaged"));
         }
         return id;
     }
@@ -558,7 +558,7 @@ final class ModuleReaders {
                 out.write(chunk, 0, count);
             }
         } catch (DataFormatException error) {
-            throw new Refused("«" + fileName + "»: не вдалося розпакувати пісенник");
+            throw new Refused("«" + fileName + Lang.t("»: не вдалося розпакувати пісенник", "»: could not unpack the songbook"));
         } finally {
             inflater.end();
         }
@@ -687,7 +687,7 @@ final class ModuleReaders {
             }
         } catch (IllegalArgumentException error) {
             // Імена в архіві не в UTF-8 — Android 5–6 інших не читає.
-            throw new Refused("Архів не розпаковується: імена файлів у незнайомому кодуванні");
+            throw new Refused(Lang.t("Архів не розпаковується: імена файлів у незнайомому кодуванні", "The archive does not unpack: file names use an unknown encoding"));
         }
     }
 

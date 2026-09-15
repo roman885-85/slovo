@@ -26,11 +26,16 @@ final class ImportIntroPage: NSView, ImportPageRefreshing {
             size: 13)
         // Чесна межа: в оригіналі джерело — лише попередня версія, тут —
         // будь-яка тека з даними й архів; налаштувань не переносимо.
-        let ours = ImportText(OurWords.t("Источником может быть папка с данными VisioBible, любая папка с данными "
-            + "(модули «Цитаты из Библии», файлы MyBible .SQLite3, песенники .vbm, папка Templates, "
-            + "фоновые изображения) или архив .zip. Настройки чужой программы не переносятся — у «Слова» свои. "
-            + "Каждый модуль перед переносом открывается, и в библиотеку не попадает то, "
-            + "что программа не прочитает."), size: 11, secondary: true)
+        // Власник: «добавить в описание все форматы импорта, которые
+        // поддерживаются, и сделать подсказки в программе» — перелік тут
+        // повний і збігається з описом на GitHub.
+        let ours = ImportText(OurWords.t("Источником может быть папка с данными VisioBible или любая папка, архив .zip либо файл: "
+            + "модули «Цитата из Библии» (папка с bibleqt.ini или архив .zip, в том числе несколько архивов в одной папке); "
+            + "модули MyBible (.SQLite3, .sqlite — вместе со словарями и комментариями рядом); модули MySword (.bbl.mybible); "
+            + "песенники VisioBible (.vbm) и «Слова» (.songbook); шаблоны слайда (папка Templates, .sch); "
+            + "фоновые изображения (.jpg, .png, .bmp, .gif, .tif, .heic, .webp). "
+            + "Настройки чужой программы не переносятся — у «Слова» свои. Каждый модуль перед переносом открывается, "
+            + "и в библиотеку не попадает то, что программа не прочитает."), size: 11, secondary: true)
 
         let reveal = NativeForm.button(OurWords.t("Показать в Finder")) { [weak self] in
             guard let self else { return }
@@ -299,7 +304,8 @@ final class ImportVersionsPage: NSView, ImportPageRefreshing,
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.message = state.imp("OpenDialogSelHandly", "Выбрать папку с предыдущей версией")
+        panel.message = state.imp("OpenDialogSelHandly", "Выбрать папку с предыдущей версией") + " — "
+            + OurWords.t("папка с данными, архив .zip или файл .SQLite3, .mybible, .vbm, .songbook")
         panel.prompt = state.imp("PBBNext", "Дальше")
 
         var types: [UTType] = [.zip, .folder]

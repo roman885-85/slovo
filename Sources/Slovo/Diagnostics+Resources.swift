@@ -247,7 +247,8 @@ extension Diagnostics {
         {"version": 1, "hosts": [{"alias": "mz", "path": "https://mybible.zone/repository/modules/%s.zip", "priority": 1}],
          "downloads": [{"abr": "UBIO'62", "fil": "UBIO'62", "lng": "uk", "url": ["{mz}UBIO%2762"], "siz": "2.1M"},
                        {"abr": "ФІЛ", "fil": "ФІЛ", "lng": "uk", "url": ["{mz}%D0%A4%D0%86%D0%9B"], "siz": "2.5M"},
-                       {"abr": "AGP", "fil": "AGP", "lng": "ru", "url": ["{mz}AGP"], "siz": "589K"}]}
+                       {"abr": "AGP", "fil": "AGP", "lng": "ru", "url": ["{mz}AGP"], "siz": "589K",
+                        "des": "Біблія. Новий переклад УБТ Рафаїла Турконяка (1997-2007)\n76 книг"}]}
         """#.utf8)
         let links = ResourceCatalog.myBible(registry: registry)?.items.map(\.url) ?? []
         let wanted = ["https://mybible.zone/repository/modules/UBIO%2762.zip",
@@ -255,6 +256,10 @@ extension Diagnostics {
                       "https://mybible.zone/repository/modules/AGP.zip"]
         checks.append(Check(area: area, name: "Адреси реєстру MyBible не кодуються вдруге", status: links == wanted ? .ok : .failed,
                             detail: links.joined(separator: " · ")))
+        let joinedTitle = ResourceCatalog.myBible(registry: registry)?.items.last?.title ?? ""
+        checks.append(Check(area: area, name: "Назва з реєстру MyBible — в один рядок",
+                            status: joinedTitle == "Біблія. Новий переклад УБТ Рафаїла Турконяка (1997-2007) 76 книг" ? .ok : .failed,
+                            detail: "«\(joinedTitle.replacingOccurrences(of: "\n", with: "⏎"))»"))
 
         // 9. Опис випуску без Markdown.
         let plain = AppUpdater.plain("## Що нового\n- **Пісенники** — [slovo-resources](https://github.com/x) і `.songbook`")
