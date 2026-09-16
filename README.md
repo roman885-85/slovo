@@ -129,6 +129,12 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 - **Пульт у браузері** будь-якого пристрою — адреса `slovo.local`.
 - **План проповіді**: проповідник складає його на планшеті вдома, без
   зв'язку, а на служінні однією кнопкою робить головним планом «Слова».
+- **Проповідник Слова для Windows** — ті самі функції проповідника на
+  комп'ютері з Windows 10/11: своя бібліотека перекладів і пісенників (зі
+  «Слова», з GitHub, з файла), план із віршів, пісень, файлів і оголошень,
+  «⬆ Завантажити в «Слово»» і керування показом. Один файл
+  `Propovidnyk-Slova-*.exe` у [Releases](../../releases), нічого встановлювати не
+  треба; докладно — [Проповідник/ЧИТАТЬ.md](Проповідник/ЧИТАТЬ.md).
 - Програми для Android ставляться за QR-кодом із меню «Налаштування» →
   «Програми для Android…».
 
@@ -304,7 +310,10 @@ Releases.
 **Slovo** is a macOS program for showing the Bible, songs, presentations,
 pictures, video and announcements on a projector during church services. It
 comes with a phone remote, an operator workplace on an Android tablet and a
-remote in any browser on the local network. The interface follows the system
+remote in any browser on the local network, plus **Slovo Preacher for
+Windows** — the tablet's sermon-plan features on a Windows 10/11 computer (build
+the plan offline, upload it to Slovo with one button, control the show; a single
+`Propovidnyk-Slova-*.exe` in Releases). The interface follows the system
 language: Ukrainian, Russian, otherwise English (German is built in too). The
 browser remote and the Android apps have a switchable English interface.
 

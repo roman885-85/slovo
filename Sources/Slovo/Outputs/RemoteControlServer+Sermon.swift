@@ -261,8 +261,16 @@ extension RemoteControlServer {
         case "song":
             let file = string("songBook")
             let index = number("song") ?? -1
+            // Пісенник упізнається за основою імені: `/api/library` досі
+            // називає його «englishworship.vbm» (планшет розбирає лише .vbm),
+            // а в бібліотеці він давно «englishworship.songbook». Порівняння
+            // повного імені не знаходило його, і пісня ставала текстом.
+            let stem = ((file as NSString).deletingPathExtension as String).lowercased()
             if let library = state.songLibrary,
-               let found = library.books.first(where: { $0.url.lastPathComponent.caseInsensitiveCompare(file) == .orderedSame }),
+               let found = library.books.first(where: {
+                   $0.url.lastPathComponent.caseInsensitiveCompare(file) == .orderedSame
+                       || $0.url.deletingPathExtension().lastPathComponent.lowercased() == stem
+               }),
                let book = library.book(found.id), book.songs.indices.contains(index),
                title.isEmpty || book.songs[index].title == title {
                 return PlanItem.song(bookFileName: found.url.lastPathComponent, song: book.songs[index])

@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ==========================================================================
+       Propovidnyk.csproj — «Проповідник Слова» для Windows
+       ==========================================================================
+       Функції планшета для проповідника на комп'ютері з Windows: план
+       проповіді складається вдома, без зв'язку, зі своєю бібліотекою
+       перекладів і пісенників, а на служінні однією кнопкою стає головним
+       планом «Слова»; далі — керування показом.
+       Збирається на Mac в один самодостатній .exe: на цільовому комп'ютері не
+       треба ні .NET, ні чогось іще. Інструмент — у теці toolchain поруч.
+       ========================================================================== -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Propovidnyk</AssemblyName>
+    <RootNamespace>Propovidnyk</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!-- Значок — зі Slovo.icns (build.sh); у відкритому коді зображень немає,
+         і тоді програма збирається з типовим значком. -->
+    <ApplicationIcon Condition="Exists('Resources/AppIcon.ico')">Resources/AppIcon.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Resources/AppIcon-256.png" Condition="Exists('Resources/AppIcon-256.png')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
+    <!-- MyBible — це SQLite; і своя бібліотека перекладів лежить у SQLite, як
+         на планшеті: один розбір — одні й ті самі рядки для екрана плану. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <!-- Нативний SQLite — свіжіший за той, що тягне Microsoft.Data.Sqlite:
+         у 2.1.11 відома вразливість (GHSA-2m69-gcr7-jv3q), а модулі MyBible
+         приходять із чужих рук. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+  </ItemGroup>
+
+</Project>

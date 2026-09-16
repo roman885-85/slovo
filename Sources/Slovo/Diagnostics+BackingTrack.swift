@@ -521,24 +521,38 @@ extension Diagnostics {
         // міряємо рівність, коли смуга вже піднялася, а не сам підйом.
         wait(untilTrue: { (bar.meter.decibelsForCheck.max() ?? -48) > -40 }, seconds: 3)
         wait(untilTrue: { false }, seconds: 0.8)
-        var samples: [Float] = []
+        var samples: [(time: TimeInterval, level: Float)] = []
         for _ in 0..<60 {
             wait(untilTrue: { false }, seconds: 1.0 / 60)
-            samples.append(bar.meter.decibelsForCheck.max() ?? -48)
+            samples.append((ProcessInfo.processInfo.systemUptime, bar.meter.decibelsForCheck.max() ?? -48))
         }
-        let jitter = zip(samples, samples.dropFirst()).map { abs($1 - $0) }.max() ?? 0
-        let level = samples.last ?? -48
+        // Кадри, між якими головний потік стояв довше за 0,1 с (Mac під
+        // навантаженням), не міряємо: за таку паузу смуга законно проходить
+        // більший шлях, і це не смикання.
+        var stalls = 0
+        var jitter: Float = 0
+        for (previous, next) in zip(samples, samples.dropFirst()) {
+            if next.time - previous.time > 0.1 { stalls += 1; continue }
+            jitter = max(jitter, abs(next.level - previous.level))
+        }
+        let level = samples.last?.level ?? -48
         let engineWasRunning = backing.engineRunningForCheck
+        let pausedAt = ProcessInfo.processInfo.systemUptime
         backing.pause()
         wait(untilTrue: { false }, seconds: 0.1)
-        let afterTenth = bar.meter.decibelsForCheck.max() ?? -48
+        let afterPause = bar.meter.decibelsForCheck.max() ?? -48
+        let elapsed = ProcessInfo.processInfo.systemUptime - pausedAt
         wait(untilTrue: { bar.meter.isQuiet }, seconds: 3)
         let settled = bar.meter.isQuiet
-        let falls = level - afterTenth
-        let ok = level > -40 && jitter < 0.5 && falls > 0.3 && falls < 12 && settled
+        let falls = level - afterPause
+        // Скільки впала б смуга зі сталою 0,2 с за той самий час: плавний спад
+        // повільніший. Час міряємо, а не беремо «0,1 с» на віру — під
+        // навантаженням пауза перевірки буває вдвічі довшою.
+        let sharp = Double(level + 48) * (1 - exp(-elapsed / 0.2))
+        let ok = level > -40 && jitter < 0.5 && falls > 0.3 && Double(falls) < sharp && settled
         return Check(area: area, name: name, status: ok ? .ok : .failed,
-                     detail: String(format: "рівний тон: рівень %.1f дБ, найбільший стрибок між кадрами %.2f дБ (межа 0,5); "
-                                        + "за 0,1 с після паузи опустився на %.1f дБ (плавно — від 0,3 до 12); опустився до кінця: %@; двигун звуку крутився: %@",
-                                    level, jitter, falls, settled ? "так" : "ні", engineWasRunning ? "так" : "НІ"))
+                     detail: String(format: "рівний тон: рівень %.1f дБ, найбільший стрибок між кадрами %.2f дБ (межа 0,5; пауз потоку пропущено: \(stalls)); "
+                                        + "за %.2f с після паузи опустився на %.1f дБ (різкий спад дав би %.1f); опустився до кінця: %@; двигун звуку крутився: %@",
+                                    level, jitter, elapsed, falls, sharp, settled ? "так" : "ні", engineWasRunning ? "так" : "НІ"))
     }
 }

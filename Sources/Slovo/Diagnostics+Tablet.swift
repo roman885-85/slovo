@@ -606,6 +606,12 @@ extension Diagnostics {
             let saved = FileManager.default.fileExists(atPath: stored.path)
             let before = desk.plan.items.map(\.id)
             let canon = state.primaryModule?.books.first?.canonicalNumber ?? 10
+            // Пісенник, названий старим іменем «….vbm», як його віддає
+            // /api/library, хоча файл у бібліотеці — «….songbook»: має
+            // знайтися за основою імені й лишитися піснею, а не текстом.
+            let known = state.songLibrary?.books.first(where: { state.songLibrary?.book($0.id)?.songs.isEmpty == false })
+            let knownSong = known.flatMap { state.songLibrary?.book($0.id)?.songs.first }
+            let legacyName = known.map { $0.url.deletingPathExtension().lastPathComponent + ".vbm" } ?? "немає.vbm"
             let answer = json("POST", "/api/sermon-plan", [
                 "title": "Проба плану проповіді",
                 "items": [
@@ -615,6 +621,8 @@ extension Diagnostics {
                     ["type": "file", "title": "слайд", "file": (upload.json["file"] as? String) ?? name],
                     ["type": "song", "title": "пісня", "songBook": "немає-такого.vbm", "song": 0,
                      "parts": [["kind": "Куплет", "text": "рядок"]]],
+                    ["type": "song", "title": knownSong?.title ?? "", "songBook": legacyName, "song": 0,
+                     "parts": [["kind": "Куплет", "text": "рядок"]]],
                 ] as [[String: Any]],
             ])
             let kinds = desk.plan.items.map(\.kind.rawValue)
@@ -623,13 +631,13 @@ extension Diagnostics {
             let ended = json("POST", "/api/sermon-end", [:])
             let after = desk.plan.items.map(\.id)
             let fine = upload.code == 200 && saved && answer.code == 200
-                && kinds == ["scripture", "text", "file", "text"]
+                && kinds == ["scripture", "text", "file", "text", known == nil ? "text" : "song"]
                 && (flag?["on"] as? Bool) == true && wasSermon
                 && ended.code == 200 && !desk.isSermon && after == before
             checks.append(Check(area: area, name: "План проповіді: головний на час проповіді",
                                 status: fine ? .ok : .failed,
                                 detail: "файл → \(upload.code) (\(saved ? "лежить у теці пульта" : "не збережено")); "
-                                    + "план → \(answer.code), пункти: \(kinds.joined(separator: ", ")); "
+                                    + "план → \(answer.code), пункти: \(kinds.joined(separator: ", ")) (останній — пісенник «\(legacyName)» старим іменем); "
                                     + "у стані проповідь: \((flag?["on"] as? Bool) == true ? "так" : "ні"); "
                                     + "після повернення план служіння \(after == before ? "той самий (\(after.count))" : "інший")"))
         }
