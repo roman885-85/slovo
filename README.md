@@ -142,6 +142,12 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 - Модулі перекладів і пісенників окремо, гарячі клавіші, монітори, шляхи.
 - Програма сама перевіряє оновлення і ставить нову версію, показуючи хід
   оновлення; переклади й дані лишаються на місці.
+- **Дані — поза програмою**, у теці `~/Library/Application Support/Slovo`:
+  переклади, пісенники, фони, шаблони, шрифти, плани служінь, налаштування та
+  історія. Повну адресу видно в «Параметри» → «Шляхи» («Показати у Finder»,
+  «Скопіювати шлях») і в довідці, розділ «Де лежать дані». Оновлення замінює
+  лише програму, тож дозволи macOS не скидаються, а щоб зберегти чи перенести
+  все на інший комп'ютер, досить скопіювати цю теку.
 - **Довідка** в самій програмі (меню «Довідка», ⌘?) — українською й
   англійською, без інтернету: кожна вкладка, гарячі клавіші, «Якщо щось не
   так». До кнопок і налаштувань — спливні підказки.
@@ -356,6 +362,12 @@ shown.
   and made the main plan with one button during the service.
 - **Updates** — the program checks for new versions and installs them showing
   the progress; translations and data stay in place.
+- **Data lives outside the app**, in `~/Library/Application Support/Slovo`:
+  translations, songbooks, backgrounds, templates, fonts, service plans,
+  settings and history. The full path is shown in Settings → Paths (“Show in
+  Finder”, “Copy the path”) and in the help topic “Where the data lives”. An
+  update replaces only the app, so macOS permissions are kept; copying that one
+  folder backs everything up or moves it to another computer.
 - **Help** inside the app (Help menu, ⌘?) — Ukrainian and English, offline:
   every tab, keyboard shortcuts, troubleshooting; tooltips on buttons and
   settings.

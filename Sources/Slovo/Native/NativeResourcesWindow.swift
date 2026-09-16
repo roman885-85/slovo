@@ -154,7 +154,9 @@ final class NativeResourcesView: NSView, NativeListSource {
         newButton.toolTip = OurWords.t("Отметить всё, чего ещё нет на этом компьютере")
         updatesButton.toolTip = OurWords.t("Отметить установленное, у чего вышла новая версия")
         noneButton.toolTip = OurWords.t("Снять все отметки")
-        takeButton.toolTip = OurWords.t("Загрузить и установить отмеченное")
+        // Куди все лягає — пишемо прямо в підказці (власник: «только в
+        // программе в настройках и подсказках писать, где все хранится»).
+        takeButton.toolTip = DataHome.hint(OurWords.t("Загрузить и установить отмеченное"))
         addSubview(source)
         search.placeholderString = OurWords.t("Поиск: название, сокращение или язык (uk, ru, en…)")
         search.target = self

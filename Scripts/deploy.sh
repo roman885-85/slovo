@@ -7,6 +7,7 @@
 #
 #   Scripts/deploy.sh            — собрать и обновить ~/Documents/Слово/Слово.app
 #   SLOVO_DEST=~/Слово Scripts/deploy.sh — те саме в іншу теку
+#   SLOVO_DATA=~/дім/Library/Application\ Support/Slovo — дані в чужий дім
 #
 # Порядок внутри — не случайный: сначала пакет собирается целиком (двоичный
 # файл, Info.plist, значок, данные, библиотеки), и только потом подписывается.
@@ -92,49 +93,42 @@ rm -rf "$APP/Contents/_CodeSignature"
 # unsupported format for signature» — и пакет оставался неподписанным вовсе.
 find "$APP" -name "*.cstemp" -delete 2>/dev/null
 
-# Переклади й модулі — завжди всередині пакета (власник: «все переводы и
-# модули внутри пакета всегда»): скопійований пакет має бути цілим. Дані
-# (Modules, BackGrounds, Templates, Plans, Fonts, RemoteAPI) у репозиторії
-# не лежать — сотні мегабайт; коли в пакеті їх нема, беремо з теки,
-# відкладеної поруч (переносимо назад), або клоном із сусіднього пакета.
-if [ ! -d "$APP/Contents/Resources/app/Modules" ]; then
-  for source in "$DEST/Дані з пакета (VisioBible)" "$DEST"/*.app/Contents/Resources/app; do
-    [ -d "$source/Modules" ] || continue
-    [ "$source" = "$APP/Contents/Resources/app" ] && continue
-    mkdir -p "$APP/Contents/Resources/app"
-    for name in Modules BackGrounds Templates Plans Fonts RemoteAPI "Імпорт з VisioBible" inconsistencies.sqlite3 settings.json; do
-      [ -e "$source/$name" ] || continue
-      [ -e "$APP/Contents/Resources/app/$name" ] && continue
-      case "$source" in
-        *"Дані з пакета (VisioBible)") mv "$source/$name" "$APP/Contents/Resources/app/$name" ;;
-        *) cp -Rc "$source/$name" "$APP/Contents/Resources/app/$name" 2>/dev/null \
-             || cp -R "$source/$name" "$APP/Contents/Resources/app/$name" ;;
-      esac
-    done
-    echo "дані в пакет узято з: $source"
-    break
-  done
-fi
-[ -d "$APP/Contents/Resources/app/Modules" ] || echo "ВНИМАНИЕ: в пакете нет Resources/app/Modules — ни переводов, ни песенников"
+# Дані живуть ПОЗА пакетом: ~/Library/Application Support/Slovo (власник
+# 15.09.2026: «Application Support пусть будет там все»). Дані в пакеті
+# ламали його підпис — помічник оновлення переносив їх у новий пакет і
+# підписував його заново, і macOS після кожного оновлення забувала дозвіл на
+# запис екрана. У пакеті лишаються тільки умовчання.
+#
+# Переносить сама програма при запуску (DataMigration): вона зливає теки
+# поелементно й не перезаписує нічого, що вже є вдома. Сценарій цього не
+# робить навмисне — блоковим «є тека — видаляю» легко стерти 89 перекладів
+# заради трьох, які вже лежать удома.
+# SLOVO_DATA — дім даних іншого «дому» (стенд запускає копію з підставним
+# CFFIXED_USER_HOME): без нього збірка для стенда лізла б у дані власника.
+DATA="${SLOVO_DATA:-$HOME/Library/Application Support/Slovo}"
+mkdir -p "$DATA"
+CARRY=$(ls "$APP/Contents/Resources/app" 2>/dev/null | grep -vE '^(Slovo\.ini|hotkeys\.ini|ЧИТАТИ\.md|inconsistencies\.sqlite3)$' | tr '\n' ' ')
+echo "дім даних: $DATA (модулів $(ls "$DATA/Modules" 2>/dev/null | wc -l | tr -d ' '))"
+[ -z "$CARRY" ] || echo "у пакеті лишилося зі старих збірок (програма перенесе при запуску): $CARRY"
 # Залишків VisioBible у пакеті нема: довідка .chm, мови .lng (інтерфейс іде
 # зі свого словника), стилі .vsf, знімки, службові ini.
 for junk in Help Language Styles ScreenShots fonts_correct.ini hebrnew.ini shortnames.json; do
   rm -rf "$APP/Contents/Resources/app/$junk"
 done
-# Своє — з репозиторію, щоразу: умовчання, розкладка клавіш, довідка, база
-# правил нумерації. Саме з них програма стартує на новому комп'ютері.
+# Своє — з репозиторію, щоразу: умовчання, розкладка клавіш, база правил
+# нумерації. Саме з них програма стартує на новому комп'ютері.
 mkdir -p "$APP/Contents/Resources/app"
 cp Resources/Defaults/Slovo.ini "$APP/Contents/Resources/app/Slovo.ini"
 cp Resources/Defaults/hotkeys.ini "$APP/Contents/Resources/app/hotkeys.ini"
 cp Resources/Defaults/ЧИТАТИ.md "$APP/Contents/Resources/app/ЧИТАТИ.md"
-[ -f "$APP/Contents/Resources/app/inconsistencies.sqlite3" ] || [ ! -f Resources/Numbering/inconsistencies.sqlite3 ] \
-  || cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
-# Пісенники VisioBible у пакеті — у свій формат .songbook, до підпису пакета.
+[ -f Resources/Numbering/inconsistencies.sqlite3 ] \
+  && cp Resources/Numbering/inconsistencies.sqlite3 "$APP/Contents/Resources/app/inconsistencies.sqlite3"
+# Пісенники VisioBible у домі даних — у свій формат .songbook.
 SCAN=".build/$NATIVE-apple-macosx/$CONFIG/slovo-scan"
-if [ -x "$SCAN" ] && [ -d "$APP/Contents/Resources/app/Modules" ]; then
-  echo "пісенники: $("$SCAN" --songbooks "$APP/Contents/Resources/app/Modules" 2>&1 | tail -1)"
+if [ -x "$SCAN" ] && [ -d "$DATA/Modules" ]; then
+  echo "пісенники: $("$SCAN" --songbooks "$DATA/Modules" 2>&1 | tail -1)"
 fi
-echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md; модулів: $(ls "$APP/Contents/Resources/app/Modules" 2>/dev/null | wc -l | tr -d ' ')"
+echo "у пакеті своє: Slovo.ini ($(grep -c '^\[' Resources/Defaults/Slovo.ini) секцій), hotkeys.ini, ЧИТАТИ.md; модулів у «$DATA»: $(ls "$DATA/Modules" 2>/dev/null | wc -l | tr -d ' ')"
 
 # Програми для Android — усередині «Слова»: людина зберігає їх з програми
 # на комп'ютер або завантажує зі сторінки пульта в браузері просто на

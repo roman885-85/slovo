@@ -268,6 +268,9 @@ extension Diagnostics {
     /// Підказка не мовою інтерфейсу: в українському — суто російські літери,
     /// в англійському — будь-яка кирилиця.
     static func untranslated(_ text: String, language: String) -> Bool {
+        // Шлях до теки з даними — не переклад: теку людина назвала сама, і
+        // кирилиця в ній («новый тест слова») не означає неперекладеного.
+        let text = text.replacingOccurrences(of: DataHome.displayPath, with: "")
         switch language {
         case "en", "de": return text.unicodeScalars.contains { (0x0400...0x04FF).contains($0.value) }
         case "uk":

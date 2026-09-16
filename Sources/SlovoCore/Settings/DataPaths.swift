@@ -17,7 +17,7 @@ public enum DataPaths {
     /// Ставить `AppState`, коли тека модулів відома.
     public nonisolated(unsafe) static var roots: [URL] = []
 
-    private static let folders = ["BackGrounds", "Templates", "Fonts", "RemoteAPI", "Plans", "WebSlides", "Presets"]
+    private static let folders = ["BackGrounds", "Templates", "Fonts", "RemoteAPI", "Plans", "WebSlides", "Presets", "Modules"]
 
     /// Шлях, що існує: сам або переведений на поточні корені; `nil` — нема ніде.
     public static func existing(_ path: String) -> String? {
@@ -26,6 +26,9 @@ public enum DataPaths {
         if fm.fileExists(atPath: path) { return path }
         let cleaned = path.replacingOccurrences(of: "\\", with: "/")
         var tails: [String] = []
+        // Колишній (пакет) і теперішній (Application Support) дім даних:
+        // шляхи в пакет, збережені до перенесення (15.09.2026), знаходять
+        // файл у домі даних.
         for marker in ["/Contents/Resources/app/", "/Application Support/Slovo/"] {
             if let range = cleaned.range(of: marker, options: .backwards) {
                 tails.append(String(cleaned[range.upperBound...]))

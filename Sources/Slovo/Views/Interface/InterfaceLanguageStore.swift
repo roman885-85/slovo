@@ -17,14 +17,12 @@ enum InterfaceLanguageStore {
     /// Наши переводы. Папка данных VisioBible для записи не годится: она
     /// может лежать внутри бандла программы или на диске только для чтения.
     static var userDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/Language")
+        DataHome.folder.appendingPathComponent("Language")
     }
 
     /// Папка-склейка: ссылки на оригиналы плюс ссылки на наши файлы.
     private static var stagedDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/LanguageMerged")
+        DataHome.supportFolder.appendingPathComponent("LanguageMerged")
     }
 
     // MARK: - Список переводов

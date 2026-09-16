@@ -48,8 +48,7 @@ final class SettingsStore: ObservableObject {
     /// Власний файл налаштувань. У теці даних йому не місце — вона може бути
     /// всередині пакета програми або взагалі закрита на запис.
     static var storageURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/settings.json")
+        DataHome.folder.appendingPathComponent("settings.json")
     }
 
     private static func read(dataRoot: URL) -> SlovoSettings {

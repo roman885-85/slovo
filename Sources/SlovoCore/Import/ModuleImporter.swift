@@ -31,13 +31,11 @@ public struct ImportDestination: Sendable, Hashable {
 
     public init(dataRoot: URL) { self.dataRoot = dataRoot }
 
-    /// Особиста тека програми. Пакет програми на запис закритий (підписаний),
-    /// тому перенесене лягає сюди, а бібліотека підхоплює його поіменно —
-    /// через список модулів і список тек із фонами у «Параметрах».
+    /// Дім даних програми (Application Support): перенесене лягає сюди, а
+    /// бібліотека підхоплює його поіменно — через список модулів і список тек
+    /// із фонами у «Параметрах».
     public static var applicationLibrary: ImportDestination {
-        ImportDestination(dataRoot: FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo"))
+        ImportDestination(dataRoot: DataHome.folder)
     }
 
     public var modulesFolder: URL { dataRoot.appendingPathComponent("Modules") }

@@ -594,10 +594,9 @@ public final class VerseNumbering: @unchecked Sendable {
     /// власний пакет, потім особиста тека. Установлений VisioBible не
     /// перевіряємо — програма везе базу з собою.
     public static func locateDatabase() -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
         let candidates = [
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/inconsistencies.sqlite3"),
-            home.appendingPathComponent("Library/Application Support/Slovo/inconsistencies.sqlite3"),
+            DataHome.bundleData.appendingPathComponent("inconsistencies.sqlite3"),
+            DataHome.folder.appendingPathComponent("inconsistencies.sqlite3"),
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }

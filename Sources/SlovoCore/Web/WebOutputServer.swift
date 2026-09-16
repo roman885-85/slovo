@@ -439,8 +439,7 @@ public final class WebOutputServer: ObservableObject {
     /// Окремо від авторської теки навмисно: та лежить усередині чужого
     /// застосунку і належить не нам. Сервер віддає обидві, авторську першою.
     public nonisolated static var userPagesFolder: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/WebSlides")
+        DataHome.folder.appendingPathComponent("WebSlides")
     }
 
     private func launchHTTP(listener: WebListenerOptions, root: URL, webSocketPort: Int, isRetry: Bool, era: Int) {

@@ -180,8 +180,7 @@ public final class NumberingAssignments: @unchecked Sendable {
     }
 
     public static var defaultFileURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/numbering.json")
+        DataHome.folder.appendingPathComponent("numbering.json")
     }
 
     public var storeURL: URL { fileURL }

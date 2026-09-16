@@ -126,6 +126,11 @@ final class NativeSettingsModulesTab: NSObject, NativeListSource, NativeSettings
                 NativeForm.label(OurWords.t("Видно сразу, «Ок» только запоминает. «Пометить все» и «Снять пометку» действуют на открытый список — переводы или песенники."),
                                  secondary: true),
             ]),
+            // Власник: «писать полный текущий адрес с данными» — щоб було
+            // видно, куди лягають завантажені й привезені модулі.
+            NativeForm.Row("", stretch: true, [
+                NativeForm.note(OurWords.t("Модули лежат в папке: %s", state.modulesFolder.path)),
+            ]),
         ])
     }
 

@@ -490,19 +490,17 @@ final class AppState: ObservableObject {
     /// де нічого більше не встановлено. Потім особиста тека користувача, куди
     /// лягають додані вручну модулі. Установлений VisioBible не перевіряємо:
     /// програма від нього не залежить.
-    /// Тека модулів на старті. Власник: «все переводы и модули внутри пакета
-    /// всегда» — тому за умовчанням це `Contents/Resources/app/Modules` у
-    /// самому пакеті (скопійований пакет — цілий); вибрана вручну — збережена;
-    /// пакет без даних (відкрита збірка) — свій дім у Application Support.
+    /// Тека модулів на старті: `~/Library/Application Support/Slovo/Modules`
+    /// (дані — поза пакетом програми); вибрана вручну — збережена. Вибір, що
+    /// вказує в пакет програми (так пам'ятали старі збірки), не діє: дані
+    /// звідти переїхали.
     /// Пісенники VisioBible в теці один раз переводяться у свій `.songbook`.
     static func settleModulesFolder() -> URL {
         let fm = FileManager.default
-        let inBundle = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/Modules")
         let folder: URL
-        if let saved = Defaults.modulesFolder, fm.fileExists(atPath: saved.path) {
+        if let saved = Defaults.modulesFolder, fm.fileExists(atPath: saved.path),
+           !saved.path.contains("/Contents/Resources/app/") {
             folder = saved
-        } else if fm.fileExists(atPath: inBundle.path) {
-            folder = inBundle
         } else {
             folder = DataHome.modules
             try? fm.createDirectory(at: folder, withIntermediateDirectories: true)

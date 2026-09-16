@@ -986,10 +986,8 @@ final class DeskModel: ObservableObject {
         supportFolder.appendingPathComponent(ServiceHistory.fileName)
     }
 
-    static var supportFolder: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo", isDirectory: true)
-    }
+    /// Історія, план і плани служінь — у домі даних (Application Support).
+    static var supportFolder: URL { DataHome.folder }
 
     private func loadHistory(dataRoot: URL?) {
         if FileManager.default.fileExists(atPath: Self.historyURL.path) {

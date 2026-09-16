@@ -50,8 +50,11 @@ final class NativeHelpWindow: NSObject, WKNavigationDelegate {
             page = page.replacingOccurrences(of: "<!--SECTIONS-\(code)-->", with: sections)
         }
         let safeTopic = (topic ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        // Адреса теки з даними — жива, з цього комп'ютера (власник: «писать
+        // полный текущий адрес с данными»), а не приклад у тексті.
         return page.replacingOccurrences(of: "{{LANG}}", with: language)
             .replacingOccurrences(of: "{{TOPIC}}", with: safeTopic)
+            .replacingOccurrences(of: "{{DATA}}", with: DataHome.displayPath)
     }
 
     func open(topic: String?) {

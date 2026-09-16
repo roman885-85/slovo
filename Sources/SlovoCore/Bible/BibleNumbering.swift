@@ -157,8 +157,7 @@ public struct NumberingBase: Sendable {
     /// Своя копія бази. Файл автора лежить у теці програми і належить
     /// користувачеві — писати в нього не можна, тому правки йдуть сюди.
     public static var userURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/inconsistencies.sqlite3")
+        DataHome.folder.appendingPathComponent("inconsistencies.sqlite3")
     }
 
     /// Файл автора поруч із модулями — лише для читання.

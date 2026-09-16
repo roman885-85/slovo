@@ -131,11 +131,10 @@ enum AppUpdater {
     }
 
     /// Теки й файли даних у `Contents/Resources/app`, які переходять зі
-    /// старого пакета в новий: випуск на GitHub — «лише програма», а в
-    /// пакеті власника лежать усі переклади (власник: «все переводы и модули
-    /// внутри пакета всегда») — оновлення не має їх загубити.
-    nonisolated static let carriedData = ["Modules", "BackGrounds", "Templates", "Plans", "Fonts", "RemoteAPI",
-                                          "Імпорт з VisioBible", "settings.json"]
+    /// старого пакета в новий, — лише те, що ще не переїхало в дім даних
+    /// (`DataMigration.unmigratedBundleItems`). Дані тепер живуть поза пакетом;
+    /// переносити щось доводиться, тільки коли перенесення при запуску не
+    /// вдалося, — і лише тоді пакет підписується заново.
 
     /// Де пакет лежить насправді.
     ///
@@ -162,7 +161,8 @@ enum AppUpdater {
 
     /// Скрипт помічника. Окремо — щоб самоперевірка прогнала його на
     /// тимчасових пакетах.
-    nonisolated static func helperScript(pid: Int32, bundle: URL, fresh: URL, staging: URL, relaunch: Bool = true) -> String {
+    nonisolated static func helperScript(pid: Int32, bundle: URL, fresh: URL, staging: URL,
+                                         carried: [String], relaunch: Bool = true) -> String {
         func quoted(_ url: URL) -> String { "'" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         let old = quoted(bundle), new = quoted(fresh), parked = quoted(bundle) + ".old"
         // Дані переходять уже ПІСЛЯ заміни — з відкладеного старого пакета в
@@ -170,7 +170,7 @@ enum AppUpdater {
         // даними. У 0.82–0.83 теку з новим пакетом стирало закриття вікна,
         // заміна падала посередині, і на місці програми не лишалося нічого,
         // крім «Слово.app.old».
-        let carry = carriedData.map { name -> String in
+        let carry = carried.map { name -> String in
             let item = "'" + name + "'"
             return """
             if [ -e \(parked)/Contents/Resources/app/\(item) ]; then
@@ -192,7 +192,7 @@ enum AppUpdater {
         if mv \(old) \(parked); then
           if mv \(new) \(old); then
         \(carry)
-            codesign --force --deep --sign - \(old) >/dev/null 2>&1
+        \(carried.isEmpty ? "" : "    codesign --force --deep --sign - " + old + " >/dev/null 2>&1")
             rm -rf \(parked)
           else
             echo "оновлення: заміна не вдалася — вертаю старий пакет" >&2
@@ -491,16 +491,16 @@ final class UpdateSession: NSObject, URLSessionDownloadDelegate, @unchecked Send
         _ = run("/usr/bin/xattr", ["-cr", fresh.path])
 
         let appData = bundle.appendingPathComponent("Contents/Resources/app")
-        let carried = AppUpdater.carriedData.filter { fm.fileExists(atPath: appData.appendingPathComponent($0).path) }
+        let carried = DataMigration.unmigratedBundleItems(bundleData: appData)
         if carried.isEmpty {
-            say(OurWords.t("Данных в пакете программы нет — переносить нечего (переводы и ресурсы лежат в Application Support и остаются на месте)."))
+            say(OurWords.t("Данных в пакете программы нет — переносить нечего: переводы, ресурсы и настройки лежат в %s и остаются на месте; подпись нового пакета не меняется.", DataHome.displayPath))
         } else {
             say(OurWords.t("Из старого пакета в новый перейдут: %s.", carried.joined(separator: ", ")))
         }
 
         tell(OurWords.t("Готовлю замену программы…"), 0.96)
         let script = AppUpdater.helperScript(pid: ProcessInfo.processInfo.processIdentifier,
-                                             bundle: bundle, fresh: fresh, staging: staging)
+                                             bundle: bundle, fresh: fresh, staging: staging, carried: carried)
         let helper = staging.appendingPathComponent("replace.sh")
         do {
             try script.write(to: helper, atomically: true, encoding: .utf8)

@@ -106,10 +106,9 @@ public struct IniSettings {
     /// Support`, ні в пляшках CrossOver — програма більше не шукає: чужі
     /// налаштування не мають переробляти її під себе.
     public static var configCandidates: [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
-            home.appendingPathComponent("Library/Application Support/Slovo/\(configFileName)"),
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app/\(configFileName)"),
+        [
+            DataHome.folder.appendingPathComponent(configFileName),
+            DataHome.bundleData.appendingPathComponent(configFileName),
         ]
     }
 

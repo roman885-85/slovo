@@ -38,7 +38,7 @@ final class ImportIntroPage: NSView, ImportPageRefreshing {
             + "и в библиотеку не попадает то, что программа не прочитает."), size: 11, secondary: true)
 
         let reveal = NativeForm.button(OurWords.t("Показать в Finder"),
-                                       hint: OurWords.t("Открыть в Finder папку, куда программа кладёт данные")) { [weak self] in
+                                       hint: DataHome.hint(OurWords.t("Открыть в Finder папку, куда программа кладёт данные"))) { [weak self] in
             guard let self else { return }
             try? self.model.destination.prepare()
             NSWorkspace.shared.activateFileViewerSelecting([self.model.destination.dataRoot])

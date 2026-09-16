@@ -103,7 +103,7 @@ final class ImportSummaryPage: NSView, ImportPageRefreshing {
         }
 
         let reveal = NativeForm.button(OurWords.t("Показать в Finder"),
-                                       hint: OurWords.t("Открыть в Finder папку, куда программа кладёт данные")) { [weak self] in
+                                       hint: DataHome.hint(OurWords.t("Открыть в Finder папку, куда программа кладёт данные"))) { [weak self] in
             guard let self else { return }
             NSWorkspace.shared.activateFileViewerSelecting([self.model.destination.dataRoot])
         }

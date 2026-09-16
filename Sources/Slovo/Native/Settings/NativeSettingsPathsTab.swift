@@ -30,9 +30,43 @@ final class NativeSettingsPathsTab: NSObject, NativeListSource, NativeSettingsRo
     }
 
     var page: NSView {
-        let view = NativeForm.Page([pictures, screenshots, thumbs])
+        let view = NativeForm.Page([home, pictures, screenshots, thumbs])
         refresh()
         return view
+    }
+
+    // MARK: Де лежать дані програми
+
+    /// Повна адреса дому даних — щоб людина знала, що копіювати й що берегти.
+    ///
+    /// Власник 15.09.2026: «только в программе в настройках и подсказках
+    /// писать, где все хранится», «писать полный текущий адрес с данными».
+    /// Від 0.94 дані живуть поза пакетом: оновлення замінює лише програму,
+    /// а переклади, пісенники, фони, шаблони, налаштування й історія
+    /// лишаються на місці — і macOS не питає дозволів заново.
+    private var home: NativeForm.Group {
+        let path = NSTextField(labelWithString: DataHome.displayPath)
+        path.font = .systemFont(ofSize: 11)
+        path.isSelectable = true
+        path.lineBreakMode = .byTruncatingMiddle
+        path.toolTip = DataHome.displayPath
+        return NativeForm.Group(OurWords.t("Где лежат данные программы:"), [
+            NativeForm.Row("", stretch: true, [path]),
+            NativeForm.Row("", [
+                NativeForm.button(OurWords.t("Показать в Finder"),
+                                  hint: OurWords.t("Открыть в Finder папку, куда программа кладёт данные")) {
+                    NSWorkspace.shared.activateFileViewerSelecting([DataHome.folder])
+                },
+                NativeForm.button(OurWords.t("Скопировать путь"),
+                                  hint: OurWords.t("Полный адрес папки с данными — в буфер обмена")) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(DataHome.displayPath, forType: .string)
+                },
+            ]),
+            NativeForm.Row("", stretch: true, [
+                NativeForm.note(OurWords.t("Здесь переводы, песенники, фоны, шаблоны, шрифты, планы, настройки и история. Папка лежит вне программы: обновление её не трогает, разрешения macOS не сбрасываются, а для переноса на другой компьютер довольно скопировать эту папку.")),
+            ]),
+        ])
     }
 
     // MARK: (31) (32) (33) Пути для фоновых рисунков

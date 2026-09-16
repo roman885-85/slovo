@@ -928,8 +928,7 @@ final class RemoteControlServer {
 
     /// Куда складываются файлы, присланные с телефона.
     static var uploadsFolder: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/Пульт", isDirectory: true)
+        DataHome.folder.appendingPathComponent("Пульт", isDirectory: true)
     }
 
     struct UploadRefused: LocalizedError {

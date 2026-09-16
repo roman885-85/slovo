@@ -102,7 +102,8 @@ extension Diagnostics {
             try fm.createDirectory(at: old.appendingPathComponent("Contents/Resources/app/Modules/rst+"), withIntermediateDirectories: true)
             try Data("ini".utf8).write(to: old.appendingPathComponent("Contents/Resources/app/Modules/rst+/bibleqt.ini"))
             try fm.createDirectory(at: old.appendingPathComponent("Contents/Resources/app/Templates"), withIntermediateDirectories: true)
-            let script = AppUpdater.helperScript(pid: 999_999, bundle: old, fresh: fresh, staging: staging, relaunch: false)
+            let script = AppUpdater.helperScript(pid: 999_999, bundle: old, fresh: fresh, staging: staging,
+                                                 carried: ["Modules", "Templates"], relaunch: false)
             let file = root.appendingPathComponent("replace.sh")
             try script.write(to: file, atomically: true, encoding: .utf8)
             let run = Process()
@@ -120,7 +121,8 @@ extension Diagnostics {
             // Нового пакета нема (теку стерли) — старий лишається цілим на місці.
             let lost = root.appendingPathComponent(".slovo-update-стерта/Слово.app")
             let second = AppUpdater.helperScript(pid: 999_999, bundle: old, fresh: lost,
-                                                 staging: lost.deletingLastPathComponent(), relaunch: false)
+                                                 staging: lost.deletingLastPathComponent(),
+                                                 carried: ["Modules", "Templates"], relaunch: false)
             let file2 = root.appendingPathComponent("replace2.sh")
             try second.write(to: file2, atomically: true, encoding: .utf8)
             let run2 = Process()
@@ -132,9 +134,17 @@ extension Diagnostics {
             if kept != "нова" || !fm.fileExists(atPath: old.appendingPathComponent("Contents/Resources/app/Modules/rst+/bibleqt.ini").path) {
                 trouble.append("без нового пакета старий не лишився цілим")
             }
+            // Дані лежать в Application Support — переносити з пакета нічого,
+            // а отже й підписувати заново нічим. Саме через ту повторну
+            // ad-hoc підпис програма після кожного оновлення просила Запис
+            // екрана наново: для TCC вона ставала іншою.
+            let clean = AppUpdater.helperScript(pid: 999_999, bundle: old, fresh: fresh, staging: staging,
+                                                carried: [], relaunch: false)
+            if clean.contains("codesign") { trouble.append("без перенесення даних помічник усе одно переписує підпис") }
+            if !script.contains("codesign") { trouble.append("з перенесенням даних помічник не оновлює підпис") }
             checks.append(Check(area: area, name: "Оновлення програми зберігає переклади й дані пакета",
                                 status: trouble.isEmpty ? .ok : .failed,
-                                detail: trouble.isEmpty ? "новий пакет на місці, Modules і Templates перейшли зі старого, Slovo.ini — нове; без нового пакета старий лишається цілим" : trouble.joined(separator: "; ")))
+                                detail: trouble.isEmpty ? "новий пакет на місці, Modules і Templates перейшли зі старого, Slovo.ini — нове; без нового пакета старий лишається цілим; без перенесення підпис не чіпається" : trouble.joined(separator: "; ")))
         } catch {
             checks.append(Check(area: area, name: "Оновлення програми зберігає переклади й дані пакета", status: .failed, detail: "\(error)"))
         }

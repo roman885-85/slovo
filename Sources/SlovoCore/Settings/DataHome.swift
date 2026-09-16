@@ -1,21 +1,63 @@
 import Foundation
 
-/// Свій дім даних «Слова».
+/// Свій дім даних «Слова»: `~/Library/Application Support/Slovo`.
 ///
-/// Власник: «все переводы и модули внутри пакета всегда» — тека модулів (і
-/// поруч із нею фони, шаблони, плани, шрифти, веб-сторінки) живе в пакеті
-/// програми, `Contents/Resources/app`, щоб скопійований на інший комп'ютер
-/// пакет був цілим. А «залишки VisioBible», яких він просив позбутися, —
-/// це довідка `.chm`, мови `.lng`, стилі `.vsf`, знімки й службові ini
-/// (їх викидає `deploy.sh`) та формат пісенників `.vbm`: він переводиться у
-/// свій `.songbook` просто в теці модулів, а оригінали відкладаються в
-/// «Імпорт з VisioBible» поруч із нею. У `~/Library/Application Support/Slovo`
-/// живуть налаштування, історія, план, шаблони слайдів — як і раніше.
+/// Власник 15.09.2026: дані — поза пакетом програми, «Application Support
+/// пусть будет там все», а де все зберігається — писати в налаштуваннях і
+/// підказках. Досі модулі, фони, шаблони, шрифти й плани жили в пакеті
+/// (`Contents/Resources/app`, «все переводы и модули внутри пакета всегда»),
+/// а налаштування, історія й свої шаблони — тут. Дані в пакеті ламали його
+/// підпис: помічник оновлення переносив їх у новий пакет і мусив підписувати
+/// його заново тимчасовим підписом — і macOS після кожного оновлення вважала
+/// «Слово» новою програмою й забувала дозвіл на запис екрана. Тепер пакет
+/// містить лише програму й свої умовчання (`bundledDefaults`), оновлення
+/// просто замінює його, а все людське лежить тут. Переносить старе з пакета
+/// `DataMigration` при запуску.
+///
+/// Формат пісенників `.vbm` переводиться у свій `.songbook` просто в теці
+/// модулів, а оригінали відкладаються в «Імпорт з VisioBible» поруч із нею.
 public enum DataHome {
 
     public static var folder: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Slovo", isDirectory: true)
+    }
+
+    /// Та сама тека — для кешів (бібліотека NDI, збірка yt-dlp, склеєні
+    /// переклади інтерфейсу): власник хоче, щоб усе було в одному місці.
+    public static var supportFolder: URL { folder }
+
+    /// Шлях для людини — повний, як є на цьому комп'ютері (власник: «писать
+    /// полный текущий адрес с данными»).
+    public static var displayPath: String { folder.path }
+
+    /// Речення для підказок: що і де лежить, повною адресою (власник: «только
+    /// в программе в настройках и подсказках писать, где все хранится»).
+    public static var whereText: String {
+        OurWords.t("Всё загруженное и настроенное лежит в папке: %s", displayPath)
+    }
+
+    /// Дописати адресу до готової підказки — окремим рядком.
+    public static func hint(_ text: String) -> String { text + "\n" + whereText }
+
+    /// Що лишається в пакеті: умовчання, які йдуть із програмою.
+    public static let bundledDefaults: Set<String> = ["Slovo.ini", "hotkeys.ini", "ЧИТАТИ.md", "inconsistencies.sqlite3"]
+
+    /// Кеші службової теки — не дані, їх не переносимо.
+    public static let supportCaches: Set<String> = ["ndi", "ytdlp-build", "LanguageMerged"]
+
+    /// Залишки VisioBible: довідка `.chm`, мови `.lng`, стилі `.vsf`, знімки й
+    /// службові ini. Власник просив їх позбутися — з пакета старої збірки вони
+    /// в дім даних не їдуть. `Language` тут — саме тека VisioBible; наші
+    /// виправлені переклади лежать у домі даних і лишаються на місці.
+    public static let visioBibleLeftovers: Set<String> = [
+        "Help", "Language", "Styles", "ScreenShots",
+        "fonts_correct.ini", "hebrnew.ini", "shortnames.json",
+    ]
+
+    /// Дані в пакеті програми (старі збірки й повний випуск).
+    public static var bundleData: URL {
+        Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app", isDirectory: true)
     }
 
     /// Тека модулів, коли пакет своєї не має (відкрита збірка без даних).

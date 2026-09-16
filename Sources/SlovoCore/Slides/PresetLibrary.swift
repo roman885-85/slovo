@@ -34,8 +34,7 @@ public final class PresetLibrary {
 
     /// Папка по умолчанию — рядом с остальными данными приложения.
     public static var defaultFolder: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Slovo/Presets")
+        DataHome.folder.appendingPathComponent("Presets")
     }
 
     // MARK: - Чтение и запись

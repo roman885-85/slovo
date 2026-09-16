@@ -317,7 +317,14 @@ public struct ModuleRosterEntry: Codable, Sendable, Hashable, Identifiable {
     public func resolvedURL(dataRoot: URL) -> URL {
         var tail = path.replacingOccurrences(of: "\\", with: "/")
         while tail.hasSuffix("/") { tail.removeLast() }
-        if tail.hasPrefix("/") { return URL(fileURLWithPath: tail) }
+        if tail.hasPrefix("/") {
+            // Повний шлях у пакет після перенесення даних в Application
+            // Support веде в нікуди — шукаємо модуль там, куди він переїхав.
+            if !FileManager.default.fileExists(atPath: tail), let moved = DataPaths.existing(tail) {
+                return URL(fileURLWithPath: moved)
+            }
+            return URL(fileURLWithPath: tail)
+        }
         return dataRoot.appendingPathComponent(tail)
     }
 
