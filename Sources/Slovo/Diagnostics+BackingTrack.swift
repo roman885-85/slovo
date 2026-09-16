@@ -365,6 +365,7 @@ extension Diagnostics {
         checks.append(Check(area: area, name: "Пік-метр показує рівень фонограми",
                             status: loudest > -40 ? .ok : .failed,
                             detail: String(format: "найвищий рівень на індикаторі %.1f дБ (синус 0,18 — очікуємо близько −15…−25)", loudest)))
+
         backing.volume = wasVolume
 
         // 5. Окремі кнопки «Грати», «Пауза», «Стоп».
@@ -491,6 +492,53 @@ extension Diagnostics {
         }
         checks.append(Check(area: area, name: "Список фонограм пам'ятається між запусками",
                             status: memoryOK ? .ok : .failed, detail: memoryDetail))
+        checks.append(meterSmoothnessCheck(bar: bar, backing: backing, folder: folder))
         return checks
+    }
+
+    /// Власник 16.09.2026: «пик метр более сделай мягким и плавным». На рівному
+    /// тоні смуга стоїть рівно — не смикається між порціями звуку (досі між
+    /// ними приходив нуль, і вона падала й підскакувала); після паузи
+    /// опускається поступово, а не падає на дно за кадр.
+    static func meterSmoothnessCheck(bar: NativeBackingTrackBar, backing: BackingTrackPlayer, folder: URL) -> Check {
+        let area = "Фонограма"
+        let name = "Пік-метр м'який і плавний"
+        let steadyFolder = folder.appendingPathComponent("рівний")
+        try? FileManager.default.createDirectory(at: steadyFolder, withIntermediateDirectories: true)
+        guard let steady = makeWave(seconds: 6, in: steadyFolder) else {
+            return Check(area: area, name: name, status: .skipped, detail: "не вдалося зробити пробний тон")
+        }
+        let wasVolume = backing.volume
+        defer { backing.stop(); backing.volume = wasVolume }
+        backing.close()
+        backing.putBackPlaylist([])
+        _ = bar.accept(urls: [steady])
+        wait(untilTrue: { backing.url == steady }, seconds: 2)
+        backing.volume = 0.8
+        backing.play()
+        wait(untilTrue: { backing.isPlaying }, seconds: 1)
+        // Звук іде не з першої миті, а м'який підйом займає частку секунди:
+        // міряємо рівність, коли смуга вже піднялася, а не сам підйом.
+        wait(untilTrue: { (bar.meter.decibelsForCheck.max() ?? -48) > -40 }, seconds: 3)
+        wait(untilTrue: { false }, seconds: 0.8)
+        var samples: [Float] = []
+        for _ in 0..<60 {
+            wait(untilTrue: { false }, seconds: 1.0 / 60)
+            samples.append(bar.meter.decibelsForCheck.max() ?? -48)
+        }
+        let jitter = zip(samples, samples.dropFirst()).map { abs($1 - $0) }.max() ?? 0
+        let level = samples.last ?? -48
+        let engineWasRunning = backing.engineRunningForCheck
+        backing.pause()
+        wait(untilTrue: { false }, seconds: 0.1)
+        let afterTenth = bar.meter.decibelsForCheck.max() ?? -48
+        wait(untilTrue: { bar.meter.isQuiet }, seconds: 3)
+        let settled = bar.meter.isQuiet
+        let falls = level - afterTenth
+        let ok = level > -40 && jitter < 0.5 && falls > 0.3 && falls < 12 && settled
+        return Check(area: area, name: name, status: ok ? .ok : .failed,
+                     detail: String(format: "рівний тон: рівень %.1f дБ, найбільший стрибок між кадрами %.2f дБ (межа 0,5); "
+                                        + "за 0,1 с після паузи опустився на %.1f дБ (плавно — від 0,3 до 12); опустився до кінця: %@; двигун звуку крутився: %@",
+                                    level, jitter, falls, settled ? "так" : "ні", engineWasRunning ? "так" : "НІ"))
     }
 }

@@ -142,14 +142,29 @@ final class NativeWaveformView: NSView {
 
 /// Пік-метр фонограми: лівий і правий канали смугами, шкала в децибелах.
 ///
-/// Зелене — до −12 дБ, жовте — до −3 дБ, червоне — ближче до перевантаження.
-/// Рівень падає плавно, а найвищий пік тримається ще півтори секунди
-/// рискою — щоб устигнути його побачити.
+/// Власник 16.09.2026: «пик метр более сделай мягким и плавным». Досі смуга
+/// була з різких сегментів, злітала миттєво й падала сходинками по кадрах
+/// (30 на секунду, а між порціями звуку — нуль). Тепер:
+///  • балістика як у звукорежисерських індикаторів: підйом м'який (стала
+///    часу 70 мс), спад повільний (400 мс) — смуга «дихає» за музикою, а не
+///    смикається;
+///  • 60 кадрів і рух між порціями звуку без провалів;
+///  • суцільна заокруглена смуга з м'яким переходом зелене → жовте → червоне
+///    і ледь помітною доріжкою під нею;
+///  • найвищий пік — тонка риска, що тримається секунду й плавно гасне.
 @MainActor
 final class NativeLevelMeter: NSView {
 
     private static let floor: Float = -48
+    /// Стала часу підйому й спаду, секунди.
+    private static let attack: Float = 0.07
+    private static let release: Float = 0.4
+    /// Скільки тримається риска найвищого піку, і за скільки гасне.
+    private static let holdTime: TimeInterval = 1.0
+    private static let fadeTime: TimeInterval = 0.6
 
+    /// Куди смуга йде (останній пік) і де вона зараз.
+    private var target: [Float] = [floor, floor]
     private var shown: [Float] = [floor, floor]
     private var held: [Float] = [floor, floor]
     private var heldAt: [TimeInterval] = [0, 0]
@@ -157,23 +172,42 @@ final class NativeLevelMeter: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// Чи ще є що показувати: рівень не впав до нуля.
-    var isQuiet: Bool { shown.allSatisfy { $0 <= Self.floor + 0.5 } && held.allSatisfy { $0 <= Self.floor + 0.5 } }
+    /// Чи ще є що показувати: смуга й риска опустилися до дна.
+    var isQuiet: Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        let dark = heldAt.allSatisfy { now - $0 > Self.holdTime + Self.fadeTime }
+        return shown.allSatisfy { $0 <= Self.floor + 0.5 } && (dark || held.allSatisfy { $0 <= Self.floor + 0.5 })
+    }
 
-    /// Нові піки (лінійно, 0…1). Падіння — 24 дБ за секунду.
+    /// Нові піки (лінійно, 0…1).
     func update(left: Float, right: Float) {
         let now = ProcessInfo.processInfo.systemUptime
-        let elapsed = Float(min(0.5, now - last))
-        last = now
         for (index, value) in [left, right].enumerated() {
             let decibels = value > 0 ? max(Self.floor, 20 * log10(value)) : Self.floor
-            shown[index] = max(decibels, shown[index] - 24 * elapsed)
-            if decibels >= held[index] {
-                held[index] = decibels
-                heldAt[index] = now
-            } else if now - heldAt[index] > 1.5 {
-                held[index] = max(Self.floor, held[index] - 24 * elapsed)
+            target[index] = decibels
+            if decibels >= held[index] || now - heldAt[index] > Self.holdTime + Self.fadeTime {
+                if decibels > Self.floor + 0.5 {
+                    held[index] = decibels
+                    heldAt[index] = now
+                }
             }
+        }
+        advance()
+    }
+
+    /// Кадр без нових порцій звуку: смуга продовжує рух до останньої цілі,
+    /// а ціль потроху опускається — щоб застиглий звук не висів угорі.
+    func advance() {
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsed = Float(min(0.25, max(0, now - last)))
+        last = now
+        for index in 0..<2 {
+            let goal = target[index]
+            let constant = goal > shown[index] ? Self.attack : Self.release
+            let step = 1 - exp(-elapsed / constant)
+            shown[index] += (goal - shown[index]) * step
+            if abs(shown[index] - goal) < 0.05 { shown[index] = goal }
+            target[index] = max(Self.floor, target[index] - 6 * elapsed)
         }
         needsDisplay = true
     }
@@ -181,28 +215,54 @@ final class NativeLevelMeter: NSView {
     /// Показані рівні в дБ — самоперевірці.
     var decibelsForCheck: [Float] { shown }
 
+    /// Частка шкали для рівня в дБ.
+    private static func fraction(_ decibels: Float) -> CGFloat {
+        CGFloat(min(1, max(0, (decibels - floor) / -floor)))
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        // Сегменти, як на пульті звукорежисера: горять до поточного рівня,
-        // решта ледь видна. Лежить на темній картці поруч із хвилею.
         let rect = bounds
         let gap: CGFloat = 2
         let rowHeight = max(2, (rect.height - gap) / 2)
-        let segmentWidth: CGFloat = 3
-        let segmentGap: CGFloat = 1.5
-        let segments = max(8, Int((rect.width + segmentGap) / (segmentWidth + segmentGap)))
+        let radius = min(rowHeight / 2, 3)
+        let now = ProcessInfo.processInfo.systemUptime
+        // Кольори м'якші за системні: трохи приглушені, щоб смуга не різала
+        // очі на темній картці поруч із хвилею.
+        let gradient = NSGradient(colorsAndLocations:
+            (NSColor(calibratedRed: 0.30, green: 0.78, blue: 0.45, alpha: 1), 0),
+            (NSColor(calibratedRed: 0.36, green: 0.82, blue: 0.46, alpha: 1), Self.fraction(-18)),
+            (NSColor(calibratedRed: 0.93, green: 0.80, blue: 0.30, alpha: 1), Self.fraction(-9)),
+            (NSColor(calibratedRed: 0.95, green: 0.42, blue: 0.32, alpha: 1), Self.fraction(-2)),
+            (NSColor(calibratedRed: 0.95, green: 0.32, blue: 0.30, alpha: 1), 1))
         for channel in 0..<2 {
             let y = rect.minY + CGFloat(channel) * (rowHeight + gap)
-            let holdSegment = held[channel] > Self.floor + 0.5
-                ? Int((held[channel] - Self.floor) / -Self.floor * Float(segments - 1)) : -1
-            for index in 0..<segments {
-                let threshold = Self.floor + Float(index + 1) / Float(segments) * -Self.floor
-                let colour: NSColor = threshold > -3 ? .systemRed : threshold > -12 ? .systemYellow : .systemGreen
-                let lit = shown[channel] >= threshold - (-Self.floor / Float(segments)) * 0.5
-                let alpha: CGFloat = lit || index == holdSegment ? 1 : 0.14
-                colour.withAlphaComponent(alpha).setFill()
-                let x = rect.minX + CGFloat(index) * (segmentWidth + segmentGap)
-                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: segmentWidth, height: rowHeight),
-                             xRadius: 0.8, yRadius: 0.8).fill()
+            let track = NSRect(x: rect.minX, y: y, width: rect.width, height: rowHeight)
+            NSColor(white: 1, alpha: 0.07).setFill()
+            NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
+
+            let width = rect.width * Self.fraction(shown[channel])
+            if width > 0.5 {
+                let bar = NSRect(x: rect.minX, y: y, width: max(width, radius * 2), height: rowHeight)
+                let clip = NSBezierPath(roundedRect: bar, xRadius: radius, yRadius: radius)
+                NSGraphicsContext.saveGraphicsState()
+                clip.addClip()
+                // Градієнт на всю шкалу, а видно лише пройдене: колір залежить
+                // від рівня, а не від довжини смуги.
+                gradient?.draw(in: track, angle: 0)
+                NSGraphicsContext.restoreGraphicsState()
+            }
+
+            // Риска найвищого піку: тримається, потім плавно гасне.
+            let age = now - heldAt[channel]
+            if held[channel] > Self.floor + 0.5, age < Self.holdTime + Self.fadeTime {
+                let alpha = age <= Self.holdTime ? 1 : CGFloat(1 - (age - Self.holdTime) / Self.fadeTime)
+                let x = rect.minX + rect.width * Self.fraction(held[channel])
+                let colour: NSColor = held[channel] > -2 ? NSColor(calibratedRed: 0.95, green: 0.35, blue: 0.30, alpha: 1)
+                    : held[channel] > -9 ? NSColor(calibratedRed: 0.93, green: 0.80, blue: 0.30, alpha: 1)
+                    : NSColor(white: 1, alpha: 1)
+                colour.withAlphaComponent(0.85 * max(0, alpha)).setFill()
+                NSBezierPath(roundedRect: NSRect(x: min(rect.maxX - 2, max(rect.minX, x - 1)), y: y, width: 2, height: rowHeight),
+                             xRadius: 1, yRadius: 1).fill()
             }
         }
     }

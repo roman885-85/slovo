@@ -58,19 +58,23 @@ final class BackingLevels: @unchecked Sendable {
     private let lock = NSLock()
     private var left: Float = 0
     private var right: Float = 0
+    private var fresh = false
 
     func push(left newLeft: Float, right newRight: Float) {
         lock.lock()
         left = max(left, newLeft)
         right = max(right, newRight)
+        fresh = true
         lock.unlock()
     }
 
-    /// Найбільші піки з минулого разу; лічильник обнуляється.
-    func take() -> (left: Float, right: Float) {
+    /// Найбільші піки з минулого разу; лічильник обнуляється. `nil` — нових
+    /// порцій звуку не прийшло: порція йде раз на ~23 мс, а індикатор
+    /// малюється частіше, і нуль між порціями смикав смугу вниз-угору.
+    func take() -> (left: Float, right: Float)? {
         lock.lock()
-        defer { left = 0; right = 0; lock.unlock() }
-        return (left, right)
+        defer { left = 0; right = 0; fresh = false; lock.unlock() }
+        return fresh ? (left, right) : nil
     }
 }
 
@@ -479,6 +483,10 @@ final class BackingTrackPlayer: ObservableObject {
         position = duration
         notify()
     }
+
+    /// Чи крутиться двигун звуку — самоперевірці: коли macOS міняє пристрій
+    /// виводу, двигун зупиняється, і індикатор мовчить не з власної вини.
+    var engineRunningForCheck: Bool { engine.isRunning }
 
     private func currentPosition() -> Double {
         guard isPlaying, let nodeTime = node.lastRenderTime,

@@ -400,17 +400,28 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         time.stringValue = MediaPlayerModel.timeText(seconds) + " / " + MediaPlayerModel.timeText(player.duration)
     }
 
-    /// 30 кадрів на секунду, поки грає або поки рівень ще не впав.
+    /// 60 кадрів на секунду, поки грає або поки рівень ще не опустився:
+    /// власник просив індикатор «более мягким и плавным».
     private func startAnimation() {
         guard animation == nil else { return }
-        animation = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        // У режимі відстеження (тягнуть повзунок чи межу) звичайний таймер
+        // стоїть — і смуга завмирала якраз тоді, коли на неї дивляться.
+        RunLoop.main.add(timer, forMode: .common)
+        animation = timer
     }
 
     private func tick() {
-        let peaks = player.levels.take()
-        meter.update(left: player.isPlaying ? peaks.left : 0, right: player.isPlaying ? peaks.right : 0)
+        if !player.isPlaying {
+            _ = player.levels.take()
+            meter.update(left: 0, right: 0)
+        } else if let peaks = player.levels.take() {
+            meter.update(left: peaks.left, right: peaks.right)
+        } else {
+            meter.advance()
+        }
         if player.isPlaying { showPosition(player.livePosition) }
         if !player.isPlaying, meter.isQuiet {
             animation?.invalidate()
