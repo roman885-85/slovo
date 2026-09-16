@@ -208,6 +208,9 @@ extension Diagnostics {
             window.orderOut(nil)
         }
         defaults.removeObject(forKey: "backingPanelHeight")
+        // Без цього раскладка лишалася від збереженої висоти (підставка вже
+        // розклала область), і «як було» міряли від чужого числа.
+        root.needsLayout = true
         root.layoutSubtreeIfNeeded()
         guard let bar = root.subviews.compactMap({ $0 as? NativeBackingTrackBar }).first else {
             return Check(area: area, name: name, status: .failed, detail: "панелі фонограм у піснях немає")
@@ -221,6 +224,11 @@ extension Diagnostics {
         // Широка раскладка: список ліворуч, картка треку праворуч від нього.
         bar.layoutSubtreeIfNeeded()
         if bar.list.frame.maxX > bar.frame.width * 0.55 { faults.append("список зайняв усю ширину — раскладка не широка") }
+        // Власник: «полоса громкости слишком длинная» — смуга сталої ширини.
+        if let slider = bar.subviews.compactMap({ $0 as? NSSlider }).first,
+           slider.frame.width > NativeBackingTrackBar.volumeWidth + 0.5 {
+            faults.append("смуга гучності завдовжки \(Int(slider.frame.width)) — довша за \(Int(NativeBackingTrackBar.volumeWidth))")
+        }
 
         let barBefore = bar.frame.height
         let listBefore = bar.list.frame.height
@@ -240,7 +248,10 @@ extension Diagnostics {
         root.heightGrip.onReset?()
         root.layoutSubtreeIfNeeded()
         if defaults.object(forKey: "backingPanelHeight") != nil || abs(bar.frame.height - barBefore) > 1 {
-            faults.append("подвійне клацання не вернуло як було")
+            faults.append(String(format: "подвійне клацання не вернуло як було: %.0f замість %.0f, ключ %@, область %.0f×%.0f",
+                                 bar.frame.height, barBefore,
+                                 defaults.object(forKey: "backingPanelHeight") == nil ? "стерто" : "лишився",
+                                 root.bounds.width, root.bounds.height))
         }
 
         return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,

@@ -286,12 +286,19 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         toneLabel.frame = NSRect(x: toneDown.frame.maxX + 4, y: row + 2, width: 96, height: 22)
         toneUp.frame = NSRect(x: toneLabel.frame.maxX + 4, y: row + 2, width: toneButton, height: 22)
 
-        let volumeLeft = toneUp.frame.maxX + 12
+        // Гучність — поруч із тоном і сталої ширини. Розтягнута до правого
+        // краю вікна, смуга виходила на пів екрана (власник: «полоса громкости
+        // слишком длинная»), а точніше від того не крутиться.
+        let volumeLeft = toneUp.frame.maxX + 16
         quiet.frame = NSRect(x: volumeLeft, y: row + 5, width: 14, height: 14)
-        loud.frame = NSRect(x: width - pad - 18, y: row + 5, width: 18, height: 14)
+        let room = max(30, width - pad - 18 - 4 - (quiet.frame.maxX + 4))
         volume.frame = NSRect(x: quiet.frame.maxX + 4, y: row + 2,
-                              width: max(30, loud.frame.minX - quiet.frame.maxX - 8), height: 20)
+                              width: min(Self.volumeWidth, room), height: 20)
+        loud.frame = NSRect(x: volume.frame.maxX + 4, y: row + 5, width: 18, height: 14)
     }
+
+    /// Ширина смуги гучності в широкій раскладці.
+    static let volumeWidth: CGFloat = 160
 
     /// Вузька (стовпчиком) раскладка — коли панель стоїть у стовпці.
     private func layoutNarrow() {
