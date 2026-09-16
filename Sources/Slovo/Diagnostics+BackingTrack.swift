@@ -173,72 +173,109 @@ extension Diagnostics {
         backing.close()
         let music = folder.appendingPathComponent("музика")
         try? FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        checks.append(songsBackingShot(state: state))
         checks.append(contentsOf: backingPanelChecks(state: state,
                                                      wave: makeWave(seconds: 20, in: music, envelope: true) ?? wave,
                                                      folder: folder))
         return checks
     }
 
-    /// Власник: «размер высоты плейлиста должен регулироваться и весь блок
-    /// по ширине тоже». Тягнемо обидві межі вкладки «Медіа» так, як тягне
-    /// миша, і міряємо, що панель і стовпець справді змінилися й
-    /// запам'яталися; наприкінці повертаємо як було.
+    /// Власник 16.09.2026: «блок фонограм перенести в песни, поместить над
+    /// закладками названий песенников и сделать на всю длину окна, с
+    /// возможностью растягивания по высоте». Тягнемо межу так, як тягне миша,
+    /// і міряємо: панель на всю ширину, стоїть останньою (під нею — сама
+    /// смуга закладок), висота міняється, пам'ятається й вертається.
     static func backingGripCheck(state: AppState) -> Check {
         let area = "Фонограма"
-        let name = "Висоту фонограм і ширину блоку тягнуть мишею"
-        let workspace = NativeMediaWorkspace.shared
-        workspace.attach(state: state)
-        let defaults = UserDefaults.standard
-        let saved = ["backingPanelHeight", "mediaListWidth"].map { ($0, defaults.object(forKey: $0)) }
-        defer {
-            for (key, value) in saved { defaults.set(value, forKey: key) }
+        let name = "Фонограма в піснях: на всю ширину, висота тягнеться"
+        NativeSongsWorkspace.shared.attach(state: state)
+        guard let root = NativeSongsWorkspace.shared.rootForCheck else {
+            return Check(area: area, name: name, status: .failed, detail: "робочої області пісень немає")
         }
-        let host = workspace.superview
-        let wasFrame = workspace.frame
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
-                              styleMask: [.titled], backing: .buffered, defer: false)
-        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 1200, height: 820))
-        window.contentView = holder
-        workspace.removeFromSuperview()
-        holder.addSubview(workspace)
-        workspace.frame = holder.bounds
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "backingPanelHeight")
+        defer { defaults.set(saved, forKey: "backingPanelHeight") }
+        let host = root.superview
+        let wasFrame = root.frame
+        // Вид малюється лише у вікні: знімок із голої підставки виходив
+        // білим аркушем. Тому — те саме віконце за краєм екрана, що й скрізь.
+        root.removeFromSuperview()
+        let window = bench(for: root, size: NSSize(width: 1200, height: 820))
         defer {
-            workspace.removeFromSuperview()
-            if let host { host.addSubview(workspace); workspace.frame = wasFrame; workspace.needsLayout = true }
             window.contentView = nil
+            root.removeFromSuperview()
+            if let host { host.addSubview(root); root.frame = wasFrame; root.needsLayout = true }
+            window.orderOut(nil)
         }
         defaults.removeObject(forKey: "backingPanelHeight")
-        defaults.removeObject(forKey: "mediaListWidth")
-        workspace.layoutSubtreeIfNeeded()
-        guard let bar = workspace.subviews.compactMap({ $0 as? NativeBackingTrackBar }).first else {
-            return Check(area: area, name: name, status: .failed, detail: "панелі фонограм у вкладці немає")
+        root.layoutSubtreeIfNeeded()
+        guard let bar = root.subviews.compactMap({ $0 as? NativeBackingTrackBar }).first else {
+            return Check(area: area, name: name, status: .failed, detail: "панелі фонограм у піснях немає")
         }
+        var faults: [String] = []
+        // На всю ширину вікна й останньою знизу: під нею вже смуга закладок.
+        if abs(bar.frame.width - root.bounds.width) > 1 { faults.append("не на всю ширину: \(Int(bar.frame.width)) з \(Int(root.bounds.width))") }
+        if abs(bar.frame.maxY - root.bounds.height) > 1 { faults.append("не в самому низу області") }
+        let columns = root.subviews.first { $0 !== bar && $0.frame.height > 100 }
+        if let columns, columns.frame.maxY > bar.frame.minY { faults.append("стовпці залазять на панель") }
+        // Широка раскладка: список ліворуч, картка треку праворуч від нього.
+        bar.layoutSubtreeIfNeeded()
+        if bar.list.frame.maxX > bar.frame.width * 0.55 { faults.append("список зайняв усю ширину — раскладка не широка") }
+
         let barBefore = bar.frame.height
         let listBefore = bar.list.frame.height
-        workspace.heightGrip.onDrag?(-60)
-        workspace.layoutSubtreeIfNeeded()
+        root.heightGrip.onDrag?(-60)
+        root.layoutSubtreeIfNeeded()
         let grew = bar.frame.height - barBefore
         let listGrew = bar.list.frame.height - listBefore
         let remembered = defaults.object(forKey: "backingPanelHeight") != nil
-        workspace.heightGrip.onDrag?(5000)
-        workspace.layoutSubtreeIfNeeded()
-        let floorOK = abs(bar.frame.height - NativeBackingTrackBar.minimumHeight) < 1
-        let widthBefore = bar.frame.width
-        workspace.grip.onDrag?(80)
-        workspace.layoutSubtreeIfNeeded()
-        let widened = bar.frame.width - widthBefore
-        workspace.grip.onDrag?(-5000)
-        workspace.layoutSubtreeIfNeeded()
-        let narrowOK = abs(bar.frame.width - NativeMediaWorkspace.minimumListWidth) < 1
-        workspace.heightGrip.onReset?()
-        workspace.layoutSubtreeIfNeeded()
-        let resetOK = defaults.object(forKey: "backingPanelHeight") == nil && abs(bar.frame.height - barBefore) < 1
-        let ok = abs(grew - 60) < 1 && abs(listGrew - 60) < 1 && remembered && floorOK && abs(widened - 80) < 1 && narrowOK && resetOK
-        return Check(area: area, name: name, status: ok ? .ok : .failed,
-                     detail: String(format: "угору на 60 → панель +%.0f, її список +%.0f, запам'ятано: %@; униз до упору → найменша %@; "
-                                        + "ширина +80 → +%.0f; вужче до упору → %.0f (межа %.0f); подвійне клацання → як було: %@",
-                                    grew, listGrew, remembered ? "так" : "ні", floorOK ? "так" : "ні",
-                                    widened, bar.frame.width, NativeMediaWorkspace.minimumListWidth, resetOK ? "так" : "ні"))
+        if abs(grew - 60) > 1 { faults.append(String(format: "угору на 60 — панель змінилася на %.0f", grew)) }
+        if abs(listGrew - 60) > 1 { faults.append(String(format: "список змінився на %.0f", listGrew)) }
+        if !remembered { faults.append("висоту не запам'ятано") }
+        root.heightGrip.onDrag?(5000)
+        root.layoutSubtreeIfNeeded()
+        if abs(bar.frame.height - NativeBackingTrackBar.minimumHeight) > 1 {
+            faults.append(String(format: "униз до упору — %.0f замість %.0f", bar.frame.height, NativeBackingTrackBar.minimumHeight))
+        }
+        root.heightGrip.onReset?()
+        root.layoutSubtreeIfNeeded()
+        if defaults.object(forKey: "backingPanelHeight") != nil || abs(bar.frame.height - barBefore) > 1 {
+            faults.append("подвійне клацання не вернуло як було")
+        }
+
+        return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty
+                        ? String(format: "ширина %.0f (уся область), угору на 60 → панель і її список +60, запам'ятано; униз до упору → %.0f; подвійне клацання → як було",
+                                 bar.frame.width, NativeBackingTrackBar.minimumHeight)
+                        : faults.joined(separator: "; "))
+    }
+
+    /// Знімок справжнього вікна на вкладці «Пісні»: очима видно те, чого не
+    /// видно числами, — чи стоїть панель над закладками пісенників і чи не
+    /// порожня вона. Знімаємо саме вікно: вид, вийнятий у підставку, у
+    /// знімок не малюється (шари), і виходив білий аркуш.
+    static func songsBackingShot(state: AppState) -> Check {
+        let area = "Фонограма"
+        let name = "Знімок вкладки «Пісні» з панеллю фонограм"
+        let wasMode = state.mode
+        state.mode = .songs
+        Signals.shared.send(.mode)
+        wait(untilTrue: { false }, seconds: 0.6)
+        defer {
+            state.mode = wasMode
+            Signals.shared.send(.mode)
+        }
+        guard let content = NativeMainWindowController.shared.window?.contentView else {
+            return Check(area: area, name: name, status: .skipped, detail: "головного вікна немає")
+        }
+        content.layoutSubtreeIfNeeded()
+        let saved = snapshot(content, to: "slovo-пісні-фонограма.png")
+        let bar = NativeSongsWorkspace.shared.rootForCheck?.subviews.compactMap { $0 as? NativeBackingTrackBar }.first
+        let placed = bar.map { $0.window === NativeMainWindowController.shared.window && $0.frame.width > 400 } ?? false
+        return Check(area: area, name: name, status: saved && placed ? .ok : .failed,
+                     detail: saved ? (placed ? "знімок ~/Library/Logs/slovo-пісні-фонограма.png; панель у вікні, ширина \(Int(bar?.frame.width ?? 0))"
+                                             : "панель не стала у вікно")
+                                   : "знімок не записався")
     }
 
     /// Список фонограм, хвиля, пік-метр і кнопки панелі.
@@ -254,10 +291,11 @@ extension Diagnostics {
         let media = state.media
         let wasBacking = backing.playlist
         let wasMedia = media.playlist
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 520),
+        // Панель тепер стоїть на всю ширину вікна — і міряємо її такою.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 260),
                               styleMask: [.titled], backing: .buffered, defer: false)
         let bar = NativeBackingTrackBar(player: backing)
-        bar.frame = NSRect(x: 0, y: 0, width: 320, height: 520)
+        bar.frame = NSRect(x: 0, y: 0, width: 1000, height: 260)
         window.contentView = bar
         defer {
             backing.close()

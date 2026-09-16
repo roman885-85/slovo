@@ -46,6 +46,9 @@ final class NativeSongsWorkspace {
     // MARK: - Частини вікна
 
     private var root: NSView?
+
+    /// Робоча область пісень — самоперевірці: панель фонограм і межа висоти.
+    var rootForCheck: NativeSongsRootView? { root as? NativeSongsRootView }
     let header = NativeSongHeader()
     private var columns: NativeColumnsView?
     var groupColumn: NativeSongColumn?
@@ -133,6 +136,9 @@ final class NativeSongsWorkspace {
 
     /// Каталог, який уже забрали. За ним видно, що другий захід не потрібен.
     private weak var adoptedLibrary: SongLibrary?
+
+    /// Панель фонограм над закладками пісенників.
+    private(set) var backingBar: NativeBackingTrackBar?
 
     /// Скільки вкладок Пісенників стоїть на смузі (33). Для самоперевірки:
     /// відкритий збірник у моделі ще не значить, що людина його бачить.
@@ -339,7 +345,12 @@ final class NativeSongsWorkspace {
         ])
         self.columns = columns
 
-        let root = NativeSongsRootView(header: header, columns: columns)
+        // Фонограма — тут, над закладками пісенників, на всю ширину вікна
+        // (власник 16.09.2026). Стояла на «Медіа», у стовпці зі списком
+        // файлів; співають же під неї пісню, і місце їй біля пісень.
+        let backing = NativeBackingTrackBar(player: state.backing)
+        backingBar = backing
+        let root = NativeSongsRootView(header: header, columns: columns, backing: backing)
         applyCaptions()
         applyEditMode()
         return root
@@ -356,6 +367,7 @@ final class NativeSongsWorkspace {
     }
 
     private func applyCaptions() {
+        backingBar?.applyCaptions()
         groupTitle.text = caption("Label1", "Группа:")
         songTitle.text = caption("Label2", "Песня:")
         partTitle.text = caption("Label3", "Текст:")
@@ -931,30 +943,72 @@ final class NativeSongsWorkspace {
     }
 }
 
-/// Рабочая зона: шапка сверху, три колонки под ней.
+/// Рабочая зона: шапка сверху, три колонки под ней, фонограма — внизу.
+///
+/// Панель фонограм стоїть останньою, на всю ширину вікна: під нею вже сама
+/// смуга з закладками пісенників (власник: «поместить над закладками названий
+/// песенников и сделать на всю длину окна, с возможностью растягивания по
+/// высоте»). Висоту тягнуть за межу над панеллю, подвійне клацання — як було.
 @MainActor
 final class NativeSongsRootView: NSView {
 
     private let header: NativeSongHeader
     private let columns: NativeColumnsView
+    private let backing: NativeBackingTrackBar
+    /// Межа над панеллю: за неї тягнуть висоту (і самоперевірка теж).
+    let heightGrip = NativeBottomHeightGrip()
+    private static let heightKey = "backingPanelHeight"
 
-    init(header: NativeSongHeader, columns: NativeColumnsView) {
+    init(header: NativeSongHeader, columns: NativeColumnsView, backing: NativeBackingTrackBar) {
         self.header = header
         self.columns = columns
+        self.backing = backing
         super.init(frame: .zero)
         addSubview(header)
         addSubview(columns)
+        addSubview(heightGrip)
+        addSubview(backing)
+        heightGrip.toolTip = OurWords.t("Потяните вверх или вниз — высота панели фонограмм; двойной щелчок — как было")
+        heightGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(Self.heightKey, self.backing.frame.height - delta,
+                             min: NativeBackingTrackBar.minimumHeight, max: self.maximumBackingHeight)
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        heightGrip.onReset = { [weak self] in
+            NativeWidths.reset(Self.heightKey)
+            self?.needsLayout = true
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
 
     override var isFlipped: Bool { true }
 
+    /// Вище панель не піднімається: спискам пісень лишається хоч кілька рядків.
+    private var maximumBackingHeight: CGFloat {
+        let free = max(0, bounds.height - NativeSongHeader.height - 1 - 8)
+        return max(NativeBackingTrackBar.minimumHeight, free - 180)
+    }
+
+    /// Висота панелі зараз — самоперевірці й раскладці.
+    var backingHeight: CGFloat {
+        min(maximumBackingHeight,
+            NativeWidths.value(Self.heightKey, auto: NativeBackingTrackBar.minimumHeight + 40,
+                               min: NativeBackingTrackBar.minimumHeight, max: maximumBackingHeight))
+    }
+
     override func layout() {
         super.layout()
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: NativeSongHeader.height)
-        columns.frame = NSRect(x: 0, y: NativeSongHeader.height + 1, width: bounds.width,
-                               height: max(0, bounds.height - NativeSongHeader.height - 1))
+        let top = NativeSongHeader.height + 1
+        let gap: CGFloat = 6
+        let panel = backingHeight
+        let columnsHeight = max(0, bounds.height - top - panel - gap)
+        columns.frame = NSRect(x: 0, y: top, width: bounds.width, height: columnsHeight)
+        heightGrip.frame = NSRect(x: 0, y: columns.frame.maxY, width: bounds.width, height: gap)
+        backing.frame = NSRect(x: 0, y: heightGrip.frame.maxY, width: bounds.width, height: panel)
     }
 
     override func draw(_ dirtyRect: NSRect) {

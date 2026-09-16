@@ -11,6 +11,9 @@ import SlovoCore
 /// Влаштовано так само, як показ картинок: той самий `NativeList`, ті самі
 /// кнопки «додати», «прибрати», «очистити». Різниця тільки в тому, що
 /// праворуч стоїть панель плеєра, а не попередній перегляд сторінки.
+///
+/// Панель фонограм стояла тут-таки, під списком; 16.09.2026 власник переніс
+/// її на «Пісні», над закладками пісенників: під фонограму співають пісню.
 @MainActor
 final class NativeMediaWorkspace: NSView, NativeListSource {
 
@@ -31,15 +34,8 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
     /// Роздільник між списком і плеєром: ширина списку тягнеться й пам'ятається.
     let grip = NativeWidthGrip()
     private static let listWidthKey = "mediaListWidth"
-    /// Межа між списком медіа й фонограмами: за неї тягнуть висоту панелі
-    /// фонограм, а з нею — висоту їхнього списку. Власник: «размер высоты
-    /// плейлиста должен регулироваться и весь блок по ширине тоже».
-    let heightGrip = NativeBottomHeightGrip()
-    private static let backingHeightKey = "backingPanelHeight"
-    /// Найвужчий лівий стовпець: у фонограм п'ять кнопок і тон в один ряд.
-    static let minimumListWidth: CGFloat = 240
-    /// Фонограма — під списком файлів: своя, окрема від плеєра.
-    private var backingBar: NativeBackingTrackBar?
+    /// Найвужчий лівий стовпець: у списку файлів мають поміститися кнопки.
+    static let minimumListWidth: CGFloat = 200
 
     private init() {
         super.init(frame: .zero)
@@ -63,12 +59,8 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         list.onActivate = { [weak self] position in
             self?.state?.media.openFromPlaylist(at: position)
         }
-        let bar = NativeBackingTrackBar(player: state.backing)
-        addSubview(bar)
-        backingBar = bar
         tokens.append(Signals.shared.subscribe(.language) { [weak self] in
             self?.applyCaptions()
-            self?.backingBar?.applyCaptions()
         })
         // Список плеєра міняється й повз нас: файл відкривають перетягуванням
         // у вікно й клавішею Ctrl+M.
@@ -102,25 +94,12 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         addSubview(list)
         addSubview(toolbar)
         addSubview(grip)
-        addSubview(heightGrip)
         grip.onDrag = { [weak self] delta in
             guard let self else { return }
             NativeWidths.set(Self.listWidthKey, self.list.frame.width + delta,
                              min: Self.minimumListWidth, max: self.bounds.width * 0.6)
             self.needsLayout = true
             self.layoutSubtreeIfNeeded()
-        }
-        heightGrip.onDrag = { [weak self] delta in
-            guard let self, let bar = self.backingBar else { return }
-            // Униз — панель фонограм нижча, угору — вища.
-            NativeWidths.set(Self.backingHeightKey, bar.frame.height - delta,
-                             min: NativeBackingTrackBar.minimumHeight, max: self.backingMaxHeight)
-            self.needsLayout = true
-            self.layoutSubtreeIfNeeded()
-        }
-        heightGrip.onReset = { [weak self] in
-            NativeWidths.reset(Self.backingHeightKey)
-            self?.needsLayout = true
         }
         grip.onReset = { [weak self] in NativeWidths.reset(Self.listWidthKey); self?.needsLayout = true }
 
@@ -145,8 +124,7 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
 
     private func applyCaptions() {
         listCaption.stringValue = OurWords.t("Медиафайлы: заставки, видео")
-        heightGrip.toolTip = OurWords.t("Потяните вверх или вниз — высота панели фонограмм; двойной щелчок — как было")
-        grip.toolTip = OurWords.t("Потяните — ширина списков и фонограмм; двойной щелчок — как было")
+        grip.toolTip = OurWords.t("Потяните — ширина списка; двойной щелчок — как было")
         let items = toolbar.arrangedSubviews
         items.first?.toolTip = state?.text("PSBOpenVideo", default: OurWords.t("Открыть медиа-файл"))
         if items.count > 1 { items[1].toolTip = OurWords.t("Убрать из списка") }
@@ -161,33 +139,14 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         let toolbarHeight: CGFloat = 28
         toolbar.frame = NSRect(x: gap, y: gap, width: listWidth, height: toolbarHeight)
         let top = toolbar.frame.maxY + gap
-        // Фонограмі — половина стовпця, але не менше, ніж треба її хвилі й
-        // кнопкам, і так, щоб списку плеєра лишилося хоч трохи рядків.
-        let column = max(0, bounds.height - top - gap)
-        let automatic = min(max(NativeBackingTrackBar.minimumHeight, column * 0.55), backingMaxHeight)
-        let backingHeight = backingBar == nil ? 0
-            : min(backingMaxHeight, NativeWidths.value(Self.backingHeightKey, auto: automatic,
-                                                        min: NativeBackingTrackBar.minimumHeight, max: backingMaxHeight))
-        let barHeight = backingBar == nil ? 0 : backingHeight + gap
         list.frame = NSRect(x: gap, y: top, width: listWidth,
-                            height: max(0, column - barHeight))
-        backingBar?.frame = NSRect(x: gap, y: bounds.height - gap - backingHeight,
-                                   width: listWidth, height: backingHeight)
-        heightGrip.isHidden = backingBar == nil
-        heightGrip.frame = NSRect(x: gap, y: list.frame.maxY, width: listWidth, height: gap)
+                            height: max(0, bounds.height - top - gap))
         grip.frame = NSRect(x: list.frame.maxX, y: gap, width: NativeWidths.grip,
                             height: max(0, bounds.height - gap * 2))
         let hostX = grip.frame.maxX + gap
         host?.frame = NSRect(x: hostX, y: gap,
                              width: max(0, bounds.width - hostX - gap),
                              height: max(0, bounds.height - gap * 2))
-    }
-
-    /// Вища за це панель фонограм не стає: списку медіа лишається хоч
-    /// кілька рядків.
-    private var backingMaxHeight: CGFloat {
-        let column = max(0, bounds.height - (8 + 28 + 8) - 8)
-        return max(NativeBackingTrackBar.minimumHeight, column - 90)
     }
 
     // MARK: - Дії

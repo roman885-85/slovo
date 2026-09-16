@@ -3,7 +3,12 @@ import Combine
 import SlovoCore
 import UniformTypeIdentifiers
 
-/// Панель фонограммы под списком файлов вкладки «Медиа».
+/// Панель фонограммы над закладками песенников на вкладке «Песни».
+///
+/// Стояла на «Медиа», под списком файлов; власник 16.09.2026: «блок фонограм
+/// перенести в песни, поместить над закладками названий песенников и сделать
+/// на всю длину окна, с возможностью растягивания по высоте». Там ей и место:
+/// фонограмму пускают к песне, а не к заставке.
 ///
 /// Своя, отдельная от плеера: свой список, хвиля треку, пік-метр,
 /// «играть», «пауза», «стоп», «по кругу» и громкость. Ни одна кнопка показа
@@ -22,10 +27,18 @@ private final class BackingDeck: NSView {
 @MainActor
 final class NativeBackingTrackBar: NSView, NativeListSource {
 
-    /// Высота панели без списка: заголовок, картка треку, кнопки, гучність.
+    /// Высота панели без списка в узкой раскладке: заголовок, картка треку,
+    /// кнопки, гучність — одне під одним.
     static let chromeHeight: CGFloat = 266
-    /// Меньше этого списку не остаётся места даже на две строки.
-    static let minimumHeight: CGFloat = chromeHeight + 50
+    /// З цієї ширини панель розкладається вшир: список ліворуч, картка треку
+    /// й кнопки праворуч. На всю ширину вікна стовпчиком вона б розтяглася
+    /// пусткою, а списку лишилося б два рядки.
+    static let wideWidth: CGFloat = 620
+    /// Нижче цього панель не стискається: картці треку потрібні назва, хвиля
+    /// й рівень, а ряду — кнопки.
+    static let minimumHeight: CGFloat = 170
+    /// Найменша висота вузької (стовпчиком) раскладки.
+    static let narrowMinimumHeight: CGFloat = chromeHeight + 50
 
     private let player: BackingTrackPlayer
     private let icon = NSImageView()
@@ -222,6 +235,66 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
 
     override func layout() {
         super.layout()
+        if bounds.width >= Self.wideWidth { layoutWide() } else { layoutNarrow() }
+    }
+
+    /// На всю ширину вікна: ліворуч список із заголовком, праворуч картка
+    /// треку, а під нею один ряд — кнопки, тон і гучність.
+    private func layoutWide() {
+        let pad: CGFloat = 8
+        let width = bounds.width
+        let height = bounds.height
+        // Список — приблизно чверть ширини, але не вужчий за свої кнопки й
+        // не ширший за 460: на широкому екрані далі йде сама порожнеча, а
+        // хвилі місце потрібніше.
+        let listWidth = min(max(260, width * 0.26), 460)
+
+        icon.frame = NSRect(x: pad, y: 6, width: 16, height: 16)
+        var right = listWidth
+        for button in [clearButton, removeButton, addButton] {
+            right -= 22
+            button.frame = NSRect(x: right, y: 4, width: 22, height: 20)
+        }
+        let captionWidth = min(ceil(caption.fittingSize.width), max(20, right - pad - 20 - 30))
+        caption.frame = NSRect(x: pad + 20, y: 7, width: captionWidth, height: 16)
+        count.frame = NSRect(x: caption.frame.maxX + 4, y: 8, width: max(0, right - caption.frame.maxX - 8), height: 14)
+        list.frame = NSRect(x: pad, y: 28, width: max(60, listWidth - pad), height: max(0, height - 28 - pad))
+
+        let deckX = listWidth + pad
+        let deckWidth = max(120, width - deckX - pad)
+        let rowHeight: CGFloat = 26
+        let deckHeight = max(80, height - pad - rowHeight - 8 - pad)
+        deck.frame = NSRect(x: deckX, y: pad, width: deckWidth, height: deckHeight)
+        let deckInner = max(20, deckWidth - 16)
+        let timeWidth: CGFloat = 86
+        name.frame = NSRect(x: 8, y: 7, width: max(20, deckInner - timeWidth - 4), height: 16)
+        time.frame = NSRect(x: 8 + deckInner - timeWidth, y: 8, width: timeWidth, height: 14)
+        meter.frame = NSRect(x: 8, y: deckHeight - 18, width: deckInner, height: 10)
+        waveformView.frame = NSRect(x: 8, y: 30, width: deckInner, height: max(20, meter.frame.minY - 36))
+
+        // Один ряд під карткою: грати, пауза, стоп, по колу, наступна — тон —
+        // гучність. Гучність забирає те, що лишилося.
+        let row = deck.frame.maxY + 8
+        var x = deckX
+        let buttons = [playButton, pauseButton, stopButton, loopButton, nextButton]
+        for button in buttons {
+            button.frame = NSRect(x: x, y: row, width: 34, height: rowHeight)
+            x += 38
+        }
+        let toneButton: CGFloat = 62
+        toneDown.frame = NSRect(x: x + 6, y: row + 2, width: toneButton, height: 22)
+        toneLabel.frame = NSRect(x: toneDown.frame.maxX + 4, y: row + 2, width: 96, height: 22)
+        toneUp.frame = NSRect(x: toneLabel.frame.maxX + 4, y: row + 2, width: toneButton, height: 22)
+
+        let volumeLeft = toneUp.frame.maxX + 12
+        quiet.frame = NSRect(x: volumeLeft, y: row + 5, width: 14, height: 14)
+        loud.frame = NSRect(x: width - pad - 18, y: row + 5, width: 18, height: 14)
+        volume.frame = NSRect(x: quiet.frame.maxX + 4, y: row + 2,
+                              width: max(30, loud.frame.minX - quiet.frame.maxX - 8), height: 20)
+    }
+
+    /// Вузька (стовпчиком) раскладка — коли панель стоїть у стовпці.
+    private func layoutNarrow() {
         let pad: CGFloat = 8
         let width = bounds.width
         let inner = max(20, width - pad * 2)
