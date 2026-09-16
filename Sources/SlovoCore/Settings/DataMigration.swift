@@ -41,6 +41,9 @@ public enum DataMigration {
     /// Звіт останнього запуску — для журналу й самоперевірки.
     public nonisolated(unsafe) static var lastReport = Report()
 
+    /// Чи довелося перепечатати пакет після перенесення (звіт для журналу).
+    public nonisolated(unsafe) static var resealed = ""
+
     @discardableResult
     public static func run(target: URL = DataHome.folder,
                            bundleData: URL = DataHome.bundleData) -> Report {
@@ -58,8 +61,38 @@ public enum DataMigration {
         merge(from: bundleData, into: target,
               skipping: DataHome.bundledDefaults.union(DataHome.visioBibleLeftovers),
               prefix: "", report: &report)
+        if !report.moved.isEmpty, bundleData.standardizedFileURL.path == DataHome.bundleData.standardizedFileURL.path {
+            reseal(bundle: Bundle.main.bundleURL)
+        }
         lastReport = report
         return report
+    }
+
+    /// Перепечатати свій пакет після того, як дані з нього поїхали.
+    ///
+    /// Підпис накладено на ВЕСЬ пакет разом із даними; забравши їх, ми
+    /// ламаємо печатку, і наступного разу macOS скаже «пошкоджено». Тому один
+    /// раз — і тільки коли справді щось забрали зі свого пакета — кладемо
+    /// тимчасовий підпис (ключа сертифіката в людини немає). Далі переносити
+    /// нічого, підпис більше не міняється, і дозволи живуть.
+    private static func reseal(bundle: URL) {
+        guard FileManager.default.isWritableFile(atPath: bundle.path) else {
+            resealed = "пакет лише для читання — підпис не оновлено"
+            return
+        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        task.arguments = ["--force", "--deep", "--sign", "-", bundle.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+            resealed = task.terminationStatus == 0 ? "підпис пакета оновлено після перенесення"
+                : "codesign повернув \(task.terminationStatus)"
+        } catch {
+            resealed = "codesign не запустився: \(error.localizedDescription)"
+        }
     }
 
     /// Чи лишилося в пакеті щось, чого немає в новому домі, — помічнику

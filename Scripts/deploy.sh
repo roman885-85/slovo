@@ -99,17 +99,33 @@ find "$APP" -name "*.cstemp" -delete 2>/dev/null
 # підписував його заново, і macOS після кожного оновлення забувала дозвіл на
 # запис екрана. У пакеті лишаються тільки умовчання.
 #
-# Переносить сама програма при запуску (DataMigration): вона зливає теки
-# поелементно й не перезаписує нічого, що вже є вдома. Сценарій цього не
-# робить навмисне — блоковим «є тека — видаляю» легко стерти 89 перекладів
-# заради трьох, які вже лежать удома.
 # SLOVO_DATA — дім даних іншого «дому» (стенд запускає копію з підставним
 # CFFIXED_USER_HOME): без нього збірка для стенда лізла б у дані власника.
 DATA="${SLOVO_DATA:-$HOME/Library/Application Support/Slovo}"
 mkdir -p "$DATA"
-CARRY=$(ls "$APP/Contents/Resources/app" 2>/dev/null | grep -vE '^(Slovo\.ini|hotkeys\.ini|ЧИТАТИ\.md|inconsistencies\.sqlite3)$' | tr '\n' ' ')
+# Дані зі старого пакета переносимо тут-таки, ДО підпису: підпис лягає на
+# весь пакет разом із вмістом, і якби дані виїжджали з нього потім (це вміє
+# сама програма), печатка ламалася б — macOS сказала б «пошкоджено».
+# Переносимо поелементно, як DataMigration: `--ignore-existing` не чіпає
+# нічого, що вже є вдома. Блокового «є тека — видаляю» тут навмисно немає:
+# у власника вдома лежали три модулі, а в пакеті 89 — таке стерло б переклади.
+CARRIED=""
+if [ -d "$APP/Contents/Resources/app" ]; then
+  for name in Modules BackGrounds Templates Plans Fonts RemoteAPI WebSlides Presets "Імпорт з VisioBible" settings.json; do
+    source="$APP/Contents/Resources/app/$name"
+    [ -e "$source" ] || continue
+    if [ -d "$source" ]; then
+      mkdir -p "$DATA/$name"
+      rsync -a --ignore-existing "$source/" "$DATA/$name/"
+    elif [ ! -e "$DATA/$name" ]; then
+      cp "$source" "$DATA/$name"
+    fi
+    rm -rf "$source"
+    CARRIED="$CARRIED $name"
+  done
+fi
 echo "дім даних: $DATA (модулів $(ls "$DATA/Modules" 2>/dev/null | wc -l | tr -d ' '))"
-[ -z "$CARRY" ] || echo "у пакеті лишилося зі старих збірок (програма перенесе при запуску): $CARRY"
+[ -z "$CARRIED" ] || echo "з пакета перенесено в дім даних (не перезаписуючи):$CARRIED"
 # Залишків VisioBible у пакеті нема: довідка .chm, мови .lng (інтерфейс іде
 # зі свого словника), стилі .vsf, знімки, службові ini.
 for junk in Help Language Styles ScreenShots fonts_correct.ini hebrnew.ini shortnames.json; do

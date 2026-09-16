@@ -179,6 +179,9 @@ extension Diagnostics {
             // Другий прогін нічого не робить — крім того, що вже лежало вдома.
             let again = DataMigration.run(target: home, bundleData: bundle)
             if !again.moved.isEmpty || !again.copied.isEmpty { faults.append("удруге щось перенесло: \(again.summary)") }
+            // Підпис перекладають лише своєму пакетові й лише коли з нього
+            // справді щось поїхало: чужі теки цього не чіпають.
+            if !DataMigration.resealed.isEmpty { faults.append("чужа тека — а підпис чіпали: \(DataMigration.resealed)") }
         } catch {
             faults.append("\(error)")
         }

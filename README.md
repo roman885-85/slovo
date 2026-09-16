@@ -180,7 +180,8 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 
 1. Завантажте `Slovo-<версія>-macOS.zip` з [Releases](../../releases),
    розпакуйте й перенесіть «Слово.app» куди зручно.
-2. Програма підписана тимчасовим підписом, тож перший запуск — так: на
+2. Програма підписана власним сертифікатом, не завіреним Apple, тож перший
+   запуск — так: на
    macOS 11–14 правою кнопкою на «Слово.app» → «Відкрити» → «Відкрити»; на
    macOS 15 і новіших — спробуйте відкрити, потім «Системні параметри» →
    «Приватність і безпека» → «Все одно відкрити». Покроково, з усіма
@@ -218,7 +219,13 @@ Scripts/deploy.sh        # пакет «Слово.app» у ~/Documents/Слов
 
 - Тека призначення: `SLOVO_DEST=~/Слово Scripts/deploy.sh`.
 - Підпис: якщо в системі є сертифікат «Slovo»
-  (`Scripts/signing-identity.sh`) — ним, інакше тимчасовим підписом.
+  (`Scripts/signing-identity.sh`) — ним, інакше тимчасовим підписом. Ним же
+  підписує випуски `GitHub/package.sh`: тимчасовий підпис міняється з кожною
+  збіркою, і macOS після оновлення питала б дозволи наново.
+- Дані (модулі, фони, шаблони, плани) `deploy.sh` виносить у
+  `~/Library/Application Support/Slovo` ще до підпису — усередині пакета їм не
+  місце: підпис лягає на весь пакет, і дані, що виїдуть із нього потім,
+  зламали б печатку. `SLOVO_DATA=…` — дім даних для чужого «дому» (стенд).
 - NDI: покладіть `libndi.dylib` у теку призначення. yt-dlp в один файл:
   `Scripts/build-ytdlp.sh`.
 - Самоперевірка: `Слово.app/Contents/MacOS/Slovo --selftest` — звіт у
@@ -413,7 +420,8 @@ contains none of its code and is not affiliated with its authors.
 
 1. Download `Slovo-<version>-macOS.zip` from [Releases](../../releases), unzip
    it and move “Слово.app” wherever you like.
-2. The app has an ad-hoc signature, so open it the first time like this: on
+2. The app is signed with our own certificate, not notarised by Apple, so open
+   it the first time like this: on
    macOS 11–14 right-click “Слово.app” → Open → Open; on macOS 15 and later try
    to open it, then System Settings → Privacy & Security → Open Anyway. Step by
    step, with every error and the permissions macOS asks for — **[how to launch

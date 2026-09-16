@@ -16,7 +16,10 @@ MainActor.assumeIsolated {
     // й теку модулів. Власник 15.09.2026: дані поза пакетом, щоб оновлення
     // не переписувало підпис і дозволи macOS не скидалися.
     let moved = DataMigration.run()
-    if !moved.isEmpty { NativeTrace.say("дані в \(DataHome.displayPath): " + moved.summary) }
+    if !moved.isEmpty {
+        NativeTrace.say("дані в \(DataHome.displayPath): " + moved.summary
+            + (DataMigration.resealed.isEmpty ? "" : "; " + DataMigration.resealed))
+    }
     let application = NSApplication.shared
     let delegate = SlovoDelegate()
     // Ссылка на делегата у `NSApplication` слабая — держим его сами, иначе
