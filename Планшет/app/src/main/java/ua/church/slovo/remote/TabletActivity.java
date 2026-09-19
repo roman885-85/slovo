@@ -547,7 +547,8 @@ public final class TabletActivity extends Activity {
         popup.getMenu().add(0, 5, 4, R.string.menu_view);
         popup.getMenu().add(0, 6, 5, R.string.menu_scale);
         popup.getMenu().add(0, 7, 6, R.string.menu_language);
-        popup.getMenu().add(0, 8, 7, R.string.menu_update);
+        popup.getMenu().add(0, 9, 7, R.string.menu_resources);
+        popup.getMenu().add(0, 8, 8, R.string.menu_update);
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 4:
@@ -564,6 +565,9 @@ public final class TabletActivity extends Activity {
                     return true;
                 case 8:
                     Updates.checkNow(this);
+                    return true;
+                case 9:
+                    startActivity(new Intent(this, ResourcesActivity.class));
                     return true;
                 case 1:
                     startActivity(new Intent(this, ConnectActivity.class));

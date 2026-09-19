@@ -35,10 +35,10 @@
     <string name="next">Next ▶</string>
     <string name="show">Show</string>
     <string name="hide">Hide</string>
-    <string name="black">Black screen</string>
+    <string name="black">Black</string>
     <string name="black_on">Black screen: on</string>
 
-    <string name="tab_show">Presentation</string>
+    <string name="tab_show">Slides</string>
     <string name="tab_plan">Plan</string>
     <string name="tab_song">Song</string>
     <string name="tab_bible">Bible</string>
@@ -79,7 +79,7 @@
 
     <!-- Вкладка «Презентація»: головна робота пульта. -->
     <string name="show_empty">No presentation is open. Tap “Upload file” to send a PDF or PPTX from the phone, or open it in the program.</string>
-    <string name="upload">Upload file…</string>
+    <string name="upload">File…</string>
     <string name="uploading">Sending %1$s…</string>
     <string name="uploaded">Sent: %1$s (%2$d pages)</string>
     <string name="upload_failed">Could not send: %1$s</string>
@@ -114,7 +114,7 @@
     <string name="bible_no_books">No books — no translation is open in the program</string>
 
     <!-- Фото з галереї телефона. -->
-    <string name="photo">Photos from the phone…</string>
+    <string name="photo">Photos…</string>
     <string name="photo_sending">Sending photo %1$d of %2$d…</string>
     <string name="photo_sent">Photos sent: %1$d — the first one is already on the wall</string>
     <string name="photo_failed">Photos not sent: %1$s</string>
@@ -136,4 +136,31 @@
     <string name="update_permission_title">Allow installation</string>
     <string name="update_permission_text">Android installs updates only with your permission: on the next screen turn on “Allow from this source”, then press “Check for updates…” again.</string>
     <string name="update_permission_go">Open settings</string>
+    <string name="found_needs_pin">Slovo (PIN needed)</string>
+    <string name="song_book">Songbook…</string>
+    <string name="song_back">‹ Songs</string>
+    <string name="song_pick_book">Choose a songbook</string>
+    <string name="song_list_empty">The songbook is empty</string>
+    <!-- Ресурси програми з телефона. -->
+    <string name="menu_resources">Translations and songbooks…</string>
+    <string name="resources_title">Resources for Slovo</string>
+    <string name="resources_kind">What to download</string>
+    <string name="resources_kind_bible">Translations</string>
+    <string name="resources_kind_songbook">Songbooks</string>
+    <string name="resources_kind_backgrounds">Backgrounds</string>
+    <string name="resources_kind_templates">Templates</string>
+    <string name="resources_kind_fonts">Fonts</string>
+    <string name="resources_kind_web">Web slides</string>
+    <string name="resources_source">Source</string>
+    <string name="resources_search">Search by name</string>
+    <string name="resources_reading">Reading the catalogue…</string>
+    <string name="resources_count">Found: %1$d</string>
+    <string name="resources_shown">Showing %1$d of %2$d — narrow it down by name</string>
+    <string name="resources_failed">Failed: %1$s</string>
+    <string name="resources_install">Download into Slovo</string>
+    <string name="resources_starting">Starting the download…</string>
+    <string name="resources_progress">%1$s — %2$d%%, %3$d of %4$d</string>
+    <string name="resources_done">Installed: %1$d</string>
+    <string name="resources_partly">Not everything worked: %1$s</string>
+    <string name="resources_present">already there</string>
 </resources>

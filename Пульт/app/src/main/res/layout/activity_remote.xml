@@ -95,10 +95,11 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content" />
+            <!-- Однакової ширини: різні за розміром кнопки поруч виглядали кривими. -->
             <Button android:id="@+id/photoButton" style="@style/SmallButton" android:text="@string/photo"
-                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
             <Button android:id="@+id/uploadButton" style="@style/SmallButton" android:text="@string/upload"
-                android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         </LinearLayout>
     </LinearLayout>
 
@@ -269,6 +270,20 @@
             <Button android:id="@+id/bibleClear" style="@style/SmallButton" android:text="@string/bible_clear"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- Пісні: вибір пісенника й повернення від куплетів до списку пісень.
+         Власник: «иметь возможность выбора песен с песенника». -->
+    <LinearLayout
+        android:id="@+id/songBar"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <Button android:id="@+id/songBook" style="@style/SmallButton" android:text="@string/song_book"
+            android:layout_width="0dp" android:layout_weight="2" android:layout_height="wrap_content" />
+        <Button android:id="@+id/songBack" style="@style/SmallButton" android:text="@string/song_back"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
     </LinearLayout>
 
     <ListView

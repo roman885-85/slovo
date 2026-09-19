@@ -133,6 +133,7 @@ public sealed partial class MainWindow
                 _seq = (long?)state["seq"] ?? _seq;
                 var wasOffline = !_online;
                 _online = true;
+                _misses = 0;
                 // Вкладку зібрано до того, як «Слово» озвалося: списки в ній
                 // порожні, бо питати не було кого. Щойно зв'язок є —
                 // збираємо її наново.
@@ -148,14 +149,60 @@ public sealed partial class MainWindow
             catch (Exception error)
             {
                 _online = false;
+                _misses++;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     ShowConnection();
                     _status.Text = Lang.F("Немає зв'язку: {0}", "No connection: {0}", Api.Describe(error));
                 });
+                // Власник: «на короткое время иногда находит слово, но вскоре
+                // связь пропадает и не подключается снова». Причина майже
+                // завжди одна: записана адреса перестала бути дійсною —
+                // комп'ютер отримав іншу від роутера або нас занесло на
+                // адресу Parallels/VPN, якої з цієї машини не видно. Тому
+                // після кількох невдач шукаємо «Слово» заново й самі
+                // переходимо на ту адресу, яка відповідає.
+                if (_misses >= 3) await Rediscover();
                 try { await Task.Delay(2000, _closing.Token); } catch { return; }
             }
         }
+    }
+
+    /// Скільки разів поспіль не вийшло дочитатися до «Слова».
+    int _misses;
+    DateTime _searchedAt;
+
+    /// Знайти «Слово» в мережі заново й перейти на адресу, яка відповідає.
+    /// Шукаємо не частіше ніж раз на півхвилини: пошук стукає в усю підмережу.
+    async Task Rediscover()
+    {
+        if ((DateTime.UtcNow - _searchedAt).TotalSeconds < 30) return;
+        _searchedAt = DateTime.UtcNow;
+        Status(Lang.T("Шукаю «Слово» в мережі…", "Looking for Slovo on the network…"));
+        List<Found> found;
+        try
+        {
+            found = await Discovery.Search(_closing.Token);
+        }
+        catch (Exception error)
+        {
+            Paths.Say("пошук наново: " + error.Message);
+            return;
+        }
+        if (found.Count == 0) return;
+        // Та сама машина, але інша адреса — беремо її мовчки; якщо в мережі
+        // кілька «Слів», лишаємося на тому, яке звали раніше, за іменем.
+        var pick = found.FirstOrDefault(one => one.Name == _settings.Name) ?? found[0];
+        if (pick.Host == _settings.Host && pick.Port == _settings.Port) return;
+        Paths.Say($"зв'язок: {_settings.Host}:{_settings.Port} не відповідає — переходжу на {pick.Host}:{pick.Port}");
+        _settings.Host = pick.Host;
+        _settings.Port = pick.Port;
+        if (!string.IsNullOrEmpty(pick.Name)) _settings.Name = pick.Name;
+        _settings.Save();
+        _api = Api.From(_settings);
+        _seq = 0;
+        _misses = 0;
+        Status(Lang.F("Знайшлося за адресою {0}", "Found at {0}", pick.Host));
     }
 
     void Apply(JsonObject state)

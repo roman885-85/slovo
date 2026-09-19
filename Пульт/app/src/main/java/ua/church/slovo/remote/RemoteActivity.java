@@ -132,6 +132,13 @@ public final class RemoteActivity extends Activity {
     private static final int PICK_PHOTO = 8;
     /// Вкладка «Біблія»: переклад → книга → розділ → вірші.
     private BibleBrowser bible;
+    /// Пісні: список пісень пісенника чи куплети вибраної пісні.
+    private View songBar;
+    private Button songBookButton;
+    private final List<State.Row> songRows = new ArrayList<>();
+    private final List<Integer> songIndexes = new ArrayList<>();
+    private boolean songListing = true;
+    private String songBookTitle = "";
     private View bibleBar;
 
     @Override
@@ -162,6 +169,11 @@ public final class RemoteActivity extends Activity {
             @Override public java.util.concurrent.ExecutorService queue() { return commands; }
             @Override public void post(Runnable body) { main.post(body); }
         }, bibleBar);
+
+        songBar = findViewById(R.id.songBar);
+        songBookButton = findViewById(R.id.songBook);
+        songBookButton.setOnClickListener(v -> chooseSongBook());
+        findViewById(R.id.songBack).setOnClickListener(v -> { songListing = true; loadSongs(); });
 
         showBar = findViewById(R.id.showBar);
         hallBar = findViewById(R.id.hallBar);
@@ -311,7 +323,7 @@ public final class RemoteActivity extends Activity {
 
     private static final int MENU_CONNECTION = 1, MENU_VOLUME = 2, MENU_AWAKE = 3,
         MENU_REVERSED = 4, MENU_POINTER = 5, MENU_RESET = 6, MENU_ZOOM_OFF = 7, MENU_LANGUAGE = 8,
-        MENU_UPDATE = 9;
+        MENU_UPDATE = 9, MENU_RESOURCES = 10;
 
     /// Мова інтерфейсу (див. `Lang`) — до того, як вікно візьме ресурси.
     @Override
@@ -331,7 +343,8 @@ public final class RemoteActivity extends Activity {
         menu.add(0, MENU_ZOOM_OFF, 5, R.string.menu_zoom_off);
         menu.add(0, MENU_RESET, 6, R.string.menu_reset);
         menu.add(0, MENU_LANGUAGE, 7, R.string.menu_language);
-        menu.add(0, MENU_UPDATE, 8, R.string.menu_update);
+        menu.add(0, MENU_RESOURCES, 8, R.string.menu_resources);
+        menu.add(0, MENU_UPDATE, 9, R.string.menu_update);
         return true;
     }
 
@@ -366,6 +379,9 @@ public final class RemoteActivity extends Activity {
                 return true;
             case MENU_LANGUAGE:
                 Lang.showChooser(this);
+                return true;
+            case MENU_RESOURCES:
+                startActivity(new Intent(this, ResourcesActivity.class));
                 return true;
             case MENU_UPDATE:
                 Updates.checkNow(this);
@@ -483,6 +499,12 @@ public final class RemoteActivity extends Activity {
                         final String why = Api.describe(error);
                         main.post(() -> status.setText(getString(R.string.status_lost, describeServer()) + " (" + why + ")"));
                     }
+                    // Власник: «на короткое время иногда находит слово, но
+                    // вскоре связь пропадает и не подключается снова».
+                    // Записана адреса могла застаріти — комп'ютер отримав
+                    // іншу від роутера. Після кількох невдач шукаємо «Слово»
+                    // заново й самі переходимо на живу адресу.
+                    if (failures == 4 || failures % 12 == 0) rediscover();
                     // Пауза растёт до пяти секунд: не долбить выключенный
                     // компьютер, но и подхватить его сразу, как включат.
                     sleep(Math.min(5000, 800 * failures));
@@ -491,6 +513,50 @@ public final class RemoteActivity extends Activity {
         }, "slovo-poll");
         poller.setDaemon(true);
         poller.start();
+    }
+
+    /// Знайти «Слово» заново й перейти на адресу, яка відповідає.
+    ///
+    /// Шукаємо не частіше ніж раз на півхвилини: перебір підмережі — справа
+    /// не безкоштовна. Беремо ту саму машину за іменем, а як не знайшлася —
+    /// першу, що озвалася.
+    private volatile long searchedAt;
+
+    private void rediscover() {
+        if (System.currentTimeMillis() - searchedAt < 30000) return;
+        searchedAt = System.currentTimeMillis();
+        final String wanted = settings.name();
+        final java.util.List<String[]> hits = new java.util.ArrayList<>();
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        final Discovery search = new Discovery(this, new Discovery.Listener() {
+            @Override public void found(String name, String host, int port) {
+                hits.add(new String[] { name, host, String.valueOf(port) });
+            }
+            @Override public void finished() { done.countDown(); }
+        });
+        main.post(search::start);
+        try {
+            done.await(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        main.post(search::stop);
+        if (hits.isEmpty()) return;
+        String[] pick = hits.get(0);
+        for (String[] hit : hits) {
+            if (hit[0] != null && hit[0].equals(wanted)) { pick = hit; break; }
+        }
+        final String host = pick[1];
+        final int port = Integer.parseInt(pick[2]);
+        if (host.equals(settings.host()) && port == settings.port()) return;
+        final String name = pick[0];
+        main.post(() -> {
+            settings.save(host, port, settings.pin(), name == null ? settings.name() : name);
+            status.setText(getString(R.string.status_connecting, host));
+            api = new Api(host, port, settings.pin());
+            seq = 0;
+            startPolling();
+        });
     }
 
     private void stopPolling() {
@@ -1106,6 +1172,101 @@ public final class RemoteActivity extends Activity {
         }
     }
 
+    // MARK: Пісні пісенника
+
+    /// Список пісень відкритого пісенника — з програми. Власник: «иметь
+    /// возможность выбора песен с песенника»: доти на телефоні можна було
+    /// лише шукати пісню за словом, а гортати пісенник — ні.
+    private void loadSongs() {
+        final Api current = api;
+        if (current == null) return;
+        commands.execute(() -> {
+            try {
+                JSONObject books = current.get("/api/songs/books");
+                JSONObject list = current.get("/api/songs/list");
+                String bookTitle = "";
+                String open = books.optString("current", "");
+                JSONArray all = books.optJSONArray("books");
+                if (all != null) {
+                    for (int i = 0; i < all.length(); i++) {
+                        JSONObject book = all.optJSONObject(i);
+                        if (book != null && open.equals(book.optString("id"))) {
+                            bookTitle = book.optString("title", "");
+                            break;
+                        }
+                    }
+                }
+                final String title = bookTitle;
+                JSONArray songs = list.optJSONArray("songs");
+                final List<State.Row> rows = new ArrayList<>();
+                final List<Integer> indexes = new ArrayList<>();
+                int selected = list.optInt("selected", -1);
+                if (songs != null) {
+                    for (int i = 0; i < songs.length(); i++) {
+                        JSONObject song = songs.optJSONObject(i);
+                        if (song == null) continue;
+                        int index = song.optInt("index", i);
+                        String name = song.optString("title", "");
+                        String note = song.optString("subtitle", "");
+                        // Підпис, що повторює назву, — зайвий рядок: у пісень
+                        // перший рядок куплета часто і є назвою.
+                        if (note.startsWith(name) || name.startsWith(note)) note = "";
+                        rows.add(new State.Row(song.optInt("number", index + 1) + ". " + name, note, index == selected));
+                        indexes.add(index);
+                    }
+                }
+                main.post(() -> {
+                    songBookTitle = title;
+                    songBookButton.setText(title.isEmpty() ? getString(R.string.song_book) : title);
+                    songRows.clear();
+                    songRows.addAll(rows);
+                    songIndexes.clear();
+                    songIndexes.addAll(indexes);
+                    if (tab == Tab.SONG) adapter.notifyDataSetChanged();
+                });
+            } catch (Exception error) {
+                final String why = Api.describe(error);
+                main.post(() -> status.setText(getString(R.string.status_lost, describeServer()) + " (" + why + ")"));
+            }
+        });
+    }
+
+    /// Вибір пісенника: список від програми, вибір міняє пісенник і в залі.
+    private void chooseSongBook() {
+        final Api current = api;
+        if (current == null) return;
+        commands.execute(() -> {
+            try {
+                JSONObject books = current.get("/api/songs/books");
+                JSONArray all = books.optJSONArray("books");
+                final List<String> ids = new ArrayList<>();
+                final List<String> titles = new ArrayList<>();
+                if (all != null) {
+                    for (int i = 0; i < all.length(); i++) {
+                        JSONObject book = all.optJSONObject(i);
+                        if (book == null) continue;
+                        ids.add(book.optString("id"));
+                        titles.add(book.optString("title", book.optString("short", "")));
+                    }
+                }
+                main.post(() -> {
+                    if (ids.isEmpty()) return;
+                    new AlertDialog.Builder(RemoteActivity.this)
+                        .setTitle(R.string.song_pick_book)
+                        .setItems(titles.toArray(new String[0]), (dialog, which) -> {
+                            commands.execute(() -> {
+                                try {
+                                    current.command("songs-book", ids.get(which));
+                                } catch (Exception ignored) { }
+                                main.post(() -> { songListing = true; loadSongs(); });
+                            });
+                        })
+                        .show();
+                });
+            } catch (Exception ignored) { }
+        });
+    }
+
     // MARK: Вкладки и списки
 
     private void selectTab(Tab chosen) {
@@ -1122,6 +1283,8 @@ public final class RemoteActivity extends Activity {
         // Біблія має свій перегляд — книги, розділи, вірші; загальний список
         // на цій вкладці ховаємо.
         bibleBar.setVisibility(chosen == Tab.BIBLE ? View.VISIBLE : View.GONE);
+        songBar.setVisibility(chosen == Tab.SONG ? View.VISIBLE : View.GONE);
+        if (chosen == Tab.SONG) loadSongs();
         list.setVisibility(chosen == Tab.BIBLE ? View.GONE : View.VISIBLE);
         if (chosen == Tab.BIBLE) bible.open();
         if (chosen == Tab.SHOW) refreshPage(state, true);
@@ -1185,7 +1348,15 @@ public final class RemoteActivity extends Activity {
                 send("plan", position);
                 break;
             case SONG:
-                send("part", position);
+                if (songListing) {
+                    if (position < songIndexes.size()) {
+                        send("song", songIndexes.get(position));
+                        songListing = false;
+                        adapter.notifyDataSetChanged();
+                    }
+                } else {
+                    send("part", position);
+                }
                 break;
             case BIBLE:
                 // Біблія має свій перегляд (BibleBrowser) — загальний список тут схований.
@@ -1221,7 +1392,7 @@ public final class RemoteActivity extends Activity {
                 return rows;
             }
             case PLAN: return state.plan;
-            case SONG: return state.parts;
+            case SONG: return songListing ? songRows : state.parts;
             case SEARCH: return searchRows;
             case BIBLE: return new ArrayList<>();
             default: return new ArrayList<>();
@@ -1232,7 +1403,9 @@ public final class RemoteActivity extends Activity {
         switch (tab) {
             case SHOW: return getString(R.string.show_empty);
             case PLAN: return getString(R.string.plan_empty);
-            case SONG: return state.songTitle.isEmpty() ? getString(R.string.song_empty) : state.songTitle;
+            case SONG:
+                if (songListing) return songRows.isEmpty() ? getString(R.string.song_list_empty) : "";
+                return state.songTitle.isEmpty() ? getString(R.string.song_empty) : state.songTitle;
             case SEARCH: return searchRows.isEmpty() && input.length() > 0 ? getString(R.string.search_empty) : "";
             default: return "";
         }

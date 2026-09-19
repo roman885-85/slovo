@@ -48,6 +48,13 @@
             android:exported="false"
             android:label="@string/connect_title"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Ресурси «Слова» з пульта: переклади, пісенники, фони. -->
+        <activity
+            android:name="ua.church.slovo.remote.ResourcesActivity"
+            android:exported="false"
+            android:label="@string/resources_title"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Віддає завантажений .apk встановлювачу: з Android 7 адресу
              file:// іншій програмі давати не можна. -->
         <provider

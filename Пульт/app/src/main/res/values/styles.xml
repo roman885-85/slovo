@@ -25,18 +25,32 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:minHeight">64dp</item>
         <item name="android:layout_margin">4dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
 
     <style name="SmallButton" parent="@android:style/Widget.Material.Button">
         <item name="android:textSize">15sp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:minHeight">48dp</item>
-        <item name="android:layout_margin">3dp</item>
+        <!-- Ті самі 4dp, що й у великих кнопок: інакше ряди стоять із
+             різними полями і виглядають кривими (власник: «кнопки в пульте
+             выглядят криво, и не симметрично»). -->
+        <item name="android:layout_margin">4dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
 
     <style name="TabButton" parent="@android:style/Widget.Material.Button.Borderless">
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:minHeight">44dp</item>
+        <!-- В один рядок: «Презентація» переносилася на двоє і збивала
+             весь ряд вкладок. Поля вузькі — на телефоні п'ять вкладок. -->
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:paddingLeft">2dp</item>
+        <item name="android:paddingRight">2dp</item>
+        <item name="android:layout_margin">0dp</item>
     </style>
 </resources>

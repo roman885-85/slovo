@@ -30,10 +30,10 @@
     <string name="next">Далі ▶</string>
     <string name="show">Показати</string>
     <string name="hide">Сховати</string>
-    <string name="black">Чорний екран</string>
+    <string name="black">Чорний</string>
     <string name="black_on">Чорний екран: увімкнено</string>
 
-    <string name="tab_show">Презентація</string>
+    <string name="tab_show">Слайди</string>
     <string name="tab_plan">План</string>
     <string name="tab_song">Пісня</string>
     <string name="tab_bible">Біблія</string>
@@ -74,7 +74,7 @@
 
     <!-- Вкладка «Презентація»: головна робота пульта. -->
     <string name="show_empty">Презентацію не відкрито. Натисніть «Завантажити файл», щоб надіслати PDF або PPTX з телефону, або відкрийте її в програмі.</string>
-    <string name="upload">Завантажити файл…</string>
+    <string name="upload">Файл…</string>
     <string name="uploading">Надсилаю %1$s…</string>
     <string name="uploaded">Надіслано: %1$s (%2$d стор.)</string>
     <string name="upload_failed">Не вдалося надіслати: %1$s</string>
@@ -109,7 +109,7 @@
     <string name="bible_no_books">Книг немає — у програмі не відкрито перекладу</string>
 
     <!-- Фото з галереї телефона. -->
-    <string name="photo">Фото з телефона…</string>
+    <string name="photo">Фото…</string>
     <string name="photo_sending">Надсилаю фото %1$d з %2$d…</string>
     <string name="photo_sent">Надіслано фото: %1$d — перше вже на стіні</string>
     <string name="photo_failed">Фото не надіслано: %1$s</string>
@@ -130,4 +130,31 @@
     <string name="update_permission_title">Дозвольте встановлення</string>
     <string name="update_permission_text">Android ставить оновлення лише з вашого дозволу: на наступному екрані ввімкніть «Дозволити з цього джерела», потім знову натисніть «Перевірити оновлення…».</string>
     <string name="update_permission_go">Відкрити налаштування</string>
+    <string name="found_needs_pin">Слово (потрібен PIN)</string>
+    <string name="song_book">Пісенник…</string>
+    <string name="song_back">‹ Пісні</string>
+    <string name="song_pick_book">Виберіть пісенник</string>
+    <string name="song_list_empty">У пісеннику порожньо</string>
+    <!-- Ресурси програми з телефона. -->
+    <string name="menu_resources">Переклади й пісенники…</string>
+    <string name="resources_title">Ресурси для «Слова»</string>
+    <string name="resources_kind">Що завантажити</string>
+    <string name="resources_kind_bible">Переклади</string>
+    <string name="resources_kind_songbook">Пісенники</string>
+    <string name="resources_kind_backgrounds">Фони</string>
+    <string name="resources_kind_templates">Шаблони</string>
+    <string name="resources_kind_fonts">Шрифти</string>
+    <string name="resources_kind_web">Сторінки</string>
+    <string name="resources_source">Джерело</string>
+    <string name="resources_search">Пошук за назвою</string>
+    <string name="resources_reading">Читаю каталог…</string>
+    <string name="resources_count">Знайдено: %1$d</string>
+    <string name="resources_shown">Показано %1$d із %2$d — звузьте пошуком за назвою</string>
+    <string name="resources_failed">Не вдалося: %1$s</string>
+    <string name="resources_install">Завантажити в «Слово»</string>
+    <string name="resources_starting">Починаю завантаження…</string>
+    <string name="resources_progress">%1$s — %2$d%%, %3$d з %4$d</string>
+    <string name="resources_done">Поставлено: %1$d</string>
+    <string name="resources_partly">Не все вийшло: %1$s</string>
+    <string name="resources_present">уже є</string>
 </resources>

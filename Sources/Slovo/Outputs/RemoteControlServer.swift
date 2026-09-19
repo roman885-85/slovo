@@ -659,6 +659,8 @@ final class RemoteControlServer {
         }
         // Планшет: плеєр, картинки, екран, текст, Історія, пошук, зал.
         if request.method == "GET", tabletGET(request, state: state, on: connection) { return }
+        // Ресурси: каталоги джерел і хід завантаження — з будь-якого пульта.
+        if request.method == "GET", resourcesGET(request, state: state, on: connection) { return }
         // Бібліотека для плану проповіді: переклади й пісенники на планшет.
         if request.method == "GET", libraryGET(request, state: state, on: connection) { return }
         guard request.method == "POST", request.path.hasPrefix("/api/") else {
@@ -681,6 +683,10 @@ final class RemoteControlServer {
         case "blank": state.showBlankSlide()
         case "next-chapter": state.stepChapter(by: 1, live: false)
         case "prev-chapter": state.stepChapter(by: -1, live: false)
+        case "resource-install":
+            if let trouble = startResourceInstall(body: body, state: state, answer: &answer) {
+                respond(connection, 400, ["error": trouble]); return
+            }
         case "plan":
             let items = DeskModel.shared.plan.items
             guard let index, items.indices.contains(index) else { respond(connection, 404, ["error": OurWords.t("нет такого пункта")]); return }
