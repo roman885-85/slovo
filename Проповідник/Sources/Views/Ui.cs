@@ -30,7 +30,7 @@ public static class Ui
         var button = new Button
         {
             Content = text,
-            Padding = new Thickness(12, 6),
+            Padding = new Thickness(10, 5),
             VerticalAlignment = VerticalAlignment.Center,
         };
         if (accent)

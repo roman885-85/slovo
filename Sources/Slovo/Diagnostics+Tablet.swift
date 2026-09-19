@@ -56,9 +56,13 @@ extension Diagnostics {
         let base = "http://127.0.0.1:\(server.port)"
 
         /// Запит тією самою дорогою, що й планшет.
-        func call(_ method: String, _ path: String, _ body: [String: Any]? = nil) -> (code: Int, data: Data) {
+        /// `seconds` — скільки чекати. Переклад цілком (шість мегабайтів
+        /// рядками) на зайнятому Mac збирається довше за двадцять секунд, і
+        /// перевірка бачила «0» там, де насправді все працює.
+        func call(_ method: String, _ path: String, _ body: [String: Any]? = nil,
+                  seconds: Double = 20) -> (code: Int, data: Data) {
             guard let url = URL(string: base + path) else { return (0, Data()) }
-            var request = URLRequest(url: url, timeoutInterval: 20)
+            var request = URLRequest(url: url, timeoutInterval: seconds)
             request.httpMethod = method
             if let body {
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -70,7 +74,7 @@ extension Diagnostics {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
                 DispatchQueue.main.async { result = (code, data ?? Data()); finished = true }
             }.resume()
-            wait(untilTrue: { finished }, seconds: 22)
+            wait(untilTrue: { finished }, seconds: seconds + 2)
             return result
         }
         func json(_ method: String, _ path: String, _ body: [String: Any]? = nil) -> (code: Int, json: [String: Any]) {
@@ -569,7 +573,7 @@ extension Diagnostics {
             }
             var detail = "перекладів \(bibles.count), пісенників \(songbooks.count)"
             if let primary = state.primaryModule {
-                let export = call("GET", "/api/library/bible?id=" + encoded(primary.identifier))
+                let export = call("GET", "/api/library/bible?id=" + encoded(primary.identifier), seconds: 240)
                 let text = String(decoding: export.data, as: UTF8.self)
                 let books = text.components(separatedBy: "\nB\t").count - 1
                 let verses = text.components(separatedBy: "\nV\t").count - 1
@@ -579,7 +583,7 @@ extension Diagnostics {
                 detail += "; «\(primary.identifier)» рядками: книг \(books), віршів \(verses)"
             }
             if let file = songbooks.first(where: { ($0["format"] as? String) == "vbm" })?["file"] as? String {
-                let book = call("GET", "/api/library/songbook?file=" + encoded(file))
+                let book = call("GET", "/api/library/songbook?file=" + encoded(file), seconds: 120)
                 if book.code != 200 || book.data.prefix(16) != Data("VisioBibleModule".utf8) {
                     faults.append("пісенник «\(file)»: \(book.code), \(book.data.count) байт")
                 }

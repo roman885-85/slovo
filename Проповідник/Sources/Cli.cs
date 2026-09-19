@@ -36,6 +36,235 @@ public static class Cli
         return at >= 0 && at + 1 < args.Length ? args[at + 1] : null;
     }
 
+    /// Керування показом — ті самі шляхи, якими ходить робоче місце вікна:
+    /// вкладки, Біблія, Пісні, Презентація, Медіа, Зображення, Екран, Текст,
+    /// План, Історія і кнопки залу. Наприкінці все вертається, як було.
+    static async Task ControlChecks(Api api)
+    {
+        JsonObject state;
+        try { state = await api.State(0, CancellationToken.None); }
+        catch (Exception error) { Report(false, "Стан програми", Api.Describe(error)); return; }
+        var wasMode = (string?)state["mode"] ?? "bible";
+
+        // Вкладки: перемикаються всі сім.
+        var switched = new List<string>();
+        foreach (var mode in new[] { "bible", "songs", "presentation", "media", "pictures", "screen", "text" })
+        {
+            try
+            {
+                await api.Command("mode", mode);
+                var now = await api.State(0, CancellationToken.None);
+                if ((string?)now["mode"] == mode) switched.Add(mode);
+            }
+            catch (Exception error) { Report(false, "Вкладка " + mode, Api.Describe(error)); }
+        }
+        Report(switched.Count == 7, "Вкладки програми перемикаються", "перемкнулося " + switched.Count + " із 7: " + string.Join(", ", switched));
+
+        // Біблія: переклади, книги, розділ, вибір віршів у передпоказ і в зал.
+        try
+        {
+            var books = await api.Get("/api/bible/books");
+            var list = (books["books"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            var translations = (books["translations"] as JsonArray ?? new JsonArray()).Count;
+            var john = list.FirstOrDefault(b => ((string?)b["name"] ?? "").StartsWith("Иоан") || ((string?)b["name"] ?? "").StartsWith("Ів")) ?? list.FirstOrDefault();
+            var position = (int?)john?["position"] ?? 0;
+            var chapter = await api.Get($"/api/bible/chapter?book={position}&chapter=3");
+            var verses = (chapter["verses"] as JsonArray ?? new JsonArray()).Count;
+            await api.BibleSelect(position, 3, new[] { 16, 17, 19 }, false);
+            var preview = await api.State(0, CancellationToken.None);
+            var reference = (string?)(preview["preview"] as JsonObject)?["reference"] ?? "";
+            await api.BibleSelect(position, 3, new[] { 16 }, true);
+            var live = await api.State(0, CancellationToken.None);
+            var hall = (string?)(live["slide"] as JsonObject)?["reference"] ?? "";
+            // Адреса розрізнених віршів: «3:16-17,19», а не «3:16,17,19».
+            var addressOK = reference.Contains("16-17,19");
+            Report(list.Count > 60 && verses > 20 && reference.Length > 0 && hall.Length > 0 && addressOK, "Біблія: книги, розділ, вибір віршів",
+                   $"перекладів {translations}, книг {list.Count}, віршів у розділі {verses}; передпоказ «{reference}»; у залі «{hall}»" +
+                   (addressOK ? "" : "; АДРЕСА РОЗРІЗНЕНИХ ВІРШІВ НЕ ПРОМІЖКАМИ"));
+        }
+        catch (Exception error) { Report(false, "Біблія: книги, розділ, вибір віршів", Api.Describe(error)); }
+
+        // Пошук за словами.
+        try
+        {
+            await api.Command("bible-search", "любов");
+            JsonObject search = new();
+            for (var i = 0; i < 20; i++)
+            {
+                await Task.Delay(500);
+                search = await api.Get("/api/search");
+                if ((bool?)search["searching"] != true && (search["hits"] as JsonArray)?.Count > 0) break;
+            }
+            var hits = (search["hits"] as JsonArray)?.Count ?? 0;
+            if (hits > 0) await api.Command("search-hit", new JsonObject { ["index"] = 0, ["live"] = false }, 15);
+            Report(hits > 0, "Біблія: пошук за словами", hits > 0 ? $"знайдено {hits}, перший пункт — у передпоказі" : "нічого не знайшлося");
+        }
+        catch (Exception error) { Report(false, "Біблія: пошук за словами", Api.Describe(error)); }
+
+        // Пісні: пісенники, список, пісня в передпоказ, частина в зал.
+        try
+        {
+            var books = await api.Get("/api/songs/books");
+            var songbooks = (books["books"] as JsonArray ?? new JsonArray()).Count;
+            var list = await api.Get("/api/songs/list");
+            var songs = (list["songs"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            var index = (int?)songs.FirstOrDefault()?["index"] ?? 0;
+            await api.Command("song", index);
+            await Task.Delay(400);
+            var afterSong = await api.State(0, CancellationToken.None);
+            var song = afterSong["song"] as JsonObject;
+            var parts = (song?["parts"] as JsonArray ?? new JsonArray()).Count;
+            if (parts > 0) await api.Command("part", 0);
+            await Task.Delay(400);
+            var afterPart = await api.State(0, CancellationToken.None);
+            var hall = (string?)(afterPart["slide"] as JsonObject)?["text"] ?? "";
+            Report(songbooks > 0 && songs.Count > 0 && parts > 0 && hall.Length > 0, "Пісні: пісенник, пісня, частина в зал",
+                   $"пісенників {songbooks}, пісень {songs.Count}, частин у пісні «{(string?)song?["title"]}» {parts}; у залі {(hall.Length > 0 ? "текст частини" : "порожньо")}");
+        }
+        catch (Exception error) { Report(false, "Пісні: пісенник, пісня, частина в зал", Api.Describe(error)); }
+
+        // Презентація: колоди, сторінки, картинка сторінки.
+        try
+        {
+            await api.Command("mode", "presentation");
+            var now = await api.State(0, CancellationToken.None);
+            var show = now["presentation"] as JsonObject;
+            var decks = (show?["decks"] as JsonArray ?? new JsonArray()).Count;
+            var pages = (show?["pages"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            byte[]? image = null;
+            if (pages.Count > 0)
+            {
+                var index = (int?)pages[0]["index"] ?? 0;
+                await api.Command("page", index);
+                image = await api.PageImage(index, 480);
+            }
+            Report(decks == 0 || (pages.Count > 0 && image != null && image.Length > 2000), "Презентація: колоди, сторінки, картинка",
+                   decks == 0 ? "колод у програмі немає — пропущено"
+                              : $"колод {decks}, сторінок {pages.Count}, картинка сторінки {(image?.Length ?? 0) / 1024} КБ");
+        }
+        catch (Exception error) { Report(false, "Презентація: колоди, сторінки, картинка", Api.Describe(error)); }
+
+        // Зображення.
+        try
+        {
+            var pictures = await api.Get("/api/pictures");
+            var pages = (pictures["pages"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            byte[]? image = null;
+            if (pages.Count > 0)
+            {
+                var index = (int?)pages[0]["index"] ?? 0;
+                await api.Command("picture", index);
+                image = await api.PageImage(index, 480, "pictures");
+            }
+            Report(pages.Count == 0 || (image != null && image.Length > 2000), "Зображення: список і показ",
+                   pages.Count == 0 ? "картинок у програмі немає — пропущено" : $"картинок {pages.Count}, мініатюра {(image?.Length ?? 0) / 1024} КБ");
+        }
+        catch (Exception error) { Report(false, "Зображення: список і показ", Api.Describe(error)); }
+
+        // Медіа: список, гучність, звук.
+        try
+        {
+            var media = await api.Get("/api/media");
+            var playlist = (media["playlist"] as JsonArray ?? new JsonArray()).Count;
+            var wasVolume = (double?)media["volume"] ?? 0.8;
+            await api.Command("media-volume", new JsonObject { ["x"] = 0.35 }, 15);
+            await Task.Delay(300);
+            var after = await api.Get("/api/media");
+            var volume = (double?)after["volume"] ?? 0;
+            await api.Command("media-volume", new JsonObject { ["x"] = wasVolume }, 15);
+            Report(Math.Abs(volume - 0.35) < 0.02, "Медіа: список і гучність", $"у списку {playlist}; гучність {wasVolume:0.00} → {volume:0.00} → назад");
+        }
+        catch (Exception error) { Report(false, "Медіа: список і гучність", Api.Describe(error)); }
+
+        // Екран: список джерел.
+        try
+        {
+            var screen = await api.Get("/api/screen");
+            var sources = (screen["sources"] as JsonArray ?? new JsonArray()).Count;
+            var permission = (bool?)screen["permission"] ?? false;
+            Report(true, "Екран: джерела захоплення", $"джерел {sources}; дозвіл на запис екрана: {(permission ? "є" : "немає")}");
+        }
+        catch (Exception error) { Report(false, "Екран: джерела захоплення", Api.Describe(error)); }
+
+        // Текст: оголошення з цього комп'ютера — у передпоказ і в зал.
+        try
+        {
+            var wasText = await api.Get("/api/text");
+            await api.Command("text-set", new JsonObject { ["title"] = "Перевірка", ["text"] = "Оголошення з «Проповідника»." }, 15);
+            await api.Command("text-show");
+            await Task.Delay(500);
+            var now = await api.State(0, CancellationToken.None);
+            var hall = (string?)(now["slide"] as JsonObject)?["text"] ?? "";
+            await api.Command("text-set", new JsonObject { ["title"] = (string?)wasText["title"] ?? "", ["text"] = (string?)wasText["body"] ?? "" }, 15);
+            Report(hall.Contains("Проповідник"), "Текст: оголошення в зал", hall.Length > 0 ? "у залі: " + hall.Split('\n')[0] : "у залі порожньо");
+        }
+        catch (Exception error) { Report(false, "Текст: оголошення в зал", Api.Describe(error)); }
+
+        // План та Історія: додати вибране, пересунути, прибрати; Історія.
+        try
+        {
+            var before = ((await api.State(0, CancellationToken.None))["plan"] as JsonArray)?.Count ?? 0;
+            await api.Command("plan-add");
+            await Task.Delay(400);
+            var added = ((await api.State(0, CancellationToken.None))["plan"] as JsonArray)?.Count ?? 0;
+            if (added > 1) await api.Command("plan-move", new JsonObject { ["index"] = added - 1, ["delta"] = -1 }, 15);
+            await api.Command("plan-remove", added > before ? added - 1 : 0);
+            await Task.Delay(400);
+            var after = ((await api.State(0, CancellationToken.None))["plan"] as JsonArray)?.Count ?? 0;
+            var history = await api.Get("/api/history");
+            var records = (history["records"] as JsonArray)?.Count ?? 0;
+            Report(added == before + 1 && after == before, "План та Історія: додати, пересунути, прибрати",
+                   $"у Плані було {before}, стало {added}, після прибирання {after}; в Історії записів {records}");
+        }
+        catch (Exception error) { Report(false, "План та Історія: додати, пересунути, прибрати", Api.Describe(error)); }
+
+        // Кнопки залу.
+        try
+        {
+            await api.Command("black");
+            await Task.Delay(300);
+            var black = (bool?)(await api.State(0, CancellationToken.None))["black"] ?? false;
+            await api.Command("black");
+            await api.Command("hide");
+            await Task.Delay(300);
+            var hidden = !((bool?)(await api.State(0, CancellationToken.None))["live"] ?? true);
+            await api.Command("next");
+            await api.Command("prev");
+            Report(black && hidden, "Кнопки залу: чорний екран, сховати, гортання",
+                   $"чорний екран: {(black ? "так" : "НІ")}; сховати: {(hidden ? "так" : "НІ")}; «Далі» й «Назад» без помилки");
+        }
+        catch (Exception error) { Report(false, "Кнопки залу: чорний екран, сховати, гортання", Api.Describe(error)); }
+
+        // Указка й наближення — те, що робить миша по картинці залу.
+        try
+        {
+            await api.Command("pointer", new JsonObject { ["x"] = 0.4, ["y"] = 0.6, ["colour"] = "#FFD400", ["size"] = 0.05, ["opacity"] = 0.85 }, 10);
+            await Task.Delay(300);
+            var on = await api.State(0, CancellationToken.None);
+            var pointer = on["pointer"] as JsonObject;
+            var lit = (bool?)pointer?["on"] ?? false;
+            await api.Command("pointer-off");
+            await api.Command("zoom", new JsonObject { ["zoom"] = 2, ["x"] = 0.5, ["y"] = 0.5 }, 10);
+            await Task.Delay(300);
+            var zoomed = (double?)((await api.State(0, CancellationToken.None))["zoom"] as JsonObject)?["zoom"] ?? 1;
+            await api.Command("zoom", new JsonObject { ["zoom"] = 1, ["x"] = 0.5, ["y"] = 0.5 }, 10);
+            Report(lit && zoomed > 1.5, "Указка й наближення",
+                   $"указка: {(lit ? "горить" : "НЕ горить")}; наближення {zoomed:0.0}× і назад");
+        }
+        catch (Exception error) { Report(false, "Указка й наближення", Api.Describe(error)); }
+
+        // Картинка залу — те, що вікно показує замість проектора.
+        try
+        {
+            await api.Command("mode", "bible");
+            var image = await api.HallImage(640);
+            Report(image == null || image.Length > 1000, "Зал картинкою", image == null ? "у залі відео чи порожньо" : $"{image.Length / 1024} КБ");
+        }
+        catch (Exception error) { Report(false, "Зал картинкою", Api.Describe(error)); }
+
+        try { await api.Command("mode", wasMode); } catch { /* вернути вкладку — не критично */ }
+    }
+
     public static async Task<int> Run(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -186,6 +415,9 @@ public static class Cli
                 settings.LastPlan = plan.Id;
                 settings.Save();
             }
+
+            // 4а. Керування показом: усе, що вміє робоче місце.
+            if (host != null) await ControlChecks(new Api(host, port, pin));
 
             // 5. Завантаження плану в «Слово» і повернення плану служіння.
             if (host != null && !keep)

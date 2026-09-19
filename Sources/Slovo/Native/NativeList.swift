@@ -150,6 +150,9 @@ final class NativeList: NSView, NativeListChecking {
     private let table: NativeTableView
     private let column = NSTableColumn(identifier: .init("row"))
     private var bridge: Bridge!
+    /// Ширина, за якої міряли висоти рядків: на іншій вони недійсні.
+    private var measuredAtWidth: CGFloat = 0
+    private var fitGuardScheduled = false
     private(set) var style: NativeListStyle
     /// Число строк, снятое при последней `reload()`. Спрашивать источник
     /// на каждый чих незачем, а разойтись они не могут: состав меняется
@@ -330,9 +333,48 @@ final class NativeList: NSView, NativeListChecking {
             if case .measured = heights {
                 table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows))
             }
+            scheduleFitGuard()
             return
         }
         table.reloadData()
+        scheduleFitGuard()
+    }
+
+    /// Сторож першого показу: через мить після того, як список наповнився,
+    /// звіряє видимі рядки — чи вміщається в них те, що намальовано.
+    ///
+    /// Власник 19.09.2026: «при запуске программы часто окно со списком
+    /// стихов или куплетов отображается с перекрытием некоторых строк,
+    /// исправляется если переключить песню или главу». Перемикання лагодить
+    /// тому, що міряє висоти наново. Сторож робить те саме сам: не шукаючи,
+    /// хто саме не встиг стати на місце при запуску, він просто перевіряє
+    /// результат і, коли той не сходиться, переміряє.
+    private func scheduleFitGuard() {
+        guard isMeasured, !fitGuardScheduled else { return }
+        fitGuardScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self else { return }
+            self.fitGuardScheduled = false
+            self.remeasureIfTight()
+        }
+    }
+
+    /// Чи є видимий рядок, якому замало місця; якщо є — переміряти всі.
+    private func remeasureIfTight() {
+        guard isMeasured, source != nil, table.numberOfRows > 0 else { return }
+        let visible = table.rows(in: scrollView.contentView.bounds)
+        guard visible.length > 0 else { return }
+        var tight = false
+        for row in visible.location..<min(table.numberOfRows, visible.location + visible.length) {
+            guard let fit = fit(ofRow: row) else { continue }
+            if fit.drawn > fit.given + 0.5 { tight = true; break }
+        }
+        guard tight else { return }
+        NativeTrace.say("список: рядкам було замало місця при першому показі — переміряв")
+        measuredAtWidth = contentWidth
+        measuredHeights = Array(repeating: 0, count: measuredHeights.count)
+        table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
+        refreshVisibleCells()
     }
 
     /// Перечитать содержимое стоящих на экране клеток из источника.
@@ -706,9 +748,25 @@ final class NativeList: NSView, NativeListChecking {
     /// Настоящая высота строки считается тогда же, когда строка впервые
     /// показалась, — на видимые два десятка строк это доли миллисекунды.
     fileprivate func noteRealHeight(ofTableRow row: Int) {
-        guard case .measured = heights, row >= 0, row < measuredHeights.count,
-              measuredHeights[row] == 0, let source else { return }
+        guard case .measured = heights, row >= 0, row < measuredHeights.count, let source else { return }
         let width = contentWidth
+        // Висота рядка залежить від ширини: те саме речення на вузькому місці
+        // переноситься більше разів. Ширина міняється не лише коли міняється
+        // наш власний розмір (тоді `layout` сам скидає виміряне), а й коли
+        // з'являється смуга прокрутки чи стовпець стає на своє місце вже
+        // після першого малювання. Власник 19.09.2026: «при запуске программы
+        // часто окно со списком стихов или куплетов отображается с
+        // перекрытием некоторых строк, исправляется если переключить песню
+        // или главу». Тому міряне пам'ятає свою ширину, і на іншій —
+        // міряється наново.
+        if abs(width - measuredAtWidth) > 0.5 {
+            measuredAtWidth = width
+            if measuredHeights.contains(where: { $0 > 0 }) {
+                measuredHeights = Array(repeating: 0, count: measuredHeights.count)
+                heightsToNote.formUnion(IndexSet(integersIn: 0..<measuredHeights.count))
+            }
+        }
+        guard measuredHeights[row] == 0 else { return }
         let layout = NativeRowLayout(row: ask(source, row), width: width, style: style, measure: true)
         let real = max(1, layout.height)
         measuredHeights[row] = real
@@ -825,6 +883,7 @@ final class NativeList: NSView, NativeListChecking {
         scrollView.backgroundColor = metrics.background
         if case .measured = heights {
             measuredHeights = Array(repeating: 0, count: itemCount)
+            measuredAtWidth = 0
         }
         columnsPerRow = tileColumns(for: contentWidth)
         table.reloadData()

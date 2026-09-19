@@ -17,7 +17,36 @@ extension Diagnostics {
         checks.append(contentsOf: nativeBibleBridge(state))
         checks.append(contentsOf: nativeBibleColumns(state))
         checks.append(nativeTranslationSwitchVerses(state))
+        checks.append(verseAddressCheck())
         return checks
+    }
+
+    /// Адреса місця Писання: вірші підряд — через тире, розрізнені — через
+    /// кому, мішанина — проміжками.
+    ///
+    /// Власник 19.09.2026: «при выделении нескольких стихов подряд в адресе
+    /// написано все правильно… но если добавить стих, который идет не по
+    /// порядку, то отображение всех стихов через запятую».
+    static func verseAddressCheck() -> Check {
+        let cases: [(verses: [Int], want: String)] = [
+            ([], "3"),
+            ([16], "3:16"),
+            ([16, 17], "3:16-17"),
+            ([16, 18], "3:16,18"),
+            ([1, 2, 3, 7], "3:1-3,7"),
+            ([7, 1, 3, 2, 10, 9], "3:1-3,7,9-10"),
+            ([5, 5, 6], "3:5-6"),
+        ]
+        var faults: [String] = []
+        var lines: [String] = []
+        for one in cases {
+            let got = ReferenceFormat.position(chapter: 3, verses: one.verses)
+            lines.append("\(one.verses) → \(got)")
+            if got != one.want { faults.append("\(one.verses): «\(got)» замість «\(one.want)»") }
+        }
+        return Check(area: "Біблія", name: "Адреса: вірші підряд через тире, розрізнені — комою",
+                     status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty ? lines.joined(separator: "; ") : faults.joined(separator: "; "))
     }
 
     /// Перемикання перекладу: у списку віршів — текст нового перекладу.

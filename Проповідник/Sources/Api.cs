@@ -11,6 +11,8 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -104,6 +106,32 @@ public sealed class Api
         return await response.Content.ReadAsByteArrayAsync(timeout.Token);
     }
 
+    /// Команда з рядком: адреса місця Писання, пісенник, пошук.
+    public Task<JsonObject> Command(string name, string text) =>
+        Command(name, new JsonObject { ["text"] = text }, 15);
+
+    /// Картинка сторінки показу чи картинок — JPEG заданої ширини.
+    public async Task<byte[]?> PageImage(int index, int width, string kind = "")
+    {
+        var path = "/api/page?index=" + index + "&w=" + width + (kind.Length > 0 ? "&kind=" + kind : "");
+        using var request = NewRequest(HttpMethod.Get, path);
+        using var timeout = Deadline(30);
+        using var response = await Client.SendAsync(request, timeout.Token);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) throw new PinRejectedException();
+        if ((int)response.StatusCode >= 400) return null;
+        return await response.Content.ReadAsByteArrayAsync(timeout.Token);
+    }
+
+    /// Вибір місця Писання: у передпоказ або одразу в зал.
+    public Task<JsonObject> BibleSelect(int book, int chapter, IEnumerable<int> verses, bool live) =>
+        Command("bible-select", new JsonObject
+        {
+            ["book"] = book,
+            ["chapter"] = chapter,
+            ["live"] = live,
+            ["verses"] = new JsonArray(verses.Select(v => (JsonNode)v).ToArray()),
+        }, 15);
+
     /// Сирі байти: переклад рядками SLOVO-BIBLE чи пісенник .vbm.
     public async Task<byte[]> Bytes(string path, int seconds = 900)
     {
@@ -115,6 +143,11 @@ public sealed class Api
     }
 
     // MARK: План проповіді
+
+    /// Файл із цього комп'ютера — програмі: вона відкриє його в показі.
+    /// `show` — одразу вивести в зал (так шлють одне фото).
+    public Task<JsonObject> Upload(string name, byte[] bytes, bool show = false) =>
+        PostBytes("/api/upload?name=" + Uri.EscapeDataString(name) + (show ? "&show=1" : ""), bytes, 900);
 
     /// Файл плану — лише зберегти в програмі. Відповідь — ім'я, під яким він там лежить.
     public async Task<string> StoreFile(string name, byte[] bytes)

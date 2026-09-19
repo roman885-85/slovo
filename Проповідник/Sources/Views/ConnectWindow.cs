@@ -89,14 +89,15 @@ public sealed class ConnectWindow : Window
     async Task Search()
     {
         _search.IsEnabled = false;
-        _status.Text = Lang.T("Шукаю «Слово» в мережі…", "Searching the network for Slovo…");
+        _status.Text = Lang.T("Шукаю «Слово» в мережі: розсилка, ім'я slovo.local і обхід своєї мережі…",
+                              "Searching for Slovo: broadcast, the slovo.local name and a sweep of your network…");
         try
         {
             var found = await Discovery.Search();
             _found.ItemsSource = found;
             _status.Text = found.Count == 0
-                ? Lang.T("Ніхто не відповів. Перевірте, що «Слово» відкрите й пульт увімкнено, або введіть адресу вручну.",
-                         "Nobody answered. Make sure Slovo is open and the remote is on, or enter the address manually.")
+                ? Lang.T("Ніхто не відповів. Перевірте, що «Слово» відкрите й пульт увімкнено (Параметри → Remote API), що обидва комп'ютери в одній мережі, і що брандмауер Windows не заважає — або введіть адресу вручну.",
+                         "Nobody answered. Make sure Slovo is open and the remote is on (Settings → Remote API), that both computers are on the same network and that the Windows firewall is not in the way — or enter the address manually.")
                 : Lang.T("Виберіть «Слово» в списку — і «Перевірити й запам'ятати».", "Choose Slovo in the list — then “Check and remember”.");
             if (found.Count == 1) _found.SelectedIndex = 0;
         }

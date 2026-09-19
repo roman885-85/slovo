@@ -34,6 +34,8 @@ extension Diagnostics {
         }
 
         var checks: [Check] = []
+        checks.append(startupFitCheck(state: state))
+        checks.append(listWidthCheck())
         checks.append(fitCheck(area: area, state: state, scope: .bible, title: "Біблія"))
         checks.append(fitCheck(area: area, state: state, scope: .songs, title: "Пісні"))
         checks.append(hitCheck(area: area, state: state, scope: .bible, title: "Біблія"))
@@ -116,6 +118,98 @@ extension Diagnostics {
             return Check(area: area, name: name, status: .failed, detail: faults.joined(separator: "; ") + ". " + detail)
         }
         return Check(area: area, name: name, status: .ok, detail: detail)
+    }
+
+    /// Як списки виглядають одразу після запуску — нічого не перемикаючи.
+    ///
+    /// Власник: «при запуске программы часто окно со списком стихов или
+    /// куплетов отображается с перекрытием некоторых строк, исправляется если
+    /// переключить песню или главу». Перемикання все лагодить, тож міряти
+    /// треба саме перший показ: спершу вірші, як їх відкрила програма, потім
+    /// куплети першої-ліпшої пісні.
+    static func startupFitCheck(state: AppState) -> Check {
+        var faults: [String] = []
+        var lines: [String] = []
+        func look(_ label: String, _ list: NativeList) {
+            let rows = min(list.rowsNow, 60)
+            guard rows > 0 else { return }
+            var worst = 0.0
+            for index in 0..<rows {
+                guard let fit = list.fit(ofRow: index) else { continue }
+                worst = max(worst, fit.drawn - fit.given)
+                guard fit.drawn > fit.given + 0.5 else { continue }
+                faults.append(String(format: "%@, рядок %d: намальовано %.0f, а місця %.0f", label, index + 1, fit.drawn, fit.given))
+                break
+            }
+            lines.append(String(format: "%@: рядків %d, найтісніший із запасом %.0f", label, rows, -worst))
+        }
+        for (label, list) in lists(for: .bible) where label == "вірші" { look("вірші", list) }
+        // Пісні: як їх побачить людина, що відкрила вкладку вперше.
+        state.mode = .songs
+        settle()
+        for (label, list) in lists(for: .songs) where label == "частини" || label == "пісні" { look(label, list) }
+        return Check(area: "Вигляд списків", name: "Одразу після запуску рядки не наповзають",
+                     status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty ? lines.joined(separator: "; ") : faults.joined(separator: "; "))
+    }
+
+    /// Список, зміряний на широкому місці, а показаний на вузькому.
+    ///
+    /// Власник 19.09.2026: «при запуске программы часто окно со списком
+    /// стихов или куплетов отображается с перекрытием некоторых строк,
+    /// исправляется если переключить песню или главу». Саме так і буває,
+    /// коли висоти рядків зміряно за однієї ширини, а малюються вони за
+    /// іншої: при запуску вікно спершу розкладається на всю ширину, а потім
+    /// стовпці стають на свої місця.
+    static func listWidthCheck() -> Check {
+        let name = "Рядки не наповзають, коли список став вужчим"
+        let list = NativeList(mode: .list, metrics: .verses, heights: .measured(estimate: 30), fontSize: 13)
+        let source = WidthProbe()
+        list.source = source
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 400))
+        holder.addSubview(list)
+        list.frame = holder.bounds
+        let window = bench(for: holder, size: NSSize(width: 640, height: 400))
+        defer { window.orderOut(nil) }
+        list.reload()
+        holder.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        wait(untilTrue: { false }, seconds: 0.3)
+        let wide = (0..<source.rowCount).compactMap { list.fit(ofRow: $0) }
+        // Стало вдвічі вужче — текст переноситься більше разів.
+        list.frame = NSRect(x: 0, y: 0, width: 300, height: 400)
+        list.needsLayout = true
+        holder.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        wait(untilTrue: { false }, seconds: 0.3)
+        var faults: [String] = []
+        for index in 0..<source.rowCount {
+            guard let fit = list.fit(ofRow: index) else { continue }
+            if fit.drawn > fit.given + 0.5 {
+                faults.append(String(format: "рядок %d: намальовано %.0f, а місця %.0f", index + 1, fit.drawn, fit.given))
+            }
+        }
+        return Check(area: "Вигляд списків", name: name, status: faults.isEmpty ? .ok : .failed,
+                     detail: faults.isEmpty
+                        ? "на 640 пт: \(wide.map { Int($0.given) }); після звуження до 300 пт усі рядки вміщаються"
+                        : faults.joined(separator: "; "))
+    }
+
+    /// Джерело для перевірки ширини: довгі вірші, які на вузькому місці
+    /// переносяться більше разів, ніж на широкому.
+    private final class WidthProbe: NSObject, NativeListSource {
+        private let texts = [
+            "На початку Бог створив небо та землю, а земля була пуста та порожня, і темрява була над безоднею",
+            "І сказав Бог: Хай станеться світло! І сталося світло, і побачив Бог світло, що добре воно",
+            "І назвав Бог світло: День, а темряву назвав: Ніч. І був вечір, і був ранок, день перший",
+        ]
+        var rowCount: Int { texts.count }
+        func row(at index: Int) -> NativeRow {
+            var row = NativeRow()
+            row.lead = "\(index + 1)"
+            row.text = texts[index]
+            return row
+        }
     }
 
     private static func fitCheck(area: String, state: AppState,

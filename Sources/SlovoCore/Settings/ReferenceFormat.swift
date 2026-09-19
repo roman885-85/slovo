@@ -56,16 +56,38 @@ public struct ReferenceFormat: Sendable, Hashable {
         }
     }
 
-    /// Хвіст адреси: «1:1», «1:1-5» для віршів, що йдуть підряд, або «1:1,3,5»
-    /// для розрізнених.
+    /// Хвіст адреси: «1:1», «1:1-5» для віршів підряд, «1:1,3,5» для
+    /// розрізнених і «1:1-3,7» для мішанини.
+    ///
+    /// Власник 19.09.2026: «при выделении нескольких стихов подряд в адресе
+    /// написано все правильно — стихи через тире, но если к этим стихам
+    /// добавить стих, который идет не по порядку, то отображение всех стихов
+    /// через запятую». Досі так і було: одна перевірка на весь набір — або
+    /// суцільний проміжок, або перелік. Тепер набір ріжеться на проміжки, і
+    /// кожен пишеться по-своєму.
     public static func position(chapter: Int, verses: [Int]) -> String {
-        let sorted = verses.sorted()
-        guard let first = sorted.first else { return "\(chapter)" }
-        guard sorted.count > 1, let last = sorted.last else { return "\(chapter):\(first)" }
+        let runs = spans(of: verses)
+        guard !runs.isEmpty else { return "\(chapter)" }
+        return "\(chapter):" + runs.joined(separator: ",")
+    }
 
-        let isRange = last - first == sorted.count - 1
-        return isRange ? "\(chapter):\(first)-\(last)"
-                       : "\(chapter):\(sorted.map(String.init).joined(separator: ","))"
+    /// Номери віршів проміжками: [1,2,3,7,9,10] → ["1-3", "7", "9-10"].
+    /// Повтори прибираються, порядок — за зростанням.
+    public static func spans(of verses: [Int]) -> [String] {
+        let sorted = Array(Set(verses)).sorted()
+        var runs: [String] = []
+        var index = 0
+        while index < sorted.count {
+            let first = sorted[index]
+            var last = first
+            while index + 1 < sorted.count, sorted[index + 1] == last + 1 {
+                index += 1
+                last = sorted[index]
+            }
+            runs.append(first == last ? "\(first)" : "\(first)-\(last)")
+            index += 1
+        }
+        return runs
     }
 
     /// Об'єднана адреса для двох перекладів: «Буття(Gen.) 1:1».

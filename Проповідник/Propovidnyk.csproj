@@ -25,7 +25,7 @@
     <!-- Значок — зі Slovo.icns (build.sh); у відкритому коді зображень немає,
          і тоді програма збирається з типовим значком. -->
     <ApplicationIcon Condition="Exists('Resources/AppIcon.ico')">Resources/AppIcon.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
