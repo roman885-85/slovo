@@ -465,7 +465,7 @@ final class BibleBrowser {
             int start = numbers.get(i);
             int end = start;
             while (i + 1 < numbers.size() && numbers.get(i + 1) == end + 1) end = numbers.get(++i);
-            if (out.length() > 0) out.append(", ");
+            if (out.length() > 0) out.append(',');   // як у програмі: «3:16-17,19», без пробілу
             out.append(start == end ? String.valueOf(start) : start + "-" + end);
             i++;
         }
