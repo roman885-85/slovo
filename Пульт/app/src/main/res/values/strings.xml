@@ -118,4 +118,22 @@
     <string name="photo_sending">Sending photo %1$d of %2$d…</string>
     <string name="photo_sent">Photos sent: %1$d — the first one is already on the wall</string>
     <string name="photo_failed">Photos not sent: %1$s</string>
+
+    <!-- Оновлення програми з релізів GitHub. -->
+    <string name="update_asset" translatable="false">Pult-Slova-</string>
+    <string name="menu_update">Check for updates…</string>
+    <string name="update_title">Version %1$s is out</string>
+    <string name="update_message">You have %1$s, the new one is %2$s.</string>
+    <string name="update_mb">MB</string>
+    <string name="update_android_note">Android will show its own install screen. The first time it asks you to allow installing from this app.</string>
+    <string name="update_do">Update</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading the update</string>
+    <string name="update_wait">One moment…</string>
+    <string name="update_failed">Update failed: %1$s</string>
+    <string name="update_latest">Version %1$s — this is the latest one</string>
+    <string name="update_no_answer">GitHub did not answer — try again later</string>
+    <string name="update_permission_title">Allow installation</string>
+    <string name="update_permission_text">Android installs updates only with your permission: on the next screen turn on “Allow from this source”, then press “Check for updates…” again.</string>
+    <string name="update_permission_go">Open settings</string>
 </resources>

@@ -218,4 +218,7 @@
     <string name="scale_title">Interface scale: smaller fits more</string>
     <string name="scale_auto">Auto (now %1$d%%)</string>
     <string name="scale_cancel">Cancel</string>
+
+    <!-- Файл оновлення планшета в релізі — своє ім'я поверх пультового. -->
+    <string name="update_asset" translatable="false">Planshet-Slova-</string>
 </resources>

@@ -18,6 +18,10 @@ public sealed class Settings
     public string Language { get; set; } = "auto";
     /// Останній відкритий план — щоб наступного разу почати з нього.
     public string LastPlan { get; set; } = "";
+    /// Коли востаннє питали GitHub про нову версію (секунди епохи).
+    public long LastUpdateCheck { get; set; }
+    /// Версія, від якої людина відмовилася: удруге не набридати.
+    public string SkippedUpdate { get; set; } = "";
 
     public bool HasHost => !string.IsNullOrWhiteSpace(Host);
 
@@ -35,6 +39,8 @@ public sealed class Settings
             settings.Name = (string?)json["name"] ?? "";
             settings.Language = (string?)json["language"] ?? "auto";
             settings.LastPlan = (string?)json["lastPlan"] ?? "";
+            settings.LastUpdateCheck = (long?)json["lastUpdateCheck"] ?? 0;
+            settings.SkippedUpdate = (string?)json["skippedUpdate"] ?? "";
         }
         catch (Exception error)
         {
@@ -53,6 +59,8 @@ public sealed class Settings
             ["name"] = Name,
             ["language"] = Language,
             ["lastPlan"] = LastPlan,
+            ["lastUpdateCheck"] = LastUpdateCheck,
+            ["skippedUpdate"] = SkippedUpdate,
         };
         var temp = Paths.SettingsFile + ".tmp";
         File.WriteAllText(temp, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

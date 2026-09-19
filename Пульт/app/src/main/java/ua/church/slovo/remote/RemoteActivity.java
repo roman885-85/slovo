@@ -144,6 +144,8 @@ public final class RemoteActivity extends Activity {
             return;
         }
         setContentView(R.layout.activity_remote);
+        // Нова версія програми: питаємо GitHub раз на добу, мовчки.
+        Updates.checkQuietly(this);
         status = findViewById(R.id.status);
         liveReference = findViewById(R.id.liveReference);
         liveText = findViewById(R.id.liveText);
@@ -308,7 +310,8 @@ public final class RemoteActivity extends Activity {
     // MARK: Меню
 
     private static final int MENU_CONNECTION = 1, MENU_VOLUME = 2, MENU_AWAKE = 3,
-        MENU_REVERSED = 4, MENU_POINTER = 5, MENU_RESET = 6, MENU_ZOOM_OFF = 7, MENU_LANGUAGE = 8;
+        MENU_REVERSED = 4, MENU_POINTER = 5, MENU_RESET = 6, MENU_ZOOM_OFF = 7, MENU_LANGUAGE = 8,
+        MENU_UPDATE = 9;
 
     /// Мова інтерфейсу (див. `Lang`) — до того, як вікно візьме ресурси.
     @Override
@@ -328,6 +331,7 @@ public final class RemoteActivity extends Activity {
         menu.add(0, MENU_ZOOM_OFF, 5, R.string.menu_zoom_off);
         menu.add(0, MENU_RESET, 6, R.string.menu_reset);
         menu.add(0, MENU_LANGUAGE, 7, R.string.menu_language);
+        menu.add(0, MENU_UPDATE, 8, R.string.menu_update);
         return true;
     }
 
@@ -362,6 +366,9 @@ public final class RemoteActivity extends Activity {
                 return true;
             case MENU_LANGUAGE:
                 Lang.showChooser(this);
+                return true;
+            case MENU_UPDATE:
+                Updates.checkNow(this);
                 return true;
             default:
                 return super.onOptionsItemSelected(item);

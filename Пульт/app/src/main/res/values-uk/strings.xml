@@ -113,4 +113,21 @@
     <string name="photo_sending">Надсилаю фото %1$d з %2$d…</string>
     <string name="photo_sent">Надіслано фото: %1$d — перше вже на стіні</string>
     <string name="photo_failed">Фото не надіслано: %1$s</string>
+
+    <!-- Оновлення програми з релізів GitHub. -->
+    <string name="menu_update">Перевірити оновлення…</string>
+    <string name="update_title">Вийшла версія %1$s</string>
+    <string name="update_message">У вас %1$s, нова — %2$s.</string>
+    <string name="update_mb">МБ</string>
+    <string name="update_android_note">Android покаже своє вікно встановлення. Уперше він попросить дозволити встановлення з цієї програми.</string>
+    <string name="update_do">Оновити</string>
+    <string name="update_later">Пізніше</string>
+    <string name="update_downloading">Завантажую оновлення</string>
+    <string name="update_wait">Хвилинку…</string>
+    <string name="update_failed">Не вдалося оновити: %1$s</string>
+    <string name="update_latest">Версія %1$s — новішої немає</string>
+    <string name="update_no_answer">GitHub не відповів — спробуйте пізніше</string>
+    <string name="update_permission_title">Дозвольте встановлення</string>
+    <string name="update_permission_text">Android ставить оновлення лише з вашого дозволу: на наступному екрані ввімкніть «Дозволити з цього джерела», потім знову натисніть «Перевірити оновлення…».</string>
+    <string name="update_permission_go">Відкрити налаштування</string>
 </resources>

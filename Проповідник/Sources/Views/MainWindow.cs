@@ -82,6 +82,8 @@ public sealed partial class MainWindow : Window
         _api = Api.From(_settings);
         Build();
         Closing += (_, _) => _closing.Cancel();
+        // Нова версія програми: питаємо GitHub раз на добу, мовчки.
+        Opened += (_, _) => _ = Updates.CheckQuietly(this, _settings);
         _ = Follow();
         _ = RefreshHallLoop();
     }
@@ -117,6 +119,10 @@ public sealed partial class MainWindow : Window
             item.Click += (_, _) => ChangeLanguage(code);
             language.Items.Add(item);
         }
+        language.Items.Add(new Separator());
+        var check = new MenuItem { Header = Lang.F("Перевірити оновлення… (зараз {0})", "Check for updates… (now {0})", Updates.Ours) };
+        check.Click += (_, _) => _ = Updates.CheckNow(this, _settings);
+        language.Items.Add(check);
         var languageButton = Ui.Button("Мова / Language", () => { });
         languageButton.Flyout = language;
 
