@@ -266,7 +266,17 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         for view in [icon, caption, count, addButton, removeButton, clearButton, list, deck] {
             view.isHidden = compact
         }
-        if compact { layoutCompact() } else if bounds.width >= Self.wideWidth { layoutWide() } else { layoutNarrow() }
+        if compact {
+            layoutCompact()
+        } else {
+            // Повертаємо все, що ховала смужка: інакше після одного стиснення
+            // хвиля, пік-метр і тон лишалися б схованими назавжди.
+            for view in [waveformView as NSView, meter as NSView, toneDown as NSView,
+                         toneUp as NSView, toneLabel as NSView, loopButton as NSView] {
+                view.isHidden = false
+            }
+            if bounds.width >= Self.wideWidth { layoutWide() } else { layoutNarrow() }
+        }
     }
 
     /// Один ряд: грати/стоп, назва, час і гучність — усе, що треба, коли
@@ -282,18 +292,25 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
             button.frame = NSRect(x: x, y: row, width: 30, height: 22)
             x += 32
         }
-        let volumeWidth: CGFloat = 120
+        let volumeWidth: CGFloat = 110
         let timeWidth: CGFloat = 86
         volume.isHidden = false
         volume.frame = NSRect(x: max(x, bounds.width - pad - volumeWidth), y: row, width: volumeWidth, height: 22)
         time.isHidden = false
         time.frame = NSRect(x: volume.frame.minX - timeWidth - 8, y: row + 3, width: timeWidth, height: 16)
+        // Смуга перемотування лишається і в стиснутому ряді: власник —
+        // «при схлопывании плеера минусовок, полоса прокрутки должна
+        // остаться». Назва їде ліворуч від неї, скільки лишиться місця.
+        let nameWidth: CGFloat = 150
         name.isHidden = false
-        name.frame = NSRect(x: x + 6, y: row + 3,
-                            width: max(20, time.frame.minX - x - 14), height: 16)
-        // У стиснутому ряді тону й хвилі немає — місця на них нема.
-        for view in [waveformView as NSView, meter as NSView,
-                     toneDown as NSView, toneUp as NSView, toneLabel as NSView, loopButton as NSView] {
+        name.frame = NSRect(x: x + 6, y: row + 3, width: nameWidth, height: 16)
+        let barX = name.frame.maxX + 8
+        let barWidth = max(40, time.frame.minX - barX - 8)
+        waveformView.isHidden = false
+        waveformView.frame = NSRect(x: barX, y: row + 4, width: barWidth, height: 16)
+        // Решта в один ряд не вміщається.
+        for view in [meter as NSView, toneDown as NSView, toneUp as NSView,
+                     toneLabel as NSView, loopButton as NSView] {
             view.isHidden = true
         }
     }

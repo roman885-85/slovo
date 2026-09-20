@@ -24,6 +24,10 @@ final class NativeModeTabs: NSView {
     /// «Оновлення 0.92» — поки на GitHub є новіша версія, ніж ця. Не зникає
     /// після «Пізніше»: пропозицію могли не помітити, а кнопку видно завжди.
     let updateButton = NSButton(title: "", target: nil, action: nil)
+    /// Тека даних — однією кнопкою. Власник: «кнопки открытия папки настроек
+    /// и библиотеки сохраненных модулей нет»: пункт меню він не знайшов, тож
+    /// кнопка стоїть там, де видно завжди, — у верхньому ряду вікна.
+    let folderButton = NSButton(title: "", target: nil, action: nil)
     private var updateObserver: Any?
     private var watch: Set<AnyCancellable> = []
     private var tokens: [Signals.Token] = []
@@ -74,6 +78,15 @@ final class NativeModeTabs: NSView {
         slider.action = #selector(slide(_:))
         addSubview(slider)
 
+        folderButton.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        folderButton.bezelStyle = .texturedRounded
+        folderButton.isBordered = false
+        folderButton.imagePosition = .imageOnly
+        folderButton.target = self
+        folderButton.action = #selector(openDataFolder)
+        folderButton.toolTip = OurWords.t("Папка с данными: переводы, песенники, фоны, шаблоны, планы и настройки")
+        addSubview(folderButton)
+
         applyTitles(state.language)
         applyMode(state.mode)
 
@@ -114,7 +127,9 @@ final class NativeModeTabs: NSView {
         let sliderWidth: CGFloat = 120
         let middle = (bounds.height / 2).rounded()
         var right = bounds.width
-        right -= iconSide
+        right -= 24
+        folderButton.frame = NSRect(x: right, y: middle - 11, width: 22, height: 22)
+        right -= iconSide + 6
         larger.frame = NSRect(x: right, y: middle - iconSide / 2, width: iconSide, height: iconSide)
         right -= sliderWidth + 4
         slider.frame = NSRect(x: right, y: middle - 10, width: sliderWidth, height: 20)
@@ -125,6 +140,10 @@ final class NativeModeTabs: NSView {
             right -= width + 12
             updateButton.frame = NSRect(x: right, y: middle - 11, width: width, height: 22)
         }
+    }
+
+    @objc private func openDataFolder() {
+        NSWorkspace.shared.activateFileViewerSelecting([DataHome.folder])
     }
 
     private func applyUpdate() {

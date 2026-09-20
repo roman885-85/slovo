@@ -363,10 +363,22 @@ extension Diagnostics {
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 1600, height: 900))
         window.contentView = host
+        // Вид беремо на час перевірки й повертаємо туди, де він стояв:
+        // інакше робоча зона пісень лишається поза справжнім вікном, і
+        // наступні перевірки кажуть «у вікні лежить не модуль пісень».
+        let home = view.superview
+        let place = view.frame
         view.frame = host.bounds
         host.addSubview(view)
         host.layoutSubtreeIfNeeded()
-        defer { view.removeFromSuperview() }
+        defer {
+            view.removeFromSuperview()
+            if let home {
+                view.frame = place
+                home.addSubview(view)
+                home.layoutSubtreeIfNeeded()
+            }
+        }
 
         songs.selectBook(id: entry.id)
         for _ in 0..<40 where !songs.songIndexIsReady {
@@ -417,10 +429,22 @@ extension Diagnostics {
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 1600, height: 900))
         window.contentView = host
+        // Вид беремо на час перевірки й повертаємо туди, де він стояв:
+        // інакше робоча зона пісень лишається поза справжнім вікном, і
+        // наступні перевірки кажуть «у вікні лежить не модуль пісень».
+        let home = view.superview
+        let place = view.frame
         view.frame = host.bounds
         host.addSubview(view)
         host.layoutSubtreeIfNeeded()
-        defer { view.removeFromSuperview() }
+        defer {
+            view.removeFromSuperview()
+            if let home {
+                view.frame = place
+                home.addSubview(view)
+                home.layoutSubtreeIfNeeded()
+            }
+        }
 
         songs.selectBook(id: entry.id)
         for _ in 0..<40 where !songs.songIndexIsReady {
@@ -442,15 +466,34 @@ extension Diagnostics {
 
         func survey(_ label: String) -> (waste: CGFloat, cut: Int, rows: Int) {
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+            // Сторож висот міряє через чверть секунди після перезавантаження —
+            // даємо йому відпрацювати, інакше міряли б проміжний стан. Після
+            // нього рядки міряються, коли малюються, тому женемо ще й
+            // малювання: без нього висота лишалася б першою оцінкою.
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            window.displayIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            window.displayIfNeeded()
             var waste: CGFloat = 0
             var cut = 0
             var rows = 0
-            for index in 0..<songs.partRows.rowCount {
+            // Дивимося лише на видимі рядки: висоту схованих список рахує
+            // тоді, коли вони показуються, — і це правильно.
+            for index in songs.partList.visibleRows {
                 guard let fit = songs.partList.fit(ofRow: index) else { continue }
                 rows += 1
                 waste = max(waste, fit.given - fit.drawn)
                 if fit.cut || fit.drawn > fit.given + 0.5 { cut += 1 }
+            }
+            // Ширини: якщо міряли по одній, а малюють по іншій, текст ріжеться.
+            for index in songs.partList.visibleRows {
+                let pair = songs.partList.widths(ofRow: index)
+                if pair.cell > 1, abs(pair.cell - pair.measured) > 1 {
+                    NativeTrace.say("куплети \(label): міряно по \(Int(pair.measured)), клітинка \(Int(pair.cell))")
+                    cut += 1
+                    break
+                }
             }
             return (waste, cut, rows)
         }

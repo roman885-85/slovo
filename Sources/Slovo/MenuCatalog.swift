@@ -169,6 +169,11 @@ enum SlovoMenu {
                                 action: { actions.openHelp() }),
                 NativeMenuEntry(title: OurWords.t("Горячие клавиши"), action: { NativeHelpWindow.show(topic: "keys") }),
                 NativeMenuEntry(title: OurWords.t("Если что-то не так"), action: { NativeHelpWindow.show(topic: "trouble") }),
+                // Власник: «программа должна полностью работать на 11 версии
+                // макос». З іншого Mac не видно, що саме на Big Sur не так —
+                // цей пункт питає саму систему й дає готовий звіт.
+                NativeMenuEntry(title: OurWords.t("Проверка совместимости"),
+                                action: { NativeCompatWindow.show(state: state) }),
                 // Для іншого Mac: на тому, де «Слово» не запускається, цієї
                 // довідки не прочитати — посилання відкривають і пересилають звідси.
                 NativeMenuEntry(title: OurWords.t("Установка на другой Mac (GitHub)"),

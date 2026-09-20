@@ -194,7 +194,15 @@ extension Diagnostics {
         }
         let defaults = UserDefaults.standard
         let saved = defaults.object(forKey: "backingPanelHeight")
-        defer { defaults.set(saved, forKey: "backingPanelHeight") }
+        // Ширину списку теж беремо на час перевірки: збережене число з
+        // минулого разу перетворювало широку раскладку на вузьку.
+        let savedWidth = defaults.object(forKey: "backingListWidth")
+        defaults.removeObject(forKey: "backingListWidth")
+        defer {
+            defaults.set(saved, forKey: "backingPanelHeight")
+            if let savedWidth { defaults.set(savedWidth, forKey: "backingListWidth") }
+            else { defaults.removeObject(forKey: "backingListWidth") }
+        }
         let host = root.superview
         let wasFrame = root.frame
         // Вид малюється лише у вікні: знімок із голої підставки виходив
@@ -223,7 +231,10 @@ extension Diagnostics {
         if let columns, columns.frame.maxY > bar.frame.minY { faults.append("стовпці залазять на панель") }
         // Широка раскладка: список ліворуч, картка треку праворуч від нього.
         bar.layoutSubtreeIfNeeded()
-        if bar.list.frame.maxX > bar.frame.width * 0.55 { faults.append("список зайняв усю ширину — раскладка не широка") }
+        if bar.list.frame.maxX > bar.frame.width * 0.55 {
+            faults.append(String(format: "список зайняв усю ширину — раскладка не широка (список до %.0f, панель %.0f×%.0f)",
+                                 bar.list.frame.maxX, bar.frame.width, bar.frame.height))
+        }
         // Власник: «полоса громкости слишком длинная» — смуга сталої ширини.
         if let slider = bar.subviews.compactMap({ $0 as? NSSlider }).first,
            slider.frame.width > NativeBackingTrackBar.volumeWidth + 0.5 {
@@ -240,11 +251,26 @@ extension Diagnostics {
         if abs(grew - 60) > 1 { faults.append(String(format: "угору на 60 — панель змінилася на %.0f", grew)) }
         if abs(listGrew - 60) > 1 { faults.append(String(format: "список змінився на %.0f", listGrew)) }
         if !remembered { faults.append("висоту не запам'ятано") }
+        // Власник: «блок с фонограммами невозможно сжать до одной строки» і
+        // «при схлопывании плеера минусовок, полоса прокрутки должна
+        // остаться». Тягнемо донизу до упору: панель стає смужкою, у якій
+        // лишаються кнопки, назва, час, смуга перемотування й гучність.
         root.heightGrip.onDrag?(5000)
         root.layoutSubtreeIfNeeded()
-        if abs(bar.frame.height - NativeBackingTrackBar.minimumHeight) > 1 {
-            faults.append(String(format: "униз до упору — %.0f замість %.0f", bar.frame.height, NativeBackingTrackBar.minimumHeight))
+        if abs(bar.frame.height - NativeBackingTrackBar.collapsedHeight) > 6 {
+            faults.append(String(format: "униз до упору — %.0f замість %.0f",
+                                 bar.frame.height, NativeBackingTrackBar.collapsedHeight))
         }
+        if bar.waveformView.isHidden { faults.append("у стиснутій смужці немає смуги перемотування") }
+        if bar.playButton.isHidden { faults.append("у стиснутій смужці немає кнопки «грати»") }
+        if !bar.list.isHidden { faults.append("у стиснутій смужці лишився список") }
+        // І назад: нижня межа тягне так само, тільки навпаки.
+        root.bottomGrip.onDrag?(300)
+        root.layoutSubtreeIfNeeded()
+        if bar.frame.height < NativeBackingTrackBar.minimumHeight - 1 {
+            faults.append(String(format: "нижня межа не повернула панель: %.0f", bar.frame.height))
+        }
+        if bar.list.isHidden { faults.append("після повернення список не з'явився") }
         root.heightGrip.onReset?()
         root.layoutSubtreeIfNeeded()
         if defaults.object(forKey: "backingPanelHeight") != nil || abs(bar.frame.height - barBefore) > 1 {
@@ -256,8 +282,8 @@ extension Diagnostics {
 
         return Check(area: area, name: name, status: faults.isEmpty ? .ok : .failed,
                      detail: faults.isEmpty
-                        ? String(format: "ширина %.0f (уся область), угору на 60 → панель і її список +60, запам'ятано; униз до упору → %.0f; подвійне клацання → як було",
-                                 bar.frame.width, NativeBackingTrackBar.minimumHeight)
+                        ? String(format: "ширина %.0f (уся область), угору на 60 → панель і її список +60, запам'ятано; униз до упору → смужка %.0f зі смугою перемотування; нижня межа повертає; подвійне клацання → як було",
+                                 bar.frame.width, NativeBackingTrackBar.collapsedHeight)
                         : faults.joined(separator: "; "))
     }
 

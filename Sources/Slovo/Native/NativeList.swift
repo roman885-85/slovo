@@ -254,6 +254,13 @@ final class NativeList: NSView, NativeListChecking {
     /// різниці третя плитка вилазила за край списку, а зміряні висоти не
     /// сходилися з намальованими.
     private var contentWidth: CGFloat {
+        // Рахуємо по ширині СТОВПЦЯ — саме її дістає клітинка, коли малює
+        // рядок. Ширина таблиці буває більшою (смуга прокрутки, відступи), і
+        // на цій різниці міряна висота виходила меншою за намальований текст:
+        // останній рядок куплета зрізало (власник: «некоторые песни
+        // отображаются не в одну строку, а очень широко» — на знімку видно
+        // обрізаний нижній рядок). Різниця була 32 точки — рівно смуга.
+        if column.width > 1 { return column.width }
         let inner = table.bounds.width - table.intercellSpacing.width
         return inner > 1 ? inner : max(1, scrollView.contentSize.width)
     }
@@ -812,6 +819,23 @@ final class NativeList: NSView, NativeListChecking {
     /// Коли потрібно більше, ніж дано, текст або обрізається, або наповзає
     /// на сусідній рядок — саме на це скаржився власник після зміни вигляду
     /// списків.
+    /// Які рядки зараз на екрані — самоперевірці: висоту решти рядків
+    /// список навмисно не рахує, поки вони не показалися.
+    var visibleRows: Range<Int> {
+        let visible = table.rows(in: scrollView.contentView.bounds)
+        guard visible.length > 0 else { return 0..<0 }
+        let upper = min(table.numberOfRows, visible.location + visible.length)
+        return visible.location..<max(visible.location, upper)
+    }
+
+    /// Ширини, за якими рахують і малюють рядок, — самоперевірці.
+    /// Розійшлися вони — і текст ріжеться по нижньому краю: міряли по
+    /// широкому, а малюють по вузькому (смуга прокрутки з'їдає точки).
+    func widths(ofRow index: Int) -> (measured: CGFloat, cell: CGFloat) {
+        let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false)?.bounds.width ?? 0
+        return (contentWidth, cell)
+    }
+
     func fit(ofRow index: Int) -> (drawn: CGFloat, given: CGFloat, cut: Bool)? {
         guard let source, index >= 0, index < source.rowCount else { return nil }
         let row = ask(source, index)

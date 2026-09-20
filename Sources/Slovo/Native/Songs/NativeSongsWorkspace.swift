@@ -973,7 +973,7 @@ final class NativeSongsRootView: NSView {
         addSubview(columns)
         addSubview(heightGrip)
         addSubview(backing)
-        addSubview(bottomGrip)
+        addSubview(bottomGrip)   // поверх панелі: інакше події миші забирає вона
         heightGrip.toolTip = OurWords.t("Потяните вверх или вниз — высота панели фонограмм; двойной щелчок — как было")
         // Власник: «изменение размера с нижнего края отсутствует». Нижня межа
         // тягне так само, тільки навпаки: вниз — вище панель.
@@ -1032,10 +1032,11 @@ final class NativeSongsRootView: NSView {
         let columnsHeight = max(0, bounds.height - top - panel - gap)
         columns.frame = NSRect(x: 0, y: top, width: bounds.width, height: columnsHeight)
         heightGrip.frame = NSRect(x: 0, y: columns.frame.maxY, width: bounds.width, height: gap)
-        // Нижню межу лишаємо в межах панелі: нижче неї у вікні вже нічого нема.
+        backing.frame = NSRect(x: 0, y: heightGrip.frame.maxY, width: bounds.width, height: panel)
+        // Нижня межа лежить ПОВЕРХ нижнього краю панелі: місця вона не
+        // забирає, а тягнути за низ дає.
         let bottom: CGFloat = 5
-        backing.frame = NSRect(x: 0, y: heightGrip.frame.maxY, width: bounds.width, height: max(0, panel - bottom))
-        bottomGrip.frame = NSRect(x: 0, y: backing.frame.maxY, width: bounds.width, height: bottom)
+        bottomGrip.frame = NSRect(x: 0, y: max(0, backing.frame.maxY - bottom), width: bounds.width, height: bottom)
     }
 
     override func draw(_ dirtyRect: NSRect) {
