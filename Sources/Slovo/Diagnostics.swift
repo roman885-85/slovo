@@ -618,6 +618,22 @@ enum Diagnostics {
                             status: .ok, detail: "\(state.languageCatalog?.languages.count ?? 0)"))
         checks.append(Check(area: "Налаштування", name: "Зв'язати навігацію",
                             status: .ok, detail: state.arrowsLinked ? "увімкнено" : "вимкнено"))
+        // Власник: «вывод не должен происходить, пока не будет нажата кнопка
+        // показать или двойной щелчок или enter». Отже, «Активна» за
+        // умовчанням знята — гортання міняє лише передпоказ.
+        // Власник: «вывод не должен происходить, пока не будет нажата кнопка
+        // показать… дальнейшее переключение штатно по стрелкам, до момента,
+        // когда вывод экрана будет отключен».
+        let wasLive = state.isLive
+        state.isLive = false
+        let quiet = !state.arrowsReachHall
+        state.isLive = true
+        let follows = state.arrowsReachHall == state.arrowsShowLive
+        state.isLive = wasLive
+        checks.append(Check(area: "Налаштування", name: "Стрілки виводять у зал лише після «Показати»",
+                            status: quiet && follows ? .ok : .failed,
+                            detail: (quiet ? "поки нічого не показано — лише передпоказ" : "виводять і без показу")
+                                + "; " + (follows ? "після показу гортають зал" : "після показу зал не гортають")))
         checks.append(Check(area: "Налаштування", name: "Спільний фон",
                             status: .ok,
                             detail: state.showsCommonBackground

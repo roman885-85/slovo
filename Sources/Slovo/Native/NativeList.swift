@@ -359,18 +359,27 @@ final class NativeList: NSView, NativeListChecking {
         }
     }
 
-    /// Чи є видимий рядок, якому замало місця; якщо є — переміряти всі.
+    /// Чи розійшлася висота видимих рядків із їхнім текстом — і замало, і
+    /// забагато. Забагато буває тоді, коли рядок так і лишився з попередньою
+    /// висотою (наприклад, з першої оцінки у 86 точок): текст в один рядок, а
+    /// під ним порожнеча. Власник: «некоторые песни отображаются не в одну
+    /// строку, а очень широко, занимая полезное место».
     private func remeasureIfTight() {
         guard isMeasured, source != nil, table.numberOfRows > 0 else { return }
         let visible = table.rows(in: scrollView.contentView.bounds)
         guard visible.length > 0 else { return }
         var tight = false
+        var roomy = false
         for row in visible.location..<min(table.numberOfRows, visible.location + visible.length) {
             guard let fit = fit(ofRow: row) else { continue }
             if fit.drawn > fit.given + 0.5 { tight = true; break }
+            // Вісім точок — це відступи; більше означає справжню порожнечу.
+            if fit.given - fit.drawn > 8 { roomy = true }
         }
-        guard tight else { return }
-        NativeTrace.say("список: рядкам було замало місця при першому показі — переміряв")
+        guard tight || roomy else { return }
+        NativeTrace.say(tight
+                        ? "список: рядкам було замало місця при першому показі — переміряв"
+                        : "список: рядки стояли вищі за свій текст — переміряв")
         measuredAtWidth = contentWidth
         measuredHeights = Array(repeating: 0, count: measuredHeights.count)
         table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))

@@ -33,6 +33,12 @@ public final class HTTPStaticServer {
         public var images: WebSlideImages?
         /// Шрифти нинішнього шаблону — тим самим закритим списком.
         public var fonts: WebSlideImages?
+        /// Значок вкладки (PNG). У теці авторських сторінок лежить
+        /// `favicon.ico` від VisioBible, і браузер брав саме його — у вкладці
+        /// з нашим слайдом світився чужий значок (власник: «в веб слайдах
+        /// фавикон от visiobible остался»). Свій значок сильніший за файл на
+        /// диску: сторінки тут наші.
+        public var favicon: Data?
 
         public init(root: URL,
                     extraRoots: [URL] = [],
@@ -41,7 +47,9 @@ public final class HTTPStaticServer {
                     webSocketPort: Int = 8100,
                     retargetsWebSocket: Bool = true,
                     images: WebSlideImages? = nil,
-                    fonts: WebSlideImages? = nil) {
+                    fonts: WebSlideImages? = nil,
+                    favicon: Data? = nil) {
+            self.favicon = favicon
             self.images = images
             self.fonts = fonts
             self.root = root
@@ -283,6 +291,16 @@ public final class HTTPStaticServer {
         // картинок, а на диску йому відповідності немає.
         let path = String(request.path.split(separator: "?", maxSplits: 1,
                                              omittingEmptySubsequences: false)[0]).lowercased()
+
+        // Значок вкладки: свій, а не той, що лишився в теці від VisioBible.
+        if path == "/favicon.ico" || path == "/favicon.png" || path == "/apple-touch-icon.png"
+            || path == "/apple-touch-icon-precomposed.png" {
+            if let icon = configuration.favicon, !icon.isEmpty {
+                respond(to: session, status: 200, reason: "OK", contentType: "image/png",
+                        body: icon, headOnly: headOnly)
+                return
+            }
+        }
 
         // «Відео по Wi-Fi»: живий потік HLS (H.264/AAC) з кадром залу.
         // Власник: клієнт по Wi-Fi, повна смуга NDI не проходить, затримка

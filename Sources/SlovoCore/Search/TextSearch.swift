@@ -58,10 +58,15 @@ public final class TextSearch {
         public init(_ text: String) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             self.text = trimmed
-            // Роздільники — лише пробіли і переноси рядків: «синтаксический
-            // анализ не производится», тому кома і дефіс лишаються
-            // частиною слова, як їх набрав оператор.
-            let parts = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            // Розділяють і пробіли, і розділові знаки: власник —
+            // «при поиске игнорировать знаки пунктуации, брать в поиск только
+            // слова». Доти кома, крапка чи лапки лишалися частиною слова, і
+            // «спаси,» не знаходило «спаси». Апостроф теж розділяє: «з'явився»
+            // стає двома словами, і обидва мусять знайтися — так само, як у
+            // тексті пісні, хай там апостроф прямий чи фігурний.
+            let parts = trimmed
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init)
             self.words = parts
             self.foldedWords = parts.map(Index.fold).filter { !$0.isEmpty }
         }

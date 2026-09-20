@@ -81,21 +81,24 @@
                 android:layout_margin="6dp"
                 android:visibility="gone" />
         </FrameLayout>
+        <!-- Підпис слайда — своїм рядком: збоку від кнопок він збивав ряд
+             (власник: «текст сбоку кнопок вообще там находится не должен»). -->
+        <TextView
+            android:id="@+id/pageCaption"
+            android:textColor="?android:textColorSecondary"
+            android:textSize="13sp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:paddingLeft="6dp"
+            android:paddingRight="6dp"
+            android:paddingTop="2dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <!-- Рівно навпіл, як «Назад / Далі» нижче. -->
         <LinearLayout
             android:orientation="horizontal"
-            android:gravity="center_vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
-            <TextView
-                android:id="@+id/pageCaption"
-                android:textColor="?android:textColorSecondary"
-                android:textSize="13sp"
-                android:singleLine="true"
-                android:ellipsize="end"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content" />
-            <!-- Однакової ширини: різні за розміром кнопки поруч виглядали кривими. -->
             <Button android:id="@+id/photoButton" style="@style/SmallButton" android:text="@string/photo"
                 android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
             <Button android:id="@+id/uploadButton" style="@style/SmallButton" android:text="@string/upload"

@@ -147,6 +147,28 @@ extension Diagnostics {
                             detail: drawn.isEmpty ? "сторінка нічого не відповіла\(errors.isEmpty ? "" : ": " + errors)"
                                 : "об'єктів на сцені \(boxes), текст «\((parts.count > 1 ? parts[1] : "").prefix(40))»"))
 
+        // MARK: Значок вкладки
+        //
+        // У теці авторських сторінок лежить favicon.ico від VisioBible, і
+        // браузер брав саме його: у вкладці з нашим слайдом світився чужий
+        // знак (власник: «в веб слайдах фавикон от visiobible остался»).
+        var icon = Data()
+        var iconType = ""
+        let gotIcon = DispatchSemaphore(value: 0)
+        let iconURL = URL(string: "http://127.0.0.1:\(httpPort)/favicon.ico")!
+        URLSession.shared.dataTask(with: URLRequest(url: iconURL, timeoutInterval: 10)) { data, response, _ in
+            icon = data ?? Data()
+            iconType = ((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")) ?? ""
+            gotIcon.signal()
+        }.resume()
+        _ = gotIcon.wait(timeout: .now() + 12)
+        // PNG починається з \u{89}PNG; значок VisioBible — .ico (00 00 01 00).
+        let isPNG = icon.count > 8 && icon.prefix(4).elementsEqual([0x89, 0x50, 0x4E, 0x47])
+        checks.append(Check(area: area, name: "Значок вкладки — свій, не від VisioBible",
+                            status: isPNG ? .ok : .failed,
+                            detail: icon.isEmpty ? "значок не віддається"
+                                : "\(icon.count) байт, \(iconType), \(isPNG ? "наш PNG" : "чужий файл із теки")"))
+
         return checks
     }
 }

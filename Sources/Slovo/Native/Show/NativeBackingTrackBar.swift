@@ -34,11 +34,22 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
     /// й кнопки праворуч. На всю ширину вікна стовпчиком вона б розтяглася
     /// пусткою, а списку лишилося б два рядки.
     static let wideWidth: CGFloat = 620
-    /// Нижче цього панель не стискається: картці треку потрібні назва, хвиля
-    /// й рівень, а ряду — кнопки.
+    /// Нижче цього панель не стискається у ПОВНОМУ вигляді: картці треку
+    /// потрібні назва, хвиля й рівень, а ряду — кнопки.
     static let minimumHeight: CGFloat = 170
+    /// Стиснута панель — один ряд: кнопки, назва, час, гучність. Власник:
+    /// «блок с фонограммами невозможно сжать до одной строки». Нижче цього
+    /// вже нічого не видно, тому тут межа.
+    static let collapsedHeight: CGFloat = 34
+    /// З якої висоти панель показує все: список, картку треку, хвилю.
+    static let fullHeight: CGFloat = minimumHeight
     /// Найменша висота вузької (стовпчиком) раскладки.
     static let narrowMinimumHeight: CGFloat = chromeHeight + 50
+
+    /// Межа між списком і карткою треку: за неї тягнуть ширину списку.
+    /// Власник: «изменение ширины воспроизводимого блока невозможно изменить».
+    let widthGrip = NativeWidthGrip()
+    private static let listWidthKey = "backingListWidth"
 
     private let player: BackingTrackPlayer
     private let icon = NSImageView()
@@ -194,8 +205,20 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         for view in [name, time, waveformView, meter] as [NSView] { deck.addSubview(view) }
         for view in [icon, caption, count, addButton, removeButton, clearButton, list, deck,
                      playButton, pauseButton, stopButton, loopButton, nextButton,
-                     toneDown, toneLabel, toneUp, quiet, volume, loud] as [NSView] {
+                     toneDown, toneLabel, toneUp, quiet, volume, loud, widthGrip] as [NSView] {
             addSubview(view)
+        }
+        widthGrip.toolTip = OurWords.t("Потяните влево или вправо — ширина списка фонограмм; двойной щелчок — как было")
+        widthGrip.onDrag = { [weak self] delta in
+            guard let self else { return }
+            NativeWidths.set(Self.listWidthKey, self.list.frame.maxX + delta,
+                             min: 150, max: max(200, self.bounds.width - 320))
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+        widthGrip.onReset = { [weak self] in
+            NativeWidths.reset(Self.listWidthKey)
+            self?.needsLayout = true
         }
         applyCaptions()
     }
@@ -235,7 +258,44 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
 
     override func layout() {
         super.layout()
-        if bounds.width >= Self.wideWidth { layoutWide() } else { layoutNarrow() }
+        // Стиснуту панель показуємо одним рядом: усе зайве ховаємо, щоб
+        // нічого не налазило одне на одне й не лізло за край.
+        // Поріг із запасом: на межу «повної» висоти припадають ще й відступи
+        // та смужка нижньої ручки, і без запасу панель зривалася в смужку.
+        let compact = bounds.height < Self.fullHeight - 16
+        for view in [icon, caption, count, addButton, removeButton, clearButton, list, deck] {
+            view.isHidden = compact
+        }
+        if compact { layoutCompact() } else if bounds.width >= Self.wideWidth { layoutWide() } else { layoutNarrow() }
+    }
+
+    /// Один ряд: грати/стоп, назва, час і гучність — усе, що треба, коли
+    /// панель стиснуто до смужки.
+    private func layoutCompact() {
+        widthGrip.isHidden = true
+        let pad: CGFloat = 6
+        let height = bounds.height
+        let row = max(0, (height - 22) / 2)
+        var x = pad
+        for button in [playButton, pauseButton, stopButton, nextButton] {
+            button.isHidden = false
+            button.frame = NSRect(x: x, y: row, width: 30, height: 22)
+            x += 32
+        }
+        let volumeWidth: CGFloat = 120
+        let timeWidth: CGFloat = 86
+        volume.isHidden = false
+        volume.frame = NSRect(x: max(x, bounds.width - pad - volumeWidth), y: row, width: volumeWidth, height: 22)
+        time.isHidden = false
+        time.frame = NSRect(x: volume.frame.minX - timeWidth - 8, y: row + 3, width: timeWidth, height: 16)
+        name.isHidden = false
+        name.frame = NSRect(x: x + 6, y: row + 3,
+                            width: max(20, time.frame.minX - x - 14), height: 16)
+        // У стиснутому ряді тону й хвилі немає — місця на них нема.
+        for view in [waveformView as NSView, meter as NSView,
+                     toneDown as NSView, toneUp as NSView, toneLabel as NSView, loopButton as NSView] {
+            view.isHidden = true
+        }
     }
 
     /// На всю ширину вікна: ліворуч список із заголовком, праворуч картка
@@ -247,7 +307,9 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         // Список — приблизно чверть ширини, але не вужчий за свої кнопки й
         // не ширший за 460: на широкому екрані далі йде сама порожнеча, а
         // хвилі місце потрібніше.
-        let listWidth = min(max(260, width * 0.26), 460)
+        let automatic = min(max(260, width * 0.26), 460)
+        let listWidth = NativeWidths.value(Self.listWidthKey, auto: automatic,
+                                           min: 150, max: max(200, width - 320))
 
         icon.frame = NSRect(x: pad, y: 6, width: 16, height: 16)
         var right = listWidth
@@ -260,7 +322,9 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         count.frame = NSRect(x: caption.frame.maxX + 4, y: 8, width: max(0, right - caption.frame.maxX - 8), height: 14)
         list.frame = NSRect(x: pad, y: 28, width: max(60, listWidth - pad), height: max(0, height - 28 - pad))
 
-        let deckX = listWidth + pad
+        widthGrip.isHidden = false
+        widthGrip.frame = NSRect(x: listWidth, y: 24, width: 6, height: max(0, height - 24 - pad))
+        let deckX = listWidth + pad + 4
         let deckWidth = max(120, width - deckX - pad)
         let rowHeight: CGFloat = 26
         let deckHeight = max(80, height - pad - rowHeight - 8 - pad)
@@ -302,6 +366,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
 
     /// Вузька (стовпчиком) раскладка — коли панель стоїть у стовпці.
     private func layoutNarrow() {
+        widthGrip.isHidden = true
         let pad: CGFloat = 8
         let width = bounds.width
         let inner = max(20, width - pad * 2)

@@ -661,6 +661,8 @@ final class RemoteControlServer {
         if request.method == "GET", tabletGET(request, state: state, on: connection) { return }
         // Ресурси: каталоги джерел і хід завантаження — з будь-якого пульта.
         if request.method == "GET", resourcesGET(request, state: state, on: connection) { return }
+        // Фонограма: список, відтворення, гучність, тон.
+        if request.method == "GET", backingGET(request, state: state, on: connection) { return }
         // Бібліотека для плану проповіді: переклади й пісенники на планшет.
         if request.method == "GET", libraryGET(request, state: state, on: connection) { return }
         guard request.method == "POST", request.path.hasPrefix("/api/") else {
@@ -683,6 +685,13 @@ final class RemoteControlServer {
         case "blank": state.showBlankSlide()
         case "next-chapter": state.stepChapter(by: 1, live: false)
         case "prev-chapter": state.stepChapter(by: -1, live: false)
+        case let name where name.hasPrefix("backing-"):
+            if let trouble = backingCommand(name, body: body, index: index, text: text,
+                                            state: state, answer: &answer) {
+                if trouble.isEmpty { break }
+                respond(connection, 400, ["error": trouble]); return
+            }
+            respond(connection, 404, ["error": OurWords.t("нет такой команды")]); return
         case "resource-install":
             if let trouble = startResourceInstall(body: body, state: state, answer: &answer) {
                 respond(connection, 400, ["error": trouble]); return

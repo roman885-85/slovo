@@ -16,6 +16,8 @@ extension Diagnostics {
         checks.append(contentsOf: nativeSongRows(state))
         checks.append(contentsOf: nativeSongParts(state))
         checks.append(contentsOf: nativeSongWindow(state))
+        checks.append(contentsOf: songSearchClearing(state))
+        checks.append(contentsOf: songPartHeights(state))
         checks.append(nativeSongsLiveBook(state))
         checks.append(nativeSongsTabPath(state))
         checks.append(nativeSongFormat(state))
@@ -198,21 +200,30 @@ extension Diagnostics {
             ("Śpiewnik", "spiewnik", true),
             ("Хвалите Господа", "мир", false),
             ("Хвала", "хвалам", false),
+            // Власник: «при поиске игнорировать знаки пунктуации, брать в
+            // поиск только слова и искать только по словам».
+            ("Спаси, Боже", "спаси боже", true),
+            ("Спаси Боже", "спаси,", true),
+            ("Спаси, Боже!", "боже спаси", true),
+            ("Слава Богу", "лава", false),
+            ("Страдание", "рад", false),
+            ("Радость моя", "рад", true),
+            ("Хто ж, як не Ти", "хто як ти", true),
         ]
         var wrong: [String] = []
         for (haystack, needle, expected) in cases {
-            let got = NativeSongFold.contains(NativeSongFold.bytes(haystack),
-                                              NativeSongFold.bytes(needle))
+            let got = NativeSongFold.matches(NativeSongFold.bytes(haystack),
+                                             words: NativeSongFold.words(needle))
             if got != expected { wrong.append("«\(haystack)» ⊃ «\(needle)» → \(got)") }
         }
         checks.append(Check(area: songArea, name: "Пошук за згорнутими байтами відповідає як звичайний",
                             status: wrong.isEmpty ? .ok : .failed,
                             detail: wrong.isEmpty
-                                ? "звірено \(cases.count) пар: регістр, ё, діакритика, промахи"
+                                ? "звірено \(cases.count) пар: регістр, ё, діакритика, пунктуація, слова цілком"
                                 : wrong.joined(separator: "; ")))
 
         // Пустая игла — это «показать всё», а не «не найдено ничего».
-        let all = NativeSongFold.contains(NativeSongFold.bytes("будь-що"), [])
+        let all = NativeSongFold.matches(NativeSongFold.bytes("будь-що"), words: [])
         checks.append(Check(area: songArea, name: "Порожній запит показує весь збірник",
                             status: all ? .ok : .failed,
                             detail: all ? "порожній рядок підходить усьому" : "порожній рядок не підійшов"))
@@ -334,6 +345,131 @@ extension Diagnostics {
                                 ? "колір береться з «Колірної легенди частин пісень»"
                                 : "жодна частина не пофарбувалася — легенда не дійшла"))
         return checks
+    }
+
+    /// Власник: «якщо слова не знайдені, список порожній — це логічно, але
+    /// якщо я видаляю слова в пошуку, список не з'являється».
+    ///
+    /// Перевірка веде себе як людина: набирає слово, якого немає, дивиться на
+    /// порожній список, стирає набране — і список має повернутися.
+    private static func songSearchClearing(_ state: AppState) -> [Check] {
+        let songs = NativeSongsWorkspace.shared
+        songs.attach(state: state)
+        guard let view = songs.workspaceView, let entry = biggestSongBook(state) else {
+            return [Check(area: songArea, name: "Пошук: стерли слово — список повернувся",
+                          status: .skipped, detail: "робоча зона або пісенник недоступні")]
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1600, height: 900),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1600, height: 900))
+        window.contentView = host
+        view.frame = host.bounds
+        host.addSubview(view)
+        host.layoutSubtreeIfNeeded()
+        defer { view.removeFromSuperview() }
+
+        songs.selectBook(id: entry.id)
+        for _ in 0..<40 where !songs.songIndexIsReady {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        host.layoutSubtreeIfNeeded()
+        let all = songs.songRows.rowCount
+
+        func type(_ text: String) -> Int {
+            songs.songQuickField?.text = text
+            songs.songQuickField?.onChange?(text)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            host.layoutSubtreeIfNeeded()
+            return songs.songRows.rowCount
+        }
+
+        let nonsense = type("щцщцщ")
+        let cleared = type("")
+        // І другий шлях, яким стирають: не все одразу, а по літері.
+        _ = type("щцщцщ")
+        var byLetter = 0
+        for step in stride(from: 4, through: 0, by: -1) {
+            byLetter = type(String("щцщцщ".prefix(step)))
+        }
+
+        return [Check(area: songArea, name: "Пошук: стерли слово — список повернувся",
+                      status: all > 0 && nonsense == 0 && cleared == all && byLetter == all ? .ok : .failed,
+                      detail: "у збірнику \(all); на «щцщцщ» — \(nonsense); після стирання — \(cleared); "
+                          + "по літері — \(byLetter)")]
+    }
+
+    /// Власник: «некоторые песни отображаются не в одну строку, а очень
+    /// широко, занимая полезное место» — рядок куплета виходив утричі вищим
+    /// за свій текст, а сам текст обрізало по правому краю.
+    ///
+    /// Міряємо просто: у кожного видимого рядка питаємо, скільки йому треба
+    /// (`drawn`) і скільки дали (`given`). Зайве місце — це порожнеча в
+    /// списку; `cut` — обрізаний текст.
+    private static func songPartHeights(_ state: AppState) -> [Check] {
+        let songs = NativeSongsWorkspace.shared
+        songs.attach(state: state)
+        guard let view = songs.workspaceView, let entry = biggestSongBook(state),
+              let library = state.songLibrary, let book = library.book(entry.id) else {
+            return [Check(area: songArea, name: "Куплети: рядок за текстом, без порожнечі",
+                          status: .skipped, detail: "робоча зона або пісенник недоступні")]
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1600, height: 900),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1600, height: 900))
+        window.contentView = host
+        view.frame = host.bounds
+        host.addSubview(view)
+        host.layoutSubtreeIfNeeded()
+        defer { view.removeFromSuperview() }
+
+        songs.selectBook(id: entry.id)
+        for _ in 0..<40 where !songs.songIndexIsReady {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        // Пісня з довгими куплетами: саме на таких видно порожнечу.
+        // Пісня з кількома довгими куплетами: саме на таких видно порожнечу.
+        func weight(_ song: Song) -> Int {
+            guard song.parts.count >= 3 else { return 0 }
+            return song.parts.reduce(0) { $0 + $1.text.count }
+        }
+        let pick = book.songs.max { weight($0) < weight($1) }
+        guard let pick else {
+            return [Check(area: songArea, name: "Куплети: рядок за текстом, без порожнечі",
+                          status: .skipped, detail: "у збірнику немає пісень")]
+        }
+        songs.reveal(song: pick.index, part: nil, live: false)
+        host.layoutSubtreeIfNeeded()
+
+        func survey(_ label: String) -> (waste: CGFloat, cut: Int, rows: Int) {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+            var waste: CGFloat = 0
+            var cut = 0
+            var rows = 0
+            for index in 0..<songs.partRows.rowCount {
+                guard let fit = songs.partList.fit(ofRow: index) else { continue }
+                rows += 1
+                waste = max(waste, fit.given - fit.drawn)
+                if fit.cut || fit.drawn > fit.given + 0.5 { cut += 1 }
+            }
+            return (waste, cut, rows)
+        }
+
+        let before = survey("як є")
+        // І в «одну лінію», і в звичайному вигляді — порожнечі бути не має.
+        InterfaceSettings.shared.setVerseView(.singleLine, in: .songs)
+        songs.applyInterfaceNow()
+        let single = survey("одна лінія")
+        InterfaceSettings.shared.setVerseView(.multiline, in: .songs)
+        songs.applyInterfaceNow()
+        let multi = survey("багато рядків")
+
+        let worst = max(before.waste, max(single.waste, multi.waste))
+        let cut = before.cut + single.cut + multi.cut
+        return [Check(area: songArea, name: "Куплети: рядок за текстом, без порожнечі",
+                      status: worst <= 24 && cut == 0 ? .ok : .failed,
+                      detail: "пісня «\(pick.title)», частин \(single.rows); "
+                          + "зайвої висоти найбільше \(Int(worst)) тчк; обрізаних рядків \(cut)")]
     }
 
     // MARK: - Собранное окно

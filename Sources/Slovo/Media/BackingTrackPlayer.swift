@@ -1,4 +1,5 @@
 import AVFoundation
+import SlovoCore
 import Foundation
 import UniformTypeIdentifiers
 
@@ -214,14 +215,82 @@ final class BackingTrackPlayer: ObservableObject {
                 playlistIndex = playlist.count - 1
             }
         } catch {
+            // macOS не всі формати читає сама: .ogg, .opus, .wma й подібні їй
+            // чужі. Пробуємо перетворити файл у .m4a поруч, у своєму кеші, —
+            // так минусовка грає, а вихідний файл лишається недоторканим.
+            if let ready = Self.converted(target), ready != target {
+                open(ready)
+                // Назву лишаємо від вихідного файла: у кеші вона службова.
+                title = target.deletingPathExtension().lastPathComponent
+                notify()
+                return
+            }
             file = nil
             url = nil
             title = ""
             duration = 0
-            self.error = error.localizedDescription
+            self.error = Self.explain(error, for: target)
         }
         remember()
         notify()
+    }
+
+
+    // MARK: - Чужі формати
+
+    /// Тека, куди кладемо перетворені фонограми.
+    private static var conversionFolder: URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("slovo-фонограми")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    /// Перетворити файл у .m4a, якщо є чим. `nil` — не вийшло.
+    ///
+    /// Перетворення робить ffmpeg: він читає і .ogg, і .opus, і .wma, і .ape.
+    /// Готове лежить у тимчасовій теці й береться повторно, поки воно свіже —
+    /// на служінні ту саму минусовку відкривають не раз.
+    static func converted(_ source: URL) -> URL? {
+        guard let ffmpeg = YouTubeResolver.ffmpeg else { return nil }
+        let stamp = (try? source.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? 0
+        let name = source.deletingPathExtension().lastPathComponent
+            + "-" + String(format: "%08x", abs(source.path.hashValue &+ Int(stamp)))
+            + ".m4a"
+        let ready = conversionFolder.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: ready.path) { return ready }
+
+        let task = Process()
+        task.executableURL = ffmpeg
+        task.arguments = ["-nostdin", "-y", "-i", source.path,
+                          "-vn", "-c:a", "aac", "-b:a", "256k", ready.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            NativeTrace.say("фонограма: ffmpeg не запустився — \(error.localizedDescription)")
+            return nil
+        }
+        guard task.terminationStatus == 0,
+              let size = (try? ready.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > 1024 else {
+            try? FileManager.default.removeItem(at: ready)
+            NativeTrace.say("фонограма: ffmpeg не перетворив «\(source.lastPathComponent)»")
+            return nil
+        }
+        NativeTrace.say("фонограма: «\(source.lastPathComponent)» перетворено в \(ready.lastPathComponent)")
+        return ready
+    }
+
+    /// Чому не відкрилося — словами, з якими можна щось зробити.
+    static func explain(_ error: Error, for source: URL) -> String {
+        let kind = source.pathExtension.uppercased()
+        if YouTubeResolver.ffmpeg == nil {
+            return OurWords.t("Формат %s macOS сама не грає, а ffmpeg не знайдено — покладіть ffmpeg поруч із програмою або збережіть фонограму в MP3",
+                              kind.isEmpty ? "?" : kind)
+        }
+        return OurWords.t("Не вдалося відкрити %s: %s", "\(kind.isEmpty ? "?" : kind)", error.localizedDescription)
     }
 
     // MARK: - Свій список
@@ -239,7 +308,12 @@ final class BackingTrackPlayer: ObservableObject {
 
     /// Розширення звукових файлів, які бере фонограма. Відео сюди не йде,
     /// навіть якщо в ньому є звук: ролик — справа плеєра.
-    static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "caf", "flac", "m4b"]
+    static let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "wave", "aif", "aiff", "aifc", "caf", "flac", "m4b",
+                                               // Власник: «некоторые минусовки не воспроизводятся, возможно есть
+                                               // неподдерживаемые форматы, добавить». Ці macOS сама не грає —
+                                               // їх перетворює ffmpeg (див. `converted`), а без ffmpeg програма
+                                               // каже про це словами, а не мовчить.
+                                               "ogg", "oga", "opus", "wma", "ape", "wv", "mpc", "amr", "ra", "tta", "dsf", "m4r"]
 
     /// Чи звуковий це файл для фонограми.
     static func isAudio(_ url: URL) -> Bool {

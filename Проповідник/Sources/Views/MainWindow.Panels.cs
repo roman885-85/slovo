@@ -339,9 +339,102 @@ public sealed partial class MainWindow
         parts.Margin = new Thickness(0, 8, 0, 0);
         panel.Children.Add(head);
         panel.Children.Add(parts);
+        // Фонограма під списком пісень — там, де вона й потрібна (власник:
+        // «в песнях нет функции минусовок»). Керує тим самим програвачем
+        // «Слова», що й панель у його вікні.
+        var backing = BackingPanel();
+        DockPanel.SetDock(backing, Dock.Bottom);
+        panel.Children.Add(backing);
         panel.Children.Add(new Border { Child = _songList, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6) });
         _ = LoadSongs();
+        _ = LoadBacking();
         return panel;
+    }
+
+    // MARK: Фонограма
+
+    ComboBox _backingList = null!;
+    TextBlock _backingTime = null!;
+    Slider _backingVolume = null!;
+    Button _backingPlay = null!;
+    TextBlock _backingNote = null!;
+    bool _fillingBacking;
+
+    Control BackingPanel()
+    {
+        _backingList = new ComboBox { MinWidth = 220, PlaceholderText = Lang.T("Фонограма", "Backing track") };
+        _backingList.SelectionChanged += (_, _) =>
+        {
+            if (_fillingBacking || _backingList.SelectedItem is not Choice choice) return;
+            Send("backing-open", new JsonObject { ["index"] = int.Parse(choice.Id) });
+            _ = LoadBacking();
+        };
+        _backingPlay = Ui.Button("▶", () => { Send("backing-toggle"); _ = LoadBacking(); },
+                                 Lang.T("Грати або зупинити фонограму", "Play or pause the backing track"));
+        var stop = Ui.Button("■", () => { Send("backing-stop"); _ = LoadBacking(); },
+                             Lang.T("Зупинити й перемотати на початок", "Stop and rewind"));
+        var down = Ui.Button("♭ −0,5", () => { Send("backing-tone", new JsonObject { ["tone"] = _backingTone - 0.5 }); _ = LoadBacking(); },
+                             Lang.T("Нижчий тон", "Lower the key"));
+        var up = Ui.Button("♯ +0,5", () => { Send("backing-tone", new JsonObject { ["tone"] = _backingTone + 0.5 }); _ = LoadBacking(); },
+                           Lang.T("Вищий тон", "Raise the key"));
+        _backingTime = Ui.Label("0:00 / 0:00");
+        _backingVolume = new Slider { Minimum = 0, Maximum = 1, Value = 0.8, Width = 120 };
+        _backingVolume.PointerReleased += (_, _) => Send("backing-volume", new JsonObject { ["volume"] = _backingVolume.Value });
+        _backingNote = Ui.Hint("");
+
+        var row = Wrap(Ui.Label(Lang.T("Фонограма:", "Backing:")), _backingList, _backingPlay, stop,
+                       down, up, _backingTime, Ui.Label(Lang.T("Гучність:", "Volume:")), _backingVolume);
+        var box = new StackPanel { Spacing = 4, Margin = new Thickness(0, 8, 0, 0) };
+        box.Children.Add(row);
+        box.Children.Add(_backingNote);
+        return box;
+    }
+
+    double _backingTone;
+
+    async Task LoadBacking()
+    {
+        if (!_online) return;
+        try
+        {
+            var state = await _api.Get("/api/backing");
+            var items = (state["playlist"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+                .Select(one => new Choice(((int?)one["index"] ?? 0).ToString(), (string?)one["name"] ?? "")).ToList();
+            var index = (int?)state["index"] ?? -1;
+            var playing = (bool?)state["playing"] ?? false;
+            var position = (double?)state["position"] ?? 0;
+            var duration = (double?)state["duration"] ?? 0;
+            var volume = (double?)state["volume"] ?? 0.8;
+            _backingTone = (double?)state["tone"] ?? 0;
+            var trouble = (string?)state["error"] ?? "";
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _fillingBacking = true;
+                _backingList.ItemsSource = items;
+                _backingList.SelectedItem = items.FirstOrDefault(c => c.Id == index.ToString());
+                _backingPlay.Content = playing ? "❚❚" : "▶";
+                _backingTime.Text = Clock(position) + " / " + Clock(duration);
+                _backingVolume.Value = volume;
+                _backingNote.Text = trouble.Length > 0
+                    ? trouble
+                    : (items.Count == 0
+                       ? Lang.T("Список фонограм порожній — додайте їх у «Слові», на панелі «Фонограми».",
+                                "The backing list is empty — add tracks in Slovo, in the “Backing tracks” panel.")
+                       : Lang.F("Тон: {0:+0.0;−0.0;0}", "Key: {0:+0.0;−0.0;0}", _backingTone));
+                _fillingBacking = false;
+            });
+        }
+        catch (Exception error)
+        {
+            Paths.Say("фонограма: " + error.Message);
+        }
+    }
+
+    static string Clock(double seconds)
+    {
+        if (double.IsNaN(seconds) || seconds < 0) seconds = 0;
+        var whole = (int)Math.Round(seconds);
+        return (whole / 60) + ":" + (whole % 60).ToString("00");
     }
 
     async Task LoadSongs()

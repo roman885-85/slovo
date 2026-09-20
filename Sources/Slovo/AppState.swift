@@ -204,10 +204,17 @@ final class AppState: ObservableObject {
     /// `LinkPreviewAndSlide` оригинала: какая пара стрелок листает только
     /// предпросмотр, а какая — и предпросмотр, и слайд в зале.
     @Published var arrowsLinked = true
-    /// Галочка «Активна» панелі «Керування» (за умовчанням увімкнена).
-    /// Увімкнено — стрілки гортають і слайд у залі, як досі. Знято — лише
-    /// передпоказ, а в зал слайд виводять «Показати» або Enter.
-    @Published var arrowsShowLive = true {
+    /// Галочка «Активна» панелі «Керування» (за умовчанням увімкнена):
+    /// чи гортають стрілки разом із залом.
+    ///
+    /// Власник: «вывод не должен происходить, пока не будет нажата кнопка
+    /// показать или двойной щелчок мыши по пункту или клавиша enter»,
+    /// а далі — «дальнейшее переключение и вывод на экран штатно по нажатиям
+    /// кнопок стрелок, до момента, когда вывод экрана будет отключен».
+    /// Тому саме увімкнення тут нічого не виводить: поки в залі нічого не
+    /// показано, стрілки міняють лише передпоказ (див. `arrowsReachHall`).
+    static let arrowsShowLiveDefault = true
+    @Published var arrowsShowLive = AppState.arrowsShowLiveDefault {
         didSet { Defaults.arrowsShowLive = arrowsShowLive }
     }
     /// Пока true, смена стиха уходит и в зал. Ставится на время двойного
@@ -388,6 +395,13 @@ final class AppState: ObservableObject {
     /// Установлены ли перехватчики — видно в диагностике.
     var keyHandlersInstalled: Bool { arrows.isInstalled }
 
+    /// Чи доходить гортання стрілками до залу.
+    ///
+    /// Перший вивід робить людина — «Показати», Enter або подвійне клацання;
+    /// доти стрілки міняють лише передпоказ. Щойно показ увімкнено, стрілки
+    /// гортають і зал, як завжди, — і так до «Сховати», «Чорний» чи Esc.
+    var arrowsReachHall: Bool { arrowsShowLive && isLive }
+
     /// Ставит перехватчики один раз за запуск.
     func installKeyHandlers() {
         arrows.install(.init(stepVerse: { [weak self] delta, live in
@@ -397,11 +411,12 @@ final class AppState: ObservableObject {
                                  // Там обидві пари гортають і зал, поки «Активна»
                                  // увімкнена; пульт доповідача (`live`) — завжди.
                                  guard !NativeShowWorkspace.handleStep(mode: self.mode, delta: delta,
-                                                                       live: live || self.arrowsShowLive) else { return }
-                                 self.stepVerse(by: delta, live: live)
+                                                                       live: (live || self.arrowsShowLive) && self.isLive) else { return }
+                                 self.stepVerse(by: delta, live: live && self.isLive)
                              },
                              extendSelection: { [weak self] delta, live in
-                                 self?.extendSelection(by: delta, live: live)
+                                 guard let self else { return }
+                                 self.extendSelection(by: delta, live: live && self.isLive)
                              },
                              selectAll: { [weak self] in self?.selectAllVerses() },
                              isLinked: { [weak self] in self?.arrowsLinked ?? true },
@@ -1855,6 +1870,35 @@ final class AppState: ObservableObject {
         return true
     }
 
+
+    /// Значок програми в PNG — для вкладки браузера. Малюємо раз: значок не
+    /// міняється, а сторінок за служіння відкривають багато.
+    static let webFavicon: Data? = {
+        // Беремо саме файл значка з пакета: `NSApp.applicationIconImage` у
+        // програми, запущеної не через Finder, віддає значок того, хто її
+        // запустив, — у вкладці з'являвся чужий знак замість нашого.
+        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String) ?? "Slovo"
+        let file = Bundle.main.url(forResource: name, withExtension: name.hasSuffix(".icns") ? nil : "icns")
+        let icon = file.flatMap { NSImage(contentsOf: $0) }
+            ?? NSApp?.applicationIconImage
+            ?? NSImage(named: NSImage.applicationIconName)
+        guard let icon else { return nil }
+        // Рівно 64×64 пікселі: без явного полотна малюнок виходить у
+        // масштабі екрана, і «значок» важив 70 КБ замість трьох.
+        let side = 64
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                            isPlanar: false, colorSpaceName: .deviceRGB,
+                                            bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        bitmap.size = NSSize(width: side, height: side)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        icon.draw(in: NSRect(x: 0, y: 0, width: side, height: side),
+                  from: .zero, operation: .copy, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])
+    }()
+
     /// Включение и выключение веб-слайдов.
     func setWebEnabled(_ enabled: Bool) {
         outputs[.web].isEnabled = enabled
@@ -1873,7 +1917,12 @@ final class AppState: ObservableObject {
                                                title: $0.details.isEmpty ? $0.name : $0.details)
             }
         }
-        web.start(settings: outputs.web, dataRoot: modulesFolder.deletingLastPathComponent())
+        // Значок вкладки — наш: у теці авторських сторінок лежить favicon.ico
+        // від VisioBible, і браузер показував у вкладці зі слайдом чужий знак.
+        var webOptions = WebOutputServer.Options()
+        webOptions.favicon = Self.webFavicon
+        web.start(settings: outputs.web, dataRoot: modulesFolder.deletingLastPathComponent(),
+                  options: webOptions)
         web.publish(slide: outputs[.web].compose(slide), kind: .web)
     }
 

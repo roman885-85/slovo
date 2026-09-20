@@ -228,10 +228,15 @@ final class NativeRowCell: NSView, NSViewToolTipOwner {
 
         let textColor = selected ? m.selectedTextColor : (row.textColor ?? m.textColor)
         let textFont = row.bold ? style.boldTextFont : style.textFont
+        // Коли місця бракує, текст усе одно переносимо: у високому рядку так
+        // видно кілька рядків замість одного обрізаного (власник: куплет
+        // «отображается очень широко» — один рядок, а під ним порожньо).
+        // Один рядок лишається тільки там, де рядок списку і є одним рядком.
+        let fitsOneLine = textRect.height < style.textLineHeight * 1.8
         draw(row.text, in: textRect.offsetBy(dx: rect.minX, dy: rect.minY),
              font: textFont,
              color: textColor,
-             paragraph: singleLine ? style.clipping : style.wrapping)
+             paragraph: singleLine && fitsOneLine ? style.clipping : style.wrapping)
 
         if !row.detail.isEmpty, detailRect.height > 0 {
             let color = selected ? m.selectedTextColor.withAlphaComponent(0.8) : m.detailColor

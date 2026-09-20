@@ -61,13 +61,17 @@ public final class WebOutputServer: ObservableObject {
         public var loopbackOnly: Bool
         /// Чи підміняти у сторінках, що віддаються, вшиту адресу WebSocket.
         public var retargetsWebSocket: Bool
+        /// Значок вкладки (PNG) — свій, програмний.
+        public var favicon: Data?
 
         public init(index: WebIndexModel = WebIndexModel(),
                     httpFallbackPort: Int = 8082,
                     webSocketFallbackPort: Int = 18100,
                     allowsPortFallback: Bool = true,
                     loopbackOnly: Bool = false,
-                    retargetsWebSocket: Bool = true) {
+                    retargetsWebSocket: Bool = true,
+                    favicon: Data? = nil) {
+            self.favicon = favicon
             self.index = index
             self.httpFallbackPort = httpFallbackPort
             self.webSocketFallbackPort = webSocketFallbackPort
@@ -450,7 +454,8 @@ public final class WebOutputServer: ObservableObject {
                                                            webSocketPort: webSocketPort,
                                                            retargetsWebSocket: options.retargetsWebSocket,
                                                            images: images,
-                                                           fonts: fonts)
+                                                           fonts: fonts,
+                                                           favicon: options.favicon)
         let server = HTTPStaticServer(configuration: configuration)
         http = server
         server.start { [weak self] result in

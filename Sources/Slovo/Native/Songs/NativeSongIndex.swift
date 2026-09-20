@@ -24,7 +24,61 @@ enum NativeSongFold {
                      locale: nil)
             .replacingOccurrences(of: "ё", with: "е")
             .replacingOccurrences(of: "Ё", with: "е")
-        return Array(folded.utf8)
+        // Розділові знаки стають пробілами: власник — «при поиске игнорировать
+        // знаки пунктуации, брать в поиск только слова». Доти кома в назві
+        // («Спаси, Боже») ламала пошук за «спаси боже», а кома в запиті — пошук
+        // узагалі. Пробіли поспіль зводяться в один, щоб слова стояли рівно.
+        var out: [UInt8] = []
+        out.reserveCapacity(folded.utf8.count)
+        var space = true
+        for character in folded {
+            if character.isLetter || character.isNumber {
+                out.append(contentsOf: Array(String(character).utf8))
+                space = false
+            } else if !space {
+                out.append(32)
+                space = true
+            }
+        }
+        if out.last == 32 { out.removeLast() }
+        return out
+    }
+
+    /// Слова запиту — згорнуті й без розділових знаків.
+    static func words(_ text: String) -> [[UInt8]] {
+        bytes(text).split(separator: 32).map(Array.init)
+    }
+
+    /// Чи знайшлося кожне слово запиту в рядку — з початку якогось слова.
+    ///
+    /// Шукаємо за початком слова, а не будь-де: так «рад» знаходить «радість»
+    /// і не чіпає «страждання». Порядок слів не важливий — як у пошуку за
+    /// віршами: всі слова мають бути, а стояти можуть як завгодно.
+    static func matches(_ haystack: [UInt8], words needles: [[UInt8]]) -> Bool {
+        for needle in needles where !startsWord(haystack, needle) { return false }
+        return true
+    }
+
+    /// Чи починається якесь слово рядка з цих байтів.
+    static func startsWord(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
+        let need = needle.count
+        guard need > 0 else { return true }
+        guard haystack.count >= need else { return false }
+        return haystack.withUnsafeBufferPointer { hay in
+            needle.withUnsafeBufferPointer { want in
+                var start = 0
+                let last = hay.count - need
+                while start <= last {
+                    if start == 0 || hay[start - 1] == 32 {
+                        var step = 0
+                        while step < need, hay[start + step] == want[step] { step += 1 }
+                        if step == need { return true }
+                    }
+                    start += 1
+                }
+                return false
+            }
+        }
     }
 
     /// Чи є `needle` усередині `haystack`. Простий перебір з перевіркою першого
@@ -233,8 +287,8 @@ final class NativeSongIndex {
             if !byNumber.isEmpty { return byNumber }
         }
 
-        let needle = NativeSongFold.bytes(trimmed)
-        guard !needle.isEmpty else { return group }
+        let needles = NativeSongFold.words(trimmed)
+        guard !needles.isEmpty else { return group }
         guard bundle.isReady else { return hurriedFilter(needle: trimmed, each: each) }
 
         let folded = bundle.folded
@@ -243,8 +297,8 @@ final class NativeSongIndex {
         kept.reserveCapacity(64)
         each { index in
             guard index < folded.count else { return }
-            if NativeSongFold.contains(folded[index], needle)
-                || NativeSongFold.contains(alternates[index], needle) {
+            if NativeSongFold.matches(folded[index], words: needles)
+                || NativeSongFold.matches(alternates[index], words: needles) {
                 kept.append(index)
             }
         }

@@ -118,6 +118,12 @@ enum SlovoMenu {
                 // ресурсы (с выбором)… обновления с программы».
                 NativeMenuEntry(title: OurWords.t("Ресурсы с GitHub…"),
                                 action: { NativeResourcesWindow.show(state: state) }),
+                // Власник: «добавить в программу кнопку открытия папки с
+                // настройками и всеми скачанными модулями». Кнопка була лише
+                // в «Параметри → Шляхи» — там її ніхто не шукає; тепер вона
+                // стоїть у меню поруч із ресурсами.
+                NativeMenuEntry(title: OurWords.t("Папка данных в Finder…"),
+                                action: { NSWorkspace.shared.activateFileViewerSelecting([DataHome.folder]) }),
                 NativeMenuEntry(title: OurWords.t("Проверить обновление программы…"),
                                 action: { AppUpdater.checkNow(state: state) }),
                 NativeMenuEntry(title: caption("N42", "Конструктор слайда"),

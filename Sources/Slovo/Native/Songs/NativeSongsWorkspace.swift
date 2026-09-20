@@ -153,6 +153,9 @@ final class NativeSongsWorkspace {
     /// `BooksStyle` («Значки» / «Мал. значки» / «Список» / «Таблиця») лягає
     /// на список пісень, `LinesStyle` («одна лінія» / «багато рядків») — на
     /// список частин: це ті самі два списки, що в Біблії.
+    /// Перезастосувати вигляд списків — самоперевірці, яка міняє його на ходу.
+    func applyInterfaceNow() { applyInterface(force: true) }
+
     private func applyInterface(force: Bool = false) {
         let interface = InterfaceSettings.shared
         let font = CGFloat(state?.listFontSize ?? 13)
@@ -957,6 +960,8 @@ final class NativeSongsRootView: NSView {
     private let backing: NativeBackingTrackBar
     /// Межа над панеллю: за неї тягнуть висоту (і самоперевірка теж).
     let heightGrip = NativeBottomHeightGrip()
+    /// Та сама межа знизу — щоб висоту можна було міняти з обох країв.
+    let bottomGrip = NativeBottomHeightGrip()
     private static let heightKey = "backingPanelHeight"
 
     init(header: NativeSongHeader, columns: NativeColumnsView, backing: NativeBackingTrackBar) {
@@ -968,35 +973,54 @@ final class NativeSongsRootView: NSView {
         addSubview(columns)
         addSubview(heightGrip)
         addSubview(backing)
+        addSubview(bottomGrip)
         heightGrip.toolTip = OurWords.t("Потяните вверх или вниз — высота панели фонограмм; двойной щелчок — как было")
-        heightGrip.onDrag = { [weak self] delta in
-            guard let self else { return }
-            NativeWidths.set(Self.heightKey, self.backing.frame.height - delta,
-                             min: NativeBackingTrackBar.minimumHeight, max: self.maximumBackingHeight)
-            self.needsLayout = true
-            self.layoutSubtreeIfNeeded()
-        }
+        // Власник: «изменение размера с нижнего края отсутствует». Нижня межа
+        // тягне так само, тільки навпаки: вниз — вище панель.
+        bottomGrip.toolTip = heightGrip.toolTip
+        heightGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: -delta) }
+        bottomGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: delta) }
         heightGrip.onReset = { [weak self] in
             NativeWidths.reset(Self.heightKey)
             self?.needsLayout = true
         }
+        bottomGrip.onReset = heightGrip.onReset
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) не використовується") }
 
     override var isFlipped: Bool { true }
 
+    /// Посунути межу: додатне — панель вища.
+    ///
+    /// Панель має два робочі стани: повний (список, картка треку, хвиля) і
+    /// смужка в один ряд. Проміжні висоти лишали б половину панелі порожньою,
+    /// тому висота прилипає: нижче за повну — стає смужкою, вище — повною.
+    private func resizeBacking(by delta: CGFloat) {
+        let wanted = backing.frame.height + delta
+        let snapped = wanted < NativeBackingTrackBar.minimumHeight - 24
+            ? NativeBackingTrackBar.collapsedHeight
+            : max(NativeBackingTrackBar.minimumHeight, wanted)
+        NativeWidths.set(Self.heightKey, snapped,
+                         min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
     /// Вище панель не піднімається: спискам пісень лишається хоч кілька рядків.
     private var maximumBackingHeight: CGFloat {
         let free = max(0, bounds.height - NativeSongHeader.height - 1 - 8)
-        return max(NativeBackingTrackBar.minimumHeight, free - 180)
+        return max(NativeBackingTrackBar.collapsedHeight, free - 180)
     }
 
     /// Висота панелі зараз — самоперевірці й раскладці.
     var backingHeight: CGFloat {
-        min(maximumBackingHeight,
-            NativeWidths.value(Self.heightKey, auto: NativeBackingTrackBar.minimumHeight + 40,
-                               min: NativeBackingTrackBar.minimumHeight, max: maximumBackingHeight))
+        let saved = min(maximumBackingHeight,
+                        NativeWidths.value(Self.heightKey, auto: NativeBackingTrackBar.minimumHeight + 40,
+                                           min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight))
+        // Той самий поділ, що й при перетягуванні: або смужка, або повна панель.
+        if saved < NativeBackingTrackBar.minimumHeight - 24 { return NativeBackingTrackBar.collapsedHeight }
+        return max(NativeBackingTrackBar.minimumHeight, saved)
     }
 
     override func layout() {
@@ -1008,7 +1032,10 @@ final class NativeSongsRootView: NSView {
         let columnsHeight = max(0, bounds.height - top - panel - gap)
         columns.frame = NSRect(x: 0, y: top, width: bounds.width, height: columnsHeight)
         heightGrip.frame = NSRect(x: 0, y: columns.frame.maxY, width: bounds.width, height: gap)
-        backing.frame = NSRect(x: 0, y: heightGrip.frame.maxY, width: bounds.width, height: panel)
+        // Нижню межу лишаємо в межах панелі: нижче неї у вікні вже нічого нема.
+        let bottom: CGFloat = 5
+        backing.frame = NSRect(x: 0, y: heightGrip.frame.maxY, width: bounds.width, height: max(0, panel - bottom))
+        bottomGrip.frame = NSRect(x: 0, y: backing.frame.maxY, width: bounds.width, height: bottom)
     }
 
     override func draw(_ dirtyRect: NSRect) {

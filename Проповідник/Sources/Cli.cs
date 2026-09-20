@@ -176,6 +176,27 @@ public static class Cli
         }
         catch (Exception error) { Report(false, "Медіа: список і гучність", Api.Describe(error)); }
 
+        // Фонограма: список, гучність і тон — те саме, чим керує вкладка «Пісні».
+        try
+        {
+            var backing = await api.Get("/api/backing");
+            var tracks = (backing["playlist"] as JsonArray ?? new JsonArray()).Count;
+            var wasVolume = (double?)backing["volume"] ?? 0.8;
+            var wasTone = (double?)backing["tone"] ?? 0;
+            await api.Command("backing-volume", new JsonObject { ["volume"] = 0.42 }, 15);
+            await api.Command("backing-tone", new JsonObject { ["tone"] = wasTone + 0.5 }, 15);
+            await Task.Delay(300);
+            var after = await api.Get("/api/backing");
+            var volume = (double?)after["volume"] ?? 0;
+            var tone = (double?)after["tone"] ?? 0;
+            await api.Command("backing-volume", new JsonObject { ["volume"] = wasVolume }, 15);
+            await api.Command("backing-tone", new JsonObject { ["tone"] = wasTone }, 15);
+            Report(Math.Abs(volume - 0.42) < 0.02 && Math.Abs(tone - (wasTone + 0.5)) < 0.01,
+                   "Фонограма: список, гучність і тон",
+                   $"фонограм {tracks}; гучність {wasVolume:0.00} → {volume:0.00} → назад; тон {wasTone:+0.0;-0.0;0} → {tone:+0.0;-0.0;0} → назад");
+        }
+        catch (Exception error) { Report(false, "Фонограма: список, гучність і тон", Api.Describe(error)); }
+
         // Екран: список джерел.
         try
         {

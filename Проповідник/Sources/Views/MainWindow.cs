@@ -48,6 +48,13 @@ public sealed partial class MainWindow : Window
     /// Мишу тримають на залі — веде указку.
     bool _pointing;
     DateTime _pointerSent = DateTime.MinValue;
+    /// Указка: власник — «в windows приложении нет функции указки». Вона була,
+    /// але лише як перетягування по залу, без жодної кнопки й налаштувань —
+    /// про неї нізвідки було дізнатися. Тепер є і кнопка, і колір, і розмір.
+    string _pointerColour = "#FFD400";
+    double _pointerSize = 0.05;
+    double _pointerBright = 0.85;
+    bool _pointerArmed = true;
 
     // Вкладки
     readonly Dictionary<string, Button> _tabButtons = new();
@@ -185,14 +192,17 @@ public sealed partial class MainWindow : Window
         };
         // Указка й наближення — як на планшеті: ведіть пальцем по залу, і на
         // стіні йде пляма; подвійне клацання знімає наближення.
-        hall.PointerPressed += (_, e) => { _pointing = true; Pointer(hall, e.GetPosition(hall)); };
+        hall.PointerPressed += (_, e) => { if (!_pointerArmed) return; _pointing = true; Pointer(hall, e.GetPosition(hall)); };
         hall.PointerMoved += (_, e) => { if (_pointing) Pointer(hall, e.GetPosition(hall)); };
         hall.PointerReleased += (_, _) => { _pointing = false; Send("pointer-off"); };
         hall.PointerExited += (_, _) => { if (_pointing) { _pointing = false; Send("pointer-off"); } };
         hall.DoubleTapped += (_, _) => Send("zoom", new JsonObject { ["zoom"] = 1, ["x"] = 0.5, ["y"] = 0.5 });
         ToolTip.SetTip(hall, Lang.T("Ведіть мишею — указка на стіні; подвійне клацання знімає наближення",
                                     "Drag with the mouse — a pointer on the wall; a double click removes the zoom"));
+        // Ряд указки: вимикач, колір, розмір, яскравість і «зняти наближення».
+        var pointerRow = PointerRow();
         var texts = new StackPanel { Spacing = 3, Margin = new Thickness(2, 8, 2, 0) };
+        texts.Children.Add(pointerRow);
         texts.Children.Add(Ui.Label(Lang.T("У залі:", "In the hall:"), 12, true));
         texts.Children.Add(_liveReference);
         texts.Children.Add(_liveText);
@@ -322,6 +332,54 @@ public sealed partial class MainWindow : Window
     }
 
     /// Указка: частки ширини й висоти картинки залу, вісь Y униз.
+
+    /// Ряд указки під залом: щоб її було видно, а не тільки вгадати.
+    Control PointerRow()
+    {
+        var toggle = new CheckBox
+        {
+            Content = Lang.T("Указка", "Pointer"),
+            IsChecked = _pointerArmed,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        toggle.IsCheckedChanged += (_, _) =>
+        {
+            _pointerArmed = toggle.IsChecked == true;
+            if (!_pointerArmed) { _pointing = false; Send("pointer-off"); }
+        };
+        ToolTip.SetTip(toggle, Lang.T("Ведіть мишею по залу — на стіні йде пляма указки",
+                                      "Drag over the hall — a pointer spot appears on the wall"));
+
+        var colours = new ComboBox { MinWidth = 120, VerticalAlignment = VerticalAlignment.Center };
+        var palette = new[]
+        {
+            ("#FFD400", Lang.T("Жовта", "Yellow")),
+            ("#FF3B30", Lang.T("Червона", "Red")),
+            ("#00FF40", Lang.T("Зелена", "Green")),
+            ("#3B82F6", Lang.T("Синя", "Blue")),
+            ("#FFFFFF", Lang.T("Біла", "White")),
+        };
+        colours.ItemsSource = palette.Select(one => new Choice(one.Item1, one.Item2)).ToList();
+        colours.SelectedIndex = 0;
+        colours.SelectionChanged += (_, _) =>
+        {
+            if (colours.SelectedItem is Choice choice) _pointerColour = choice.Id;
+        };
+
+        var size = new Slider { Minimum = 0.02, Maximum = 0.2, Value = _pointerSize, Width = 90, VerticalAlignment = VerticalAlignment.Center };
+        size.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) _pointerSize = size.Value; };
+        var bright = new Slider { Minimum = 0.2, Maximum = 1, Value = _pointerBright, Width = 90, VerticalAlignment = VerticalAlignment.Center };
+        bright.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) _pointerBright = bright.Value; };
+
+        var zoomOff = Ui.Button(Lang.T("Зняти наближення", "Remove zoom"),
+                                () => Send("zoom", new JsonObject { ["zoom"] = 1, ["x"] = 0.5, ["y"] = 0.5 }),
+                                Lang.T("Повернути зал до звичайного вигляду", "Return the hall to its normal view"));
+
+        return Wrap(toggle, colours,
+                    Ui.Label(Lang.T("Розмір:", "Size:")), size,
+                    Ui.Label(Lang.T("Яскравість:", "Brightness:")), bright, zoomOff);
+    }
+
     void Pointer(Control hall, Point at)
     {
         // Картинка вписана в чорне поле: рахуємо частку від самої картинки,
@@ -347,7 +405,8 @@ public sealed partial class MainWindow : Window
         _pointerSent = DateTime.UtcNow;
         Send("pointer", new JsonObject
         {
-            ["x"] = x, ["y"] = y, ["colour"] = "#FFD400", ["size"] = 0.05, ["opacity"] = 0.85,
+            ["x"] = x, ["y"] = y,
+            ["colour"] = _pointerColour, ["size"] = _pointerSize, ["opacity"] = _pointerBright,
         });
     }
 
