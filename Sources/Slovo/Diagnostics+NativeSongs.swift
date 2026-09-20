@@ -498,6 +498,14 @@ extension Diagnostics {
             return (waste, cut, rows)
         }
 
+        // Вибір людини беремо на час перевірки й повертаємо: налаштування
+        // живуть в одному сховищі з робочою копією власника.
+        let chosenView = InterfaceSettings.shared.verseView(.songs)
+        defer {
+            InterfaceSettings.shared.setVerseView(chosenView, in: .songs)
+            songs.applyInterfaceNow()
+            songs.applyPartViewButtons()
+        }
         let before = survey("як є")
         // І в «одну лінію», і в звичайному вигляді — порожнечі бути не має.
         InterfaceSettings.shared.setVerseView(.singleLine, in: .songs)
@@ -534,6 +542,18 @@ extension Diagnostics {
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 1600, height: 900))
         window.contentView = host
+        // Беремо вид на час перевірки й повертаємо туди, де він стояв:
+        // інакше наступні перевірки бачать порожню робочу область.
+        let home = view.superview
+        let place = view.frame
+        defer {
+            view.removeFromSuperview()
+            if let home {
+                view.frame = place
+                home.addSubview(view)
+                home.layoutSubtreeIfNeeded()
+            }
+        }
         view.frame = host.bounds
         host.addSubview(view)
         host.layoutSubtreeIfNeeded()
@@ -558,10 +578,7 @@ extension Diagnostics {
                             status: total > 0 && visible > 0 ? .ok : .warning,
                             detail: "відкрито «\(songs.model.bookID)», пісень \(total), "
                                 + "видно рядків \(visible)"))
-        guard total > 40, visible > 0 else {
-            view.removeFromSuperview()
-            return checks
-        }
+        guard total > 40, visible > 0 else { return checks }
 
         // Главное: список спрашивает источник только про видимые строки.
         // Спросил больше — значит он всё-таки строит весь сборник, и мы
@@ -705,7 +722,6 @@ extension Diagnostics {
                                 detail: "songPartIndex = \(number.map(String.init) ?? "немає")"))
         }
 
-        view.removeFromSuperview()
         return checks
     }
 

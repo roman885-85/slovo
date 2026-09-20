@@ -108,6 +108,7 @@ enum Diagnostics {
         run.add(webTemplatesSection(state: state))
         run.add(webEditorSection(state: state))
         run.add(compatSection(state: state))
+        run.add(networkSection(state: state))
         run.add(nativeSection(state: state))
         run.add(nativeTopSection(state: state))
         run.add(nativeBibleSection(state: state))
@@ -2204,6 +2205,7 @@ enum Diagnostics {
         ("фокус", { focusSection(state: $0) }),
         ("екран", { screenSection(state: $0) }),
         ("сумісність", { compatSection(state: $0) }),
+        ("мережа", { networkSection(state: $0) }),
         ("автономність", { selfContainedSection($0) + library($0) + importWindowSection(state: $0) }),
         ("переклади", { translationsSection(state: $0) }),
         ("фонограма", { backingTrackSection(state: $0) }),

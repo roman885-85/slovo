@@ -20,7 +20,7 @@ final class NativeCompatWindow: NSWindowController {
             return
         }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 420),
-                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = OurWords.t("Проверка совместимости")
         window.center()
         let controller = NativeCompatWindow(window: window)
@@ -74,7 +74,10 @@ final class NativeCompatWindow: NSWindowController {
         // Наступним кроком циклу: вікно має встигнути показатися.
         RunLoop.main.perform(inModes: [.common]) { [weak self] in
             guard let self else { return }
+            // Мережа — поруч: із листа не видно, чому на тому Mac мовчать
+            // веб-слайди, а цей розділ каже, хто слухає й на чому спіткнувся.
             let checks = Diagnostics.compatSection(state: state)
+                + Diagnostics.networkSection(state: state)
             let system = ProcessInfo.processInfo.operatingSystemVersion
             var lines = ["macOS \(system.majorVersion).\(system.minorVersion).\(system.patchVersion)",
                          OurWords.t("Версия %s", AppUpdater.currentVersion), ""]

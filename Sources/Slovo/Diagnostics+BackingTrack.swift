@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CoreGraphics
 import SlovoCore
 
@@ -177,6 +178,7 @@ extension Diagnostics {
         checks.append(contentsOf: backingPanelChecks(state: state,
                                                      wave: makeWave(seconds: 20, in: music, envelope: true) ?? wave,
                                                      folder: folder))
+        checks.append(backingFallbackCheck(wave: wave, folder: music))
         return checks
     }
 
@@ -262,6 +264,8 @@ extension Diagnostics {
                                  bar.frame.height, NativeBackingTrackBar.collapsedHeight))
         }
         if bar.waveformView.isHidden { faults.append("у стиснутій смужці немає смуги перемотування") }
+        // Знімок смужки: на ньому видно, що саме лишилося в один ряд.
+        NativeTrace.snapshot(bar, to: "slovo-фонограма-смужка.png")
         if bar.playButton.isHidden { faults.append("у стиснутій смужці немає кнопки «грати»") }
         if !bar.list.isHidden { faults.append("у стиснутій смужці лишився список") }
         // І назад: нижня межа тягне так само, тільки навпаки.
@@ -313,6 +317,32 @@ extension Diagnostics {
                      detail: saved ? (placed ? "знімок ~/Library/Logs/slovo-пісні-фонограма.png; панель у вікні, ширина \(Int(bar?.frame.width ?? 0))"
                                              : "панель не стала у вікно")
                                    : "знімок не записався")
+    }
+
+    /// Запасні шляхи відкриття: файл, який `AVAudioFile` не бере, має
+    /// відкритися розкодуванням засобами системи. Власник: «иногда программа
+    /// не воспроизводит файл минуса, несмотря на известный формат mp3».
+    static func backingFallbackCheck(wave: URL, folder: URL) -> Check {
+        let area = "Фонограма"
+        let name = "Файл, якого не бере звичайний шлях, відкривається обхідним"
+        // Робимо «важкий» випадок: той самий звук під чужим розширенням.
+        let odd = folder.appendingPathComponent("минусовка.mp3")
+        try? FileManager.default.removeItem(at: odd)
+        try? FileManager.default.copyItem(at: wave, to: odd)
+        let direct = (try? AVAudioFile(forReading: odd)) != nil
+        guard let ready = BackingTrackPlayer.decoded(odd) else {
+            return Check(area: area, name: name,
+                         status: direct ? .ok : .failed,
+                         detail: direct
+                            ? "звичайний шлях упорався сам — обхідний не знадобився"
+                            : "обхідний шлях не дав файла")
+        }
+        let opened = try? AVAudioFile(forReading: ready)
+        let frames = opened?.length ?? 0
+        return Check(area: area, name: name,
+                     status: frames > 0 ? .ok : .failed,
+                     detail: "розкодовано в \(ready.lastPathComponent), кадрів \(frames)"
+                        + (direct ? "; звичайний шлях теж брав цей файл" : "; звичайний шлях не брав"))
     }
 
     /// Список фонограм, хвиля, пік-метр і кнопки панелі.
@@ -384,13 +414,22 @@ extension Diagnostics {
                                            backing.isPlaying ? "так" : "НІ", clickedAt)))
 
         // 4. Пік-метр оживає під звуком.
+        //
+        // Міряємо ДВА числа: що бачить відвід звуку й що показує смуга. Поки
+        // друге було саме по собі, не було видно, де губиться рівень —
+        // у звуці чи в смузі; тепер це видно з одного рядка звіту.
         backing.volume = 0.8
         _ = backing.levels.take()
+        backing.levels.resetLoudestForCheck()
         wait(untilTrue: { (bar.meter.decibelsForCheck.max() ?? -100) > -40 }, seconds: 3)
         let loudest = bar.meter.decibelsForCheck.max() ?? -100
+        let tapped = backing.levels.loudestForCheck
+        let tappedDecibels = tapped > 0 ? 20 * log10(tapped) : -100
         checks.append(Check(area: area, name: "Пік-метр показує рівень фонограми",
                             status: loudest > -40 ? .ok : .failed,
-                            detail: String(format: "найвищий рівень на індикаторі %.1f дБ (синус 0,18 — очікуємо близько −15…−25)", loudest)))
+                            detail: String(format: "найвищий рівень на індикаторі %.1f дБ; у відводі звуку %.3f (%.1f дБ); "
+                                            + "синус 0,18 при гучності 0,8 дає 0,117 (−18,6 дБ)",
+                                           loudest, tapped, tappedDecibels)))
 
         backing.volume = wasVolume
 
@@ -552,14 +591,25 @@ extension Diagnostics {
             wait(untilTrue: { false }, seconds: 1.0 / 60)
             samples.append((ProcessInfo.processInfo.systemUptime, bar.meter.decibelsForCheck.max() ?? -48))
         }
-        // Кадри, між якими головний потік стояв довше за 0,1 с (Mac під
-        // навантаженням), не міряємо: за таку паузу смуга законно проходить
-        // більший шлях, і це не смикання.
+        // Скільки смуга має право пройти між двома кадрами.
+        //
+        // Раніше тут стояло глухе «0,5 дБ», і перевірка падала на живій,
+        // справній смузі: стала підйому індикатора — 0,07 с, тобто за кадр
+        // (1/60 с) він законно проходить п'яту частину розриву до цілі, а
+        // ціль між порціями звуку сповзає на 6 дБ/с. Тому міряємо не сталим
+        // числом, а часом: 1,2 дБ на звичайний кадр і пропорційно більше,
+        // якщо головний потік стояв довше. Смикання, заради якого перевірка
+        // й писалася (смуга падала на дно між порціями), давало десятки
+        // децибел і не пролізе.
         var stalls = 0
         var jitter: Float = 0
+        var allowed: Float = 1.2
         for (previous, next) in zip(samples, samples.dropFirst()) {
-            if next.time - previous.time > 0.1 { stalls += 1; continue }
-            jitter = max(jitter, abs(next.level - previous.level))
+            let gap = next.time - previous.time
+            if gap > 0.1 { stalls += 1; continue }
+            let step = abs(next.level - previous.level)
+            let limit = Float(max(1, gap / (1.0 / 60))) * 1.2
+            if step > limit { jitter = max(jitter, step); allowed = min(allowed, limit) }
         }
         let level = samples.last?.level ?? -48
         let engineWasRunning = backing.engineRunningForCheck
@@ -575,10 +625,12 @@ extension Diagnostics {
         // повільніший. Час міряємо, а не беремо «0,1 с» на віру — під
         // навантаженням пауза перевірки буває вдвічі довшою.
         let sharp = Double(level + 48) * (1 - exp(-elapsed / 0.2))
-        let ok = level > -40 && jitter < 0.5 && falls > 0.3 && Double(falls) < sharp && settled
+        let ok = level > -40 && jitter == 0 && falls > 0.3 && Double(falls) < sharp && settled
         return Check(area: area, name: name, status: ok ? .ok : .failed,
-                     detail: String(format: "рівний тон: рівень %.1f дБ, найбільший стрибок між кадрами %.2f дБ (межа 0,5; пауз потоку пропущено: \(stalls)); "
+                     detail: String(format: "рівний тон: рівень %.1f дБ, зайвих стрибків між кадрами: "
+                                        + (jitter == 0 ? "немає" : String(format: "%.2f дБ понад межу %.2f", jitter, allowed))
+                                        + " (пауз потоку пропущено: \(stalls)); "
                                         + "за %.2f с після паузи опустився на %.1f дБ (різкий спад дав би %.1f); опустився до кінця: %@; двигун звуку крутився: %@",
-                                    level, jitter, elapsed, falls, sharp, settled ? "так" : "ні", engineWasRunning ? "так" : "НІ"))
+                                    level, elapsed, falls, sharp, settled ? "так" : "ні", engineWasRunning ? "так" : "НІ"))
     }
 }

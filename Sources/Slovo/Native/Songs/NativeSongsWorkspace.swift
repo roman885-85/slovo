@@ -57,6 +57,10 @@ final class NativeSongsWorkspace {
     private var groupTitle = NativeSongColumnTitle()
     private var songTitle = NativeSongColumnTitle()
     private var partTitle = NativeSongColumnTitle()
+    /// Вигляд тексту частин: «в одну лінію» чи повністю. Власник: «пропала
+    /// настройка отображения списков текста» — у Біблії ці кнопки стоять над
+    /// віршами, а в піснях їх не було зовсім, хоч налаштування й діяло.
+    private let partViewButtons = NativeIconButtonRow()
     let groupStrip = NativeSongToolStrip()
     let songStrip = NativeSongToolStrip()
     let partStrip = NativeSongToolStrip()
@@ -153,6 +157,16 @@ final class NativeSongsWorkspace {
     /// `BooksStyle` («Значки» / «Мал. значки» / «Список» / «Таблиця») лягає
     /// на список пісень, `LinesStyle` («одна лінія» / «багато рядків») — на
     /// список частин: це ті самі два списки, що в Біблії.
+    ///
+    /// Позначити, який вигляд тексту зараз увімкнено.
+    func applyPartViewButtons() {
+        let current = InterfaceSettings.shared.verseView(.songs)
+        for (position, mode) in InterfaceSettings.VerseViewMode.allCases.enumerated()
+        where partViewButtons.buttons.indices.contains(position) {
+            partViewButtons.buttons[position].isOn = (mode == current)
+        }
+    }
+
     /// Перезастосувати вигляд списків — самоперевірці, яка міняє його на ходу.
     func applyInterfaceNow() { applyInterface(force: true) }
 
@@ -329,10 +343,22 @@ final class NativeSongsWorkspace {
             .init(view: songQuick, height: NativeSongQuickRow.height),
             .init(view: songList, height: 0),
         ])
+        partViewButtons.install(InterfaceSettings.VerseViewMode.allCases.map { mode in
+            NativeIconButton(symbol: mode.symbol,
+                             hint: mode.hintFallback) { [weak self] in
+                InterfaceSettings.shared.setVerseView(mode, in: .songs)
+                self?.applyInterfaceNow()
+                self?.applyPartViewButtons()
+            }
+        })
+        applyPartViewButtons()
         let partColumn = NativeSongColumn()
         partColumn.install([
             .init(view: partTitle, height: NativeSongColumnTitle.height),
+            // Панель правки — рівно другою: її ховають і показують за номером
+            // (`setVisible(_:at: 1)`), і чужий рядок тут збивав би нумерацію.
             .init(view: partStrip, height: NativeSongToolStrip.height),
+            .init(view: partViewButtons, height: NativeIconButtonRow.height),
             .init(view: partQuick, height: NativeSongQuickRow.height),
             .init(view: partList, height: 0),
         ])

@@ -26,7 +26,7 @@ enum NativeResourcesWindow {
             return
         }
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
-                             styleMask: [.titled, .closable, .resizable],
+                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
                              backing: .buffered, defer: false)
         panel.title = OurWords.t("Ресурсы с GitHub")
         panel.isReleasedWhenClosed = false

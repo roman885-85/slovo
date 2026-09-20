@@ -263,9 +263,12 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         // Поріг із запасом: на межу «повної» висоти припадають ще й відступи
         // та смужка нижньої ручки, і без запасу панель зривалася в смужку.
         let compact = bounds.height < Self.fullHeight - 16
-        for view in [icon, caption, count, addButton, removeButton, clearButton, list, deck] {
+        for view in [icon, caption, count, addButton, removeButton, clearButton, list] {
             view.isHidden = compact
         }
+        // Картку треку не ховаємо: усередині неї живуть назва, час і смуга
+        // перемотування, а вони потрібні й у стиснутій смужці.
+        deck.isHidden = false
         if compact {
             layoutCompact()
         } else {
@@ -293,21 +296,27 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
             x += 32
         }
         let volumeWidth: CGFloat = 110
-        let timeWidth: CGFloat = 86
         volume.isHidden = false
         volume.frame = NSRect(x: max(x, bounds.width - pad - volumeWidth), y: row, width: volumeWidth, height: 22)
-        time.isHidden = false
-        time.frame = NSRect(x: volume.frame.minX - timeWidth - 8, y: row + 3, width: timeWidth, height: 16)
-        // Смуга перемотування лишається і в стиснутому ряді: власник —
-        // «при схлопывании плеера минусовок, полоса прокрутки должна
-        // остаться». Назва їде ліворуч від неї, скільки лишиться місця.
-        let nameWidth: CGFloat = 150
+
+        // Назва, час і смуга перемотування лежать усередині картки треку —
+        // отже, і в смужці розкладаємо їх ТАМ, а саму картку робимо на всю
+        // смужку. Власник: «при схлопывании плеера минусовок, полоса
+        // прокрутки должна остаться».
+        let deckX = x + 4
+        let deckWidth = max(80, volume.frame.minX - deckX - 8)
+        deck.frame = NSRect(x: deckX, y: 2, width: deckWidth, height: max(18, height - 4))
+        let inner = deck.bounds
+        let timeWidth: CGFloat = 86
+        let nameWidth = min(160, max(60, inner.width * 0.3))
+        let middle = max(0, (inner.height - 16) / 2)
         name.isHidden = false
-        name.frame = NSRect(x: x + 6, y: row + 3, width: nameWidth, height: 16)
+        name.frame = NSRect(x: 6, y: middle, width: nameWidth, height: 16)
+        time.isHidden = false
+        time.frame = NSRect(x: max(0, inner.width - timeWidth - 6), y: middle + 1, width: timeWidth, height: 14)
         let barX = name.frame.maxX + 8
-        let barWidth = max(40, time.frame.minX - barX - 8)
         waveformView.isHidden = false
-        waveformView.frame = NSRect(x: barX, y: row + 4, width: barWidth, height: 16)
+        waveformView.frame = NSRect(x: barX, y: middle, width: max(30, time.frame.minX - barX - 8), height: 16)
         // Решта в один ряд не вміщається.
         for view in [meter as NSView, toneDown as NSView, toneUp as NSView,
                      toneLabel as NSView, loopButton as NSView] {

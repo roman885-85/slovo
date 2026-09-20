@@ -46,6 +46,43 @@ extension Diagnostics {
         checks.append(Check(area: area, name: "Екрани змінилися — картинка вертається без нового слайда",
                             status: rebuilt && back ? .ok : .failed,
                             detail: "вікно \(rebuilt ? "перебудоване" : "не перебудоване"), картинка \(back ? "повернулася" : "не повернулася")"))
+        checks.append(contentsOf: slideWindowButtonChecks(state: state))
+        return checks
+    }
+
+    /// Кнопки вікна слайда: закрити, згорнути, розгорнути.
+    ///
+    /// Власник: «в окне нет функций закрыть, свернуть и развернуть окно». На
+    /// машині з одним екраном слайд іде звичайним вікном, і людина мусить
+    /// могти прибрати його з-перед очей. Хрестик при цьому не вбиває показ:
+    /// ховає вікно, а наступний слайд вертає його.
+    static func slideWindowButtonChecks(state: AppState) -> [Check] {
+        let area = "Проектор"
+        let projection = state.projection
+        var checks: [Check] = []
+        guard projection.isSlideWindowFramed else {
+            return [Check(area: area, name: "У вікна слайда є всі три кнопки", status: .skipped,
+                          detail: "слайд іде безрамковим вікном на окремий екран")]
+        }
+        let buttons = projection.slideWindowButtons
+        let all = buttons.map { $0.close && $0.miniaturize && $0.zoom } ?? false
+        checks.append(Check(area: area, name: "У вікна слайда є всі три кнопки",
+                            status: all ? .ok : .failed,
+                            detail: buttons.map {
+                                "закрити \($0.close ? "є" : "немає"), згорнути \($0.miniaturize ? "є" : "немає"), "
+                                    + "розгорнути \($0.zoom ? "є" : "немає")"
+                            } ?? "вікна слайда немає"))
+
+        // Хрестик: вікно ховається, показ живий, наступний слайд вертає вікно.
+        projection.hideSlideWindowByHand()
+        wait(untilTrue: { !projection.isSlideWindowVisible }, seconds: 2)
+        let hidden = !projection.isSlideWindowVisible
+        state.showCurrent()
+        wait(untilTrue: { projection.isSlideWindowVisible }, seconds: 3)
+        let returned = projection.isSlideWindowVisible
+        checks.append(Check(area: area, name: "Хрестик ховає вікно слайда, наступний слайд вертає",
+                            status: hidden && returned ? .ok : .failed,
+                            detail: "сховалося \(hidden ? "так" : "ні"), повернулося \(returned ? "так" : "ні")"))
         return checks
     }
 }

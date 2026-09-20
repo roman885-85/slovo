@@ -61,10 +61,23 @@ final class BackingLevels: @unchecked Sendable {
     private var right: Float = 0
     private var fresh = false
 
+    /// Найгучніше, що бачив відвід за весь час, — тільки для самоперевірки:
+    /// воно НЕ обнуляється при читанні, і за ним видно, чи рівень губиться
+    /// по дорозі до смуги, чи його не було й у звуці.
+    private var loudest: Float = 0
+    var loudestForCheck: Float {
+        lock.lock(); defer { lock.unlock() }
+        return loudest
+    }
+    func resetLoudestForCheck() {
+        lock.lock(); loudest = 0; lock.unlock()
+    }
+
     func push(left newLeft: Float, right newRight: Float) {
         lock.lock()
         left = max(left, newLeft)
         right = max(right, newRight)
+        loudest = max(loudest, max(newLeft, newRight))
         fresh = true
         lock.unlock()
     }
@@ -215,9 +228,18 @@ final class BackingTrackPlayer: ObservableObject {
                 playlistIndex = playlist.count - 1
             }
         } catch {
-            // macOS не всі формати читає сама: .ogg, .opus, .wma й подібні їй
-            // чужі. Пробуємо перетворити файл у .m4a поруч, у своєму кеші, —
-            // так минусовка грає, а вихідний файл лишається недоторканим.
+            // Спершу — засобами самої macOS: буває, що `AVAudioFile` не бере
+            // файл, який AVFoundation читає чудово (власник: «иногда
+            // программа не воспроизводит файл минуса, несмотря на известный
+            // формат mp3» — такі MP3 з довгими тегами чи хибним розширенням
+            // трапляються). Розкодовуємо в тимчасовий .caf і граємо його.
+            if let ready = Self.decoded(target), ready != target {
+                open(ready)
+                title = target.deletingPathExtension().lastPathComponent
+                notify()
+                return
+            }
+            // Далі — чужі формати (.ogg, .opus, .wma…): їх бере ffmpeg.
             if let ready = Self.converted(target), ready != target {
                 open(ready)
                 // Назву лишаємо від вихідного файла: у кеші вона службова.
@@ -245,6 +267,89 @@ final class BackingTrackPlayer: ObservableObject {
         return folder
     }
 
+
+    /// Ім'я готового файла в кеші: воно має бути ОДНАКОВИМ між запусками.
+    ///
+    /// Грабля: `hashValue` у Swift щоразу інший (сіль на процес), тож ім'я
+    /// виходило нове, і та сама мінусовка перетворювалася знову й знову, а
+    /// в тимчасовій теці росли двійники. Рахуємо свій, сталий відбиток —
+    /// шлях плюс час правки: змінили файл — зміниться й ім'я.
+    private static func cacheName(_ source: URL, _ extension_: String) -> String {
+        let stamp = (try? source.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? 0
+        var mark: UInt64 = 0xcbf2_9ce4_8422_2325          // FNV-1a
+        for byte in Array(source.path.utf8) + Array(String(Int(stamp)).utf8) {
+            mark = (mark ^ UInt64(byte)) &* 0x100_0000_01b3
+        }
+        return source.deletingPathExtension().lastPathComponent
+            + "-" + String(format: "%016llx", mark) + extension_
+    }
+
+    /// Розкодувати файл засобами AVFoundation у тимчасовий .caf.
+    ///
+    /// `AVAudioFile` користується вужчим шляхом, ніж `AVAsset`: буває, що
+    /// звичайний MP3 він відкрити не може (довгі теги, обкладинка, хибне
+    /// розширення), а читач ресурсу читає його без питань. Тому перш ніж
+    /// кликати ffmpeg, пробуємо власний інструмент системи.
+    static func decoded(_ source: URL) -> URL? {
+        let asset = AVURLAsset(url: source)
+        guard let track = asset.tracks(withMediaType: .audio).first else { return nil }
+        let ready = conversionFolder.appendingPathComponent(cacheName(source, ".caf"))
+        if FileManager.default.fileExists(atPath: ready.path) { return ready }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 2,
+        ]
+        guard let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading() else { return nil }
+
+        var file: AVAudioFile?
+        while reader.status == .reading {
+            guard let sample = output.copyNextSampleBuffer(),
+                  let block = CMSampleBufferGetDataBuffer(sample) else { break }
+            let count = CMBlockBufferGetDataLength(block)
+            var bytes = [UInt8](repeating: 0, count: count)
+            guard CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count, destination: &bytes) == noErr,
+                  let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44_100,
+                                             channels: 2, interleaved: true) else { break }
+            let frames = AVAudioFrameCount(count / 8)   // два канали по чотири байти
+            guard frames > 0,
+                  let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { continue }
+            buffer.frameLength = frames
+            bytes.withUnsafeBytes { raw in
+                if let base = buffer.floatChannelData?[0] {
+                    base.withMemoryRebound(to: UInt8.self, capacity: count) { target in
+                        raw.copyBytes(to: UnsafeMutableRawBufferPointer(start: target, count: count))
+                    }
+                }
+            }
+            if file == nil {
+                file = try? AVAudioFile(forWriting: ready, settings: format.settings,
+                                        commonFormat: .pcmFormatFloat32, interleaved: true)
+            }
+            try? file?.write(from: buffer)
+        }
+        guard reader.status == .completed || reader.status == .reading, file != nil else {
+            try? FileManager.default.removeItem(at: ready)
+            return nil
+        }
+        file = nil
+        guard let size = (try? ready.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > 4096 else {
+            try? FileManager.default.removeItem(at: ready)
+            return nil
+        }
+        NativeTrace.say("фонограма: «\(source.lastPathComponent)» розкодовано засобами системи")
+        return ready
+    }
+
     /// Перетворити файл у .m4a, якщо є чим. `nil` — не вийшло.
     ///
     /// Перетворення робить ffmpeg: він читає і .ogg, і .opus, і .wma, і .ape.
@@ -252,12 +357,7 @@ final class BackingTrackPlayer: ObservableObject {
     /// на служінні ту саму минусовку відкривають не раз.
     static func converted(_ source: URL) -> URL? {
         guard let ffmpeg = YouTubeResolver.ffmpeg else { return nil }
-        let stamp = (try? source.resourceValues(forKeys: [.contentModificationDateKey]))?
-            .contentModificationDate?.timeIntervalSince1970 ?? 0
-        let name = source.deletingPathExtension().lastPathComponent
-            + "-" + String(format: "%08x", abs(source.path.hashValue &+ Int(stamp)))
-            + ".m4a"
-        let ready = conversionFolder.appendingPathComponent(name)
+        let ready = conversionFolder.appendingPathComponent(cacheName(source, ".m4a"))
         if FileManager.default.fileExists(atPath: ready.path) { return ready }
 
         let task = Process()

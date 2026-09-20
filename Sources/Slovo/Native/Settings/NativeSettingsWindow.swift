@@ -62,7 +62,7 @@ final class NativeSettingsWindow: NSObject, NSWindowDelegate {
         let screen = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
         let size = NSSize(width: min(1180, screen.width - 40), height: min(720, screen.height - 60))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.titled, .closable, .resizable],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = state.vb("SettingsForm", "Параметры")
         window.isReleasedWhenClosed = false

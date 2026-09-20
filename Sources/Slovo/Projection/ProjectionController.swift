@@ -56,6 +56,18 @@ final class ProjectionController: ObservableObject {
         return probe.level.rawValue
     }
     var isSlideWindowVisible: Bool { window?.isVisible ?? false }
+    /// Чи є у вікна слайда три кнопки — самоперевірці (власник: «в окне нет
+    /// функций закрыть, свернуть и развернуть окно»).
+    var slideWindowButtons: (close: Bool, miniaturize: Bool, zoom: Bool)? {
+        guard let window else { return nil }
+        func has(_ kind: NSWindow.ButtonType) -> Bool {
+            guard let button = window.standardWindowButton(kind) else { return false }
+            return !button.isHidden
+        }
+        return (has(.closeButton), has(.miniaturizeButton), has(.zoomButton))
+    }
+    /// Вікно слайда — безрамкове (справжній проектор) чи звичайне.
+    var isSlideWindowFramed: Bool { window?.styleMask.contains(.titled) ?? false }
     /// Номер вікна слайда — самоперевірка звіряє, те саме воно чи перебудоване.
     var slideWindowNumber: Int? { window?.windowNumber }
 
@@ -134,6 +146,13 @@ final class ProjectionController: ObservableObject {
         content.backgroundOverride = backgroundOverride
         if let imageURL { content.imageURL = imageURL }
         canvas?.refresh()
+        // Сховане рукою вікно вертається саме: у зал пішов слайд — його
+        // мають побачити. Порожній слайд не рахуємо: гасіння не привід.
+        if hiddenByHand, !slide.isBlank {
+            hiddenByHand = false
+            window?.orderFrontRegardless()
+            NativeTrace.say("проектор: у зал пішов слайд — вікно слайда повернуто")
+        }
     }
 
     /// Что сейчас нарисовано в окне зала — для самопроверки.
@@ -503,24 +522,54 @@ final class ProjectionController: ObservableObject {
         return window
     }
 
+    /// Хрестик у вікні слайда ховає його, а не закриває: показ у залі живе
+    /// далі, і вікно вертається з наступним слайдом.
+    @MainActor private final class SlideWindowGuard: NSObject, NSWindowDelegate {
+        weak var owner: ProjectionController?
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            owner?.hideSlideWindowByHand()
+            return false
+        }
+    }
+
+    private lazy var slideWindowGuard: SlideWindowGuard = {
+        let guardian = SlideWindowGuard()
+        guardian.owner = self
+        return guardian
+    }()
+
+    /// Вікно слайда сховане людиною — вернеться з наступним показом.
+    private var hiddenByHand = false
+
+    func hideSlideWindowByHand() {
+        hiddenByHand = true
+        window?.orderOut(nil)
+        NativeTrace.say("проектор: вікно слайда сховано хрестиком — вернеться з наступним слайдом")
+    }
+
     private func makeWindowedSlide(on screen: NSScreen, size requested: NSSize? = nil) -> NSWindow {
         let width = min(screen.visibleFrame.width * 0.5, 960)
         let size = requested ?? NSSize(width: width, height: (width / 16 * 9).rounded())
         let origin = NSPoint(x: screen.visibleFrame.maxX - size.width - 40,
                              y: screen.visibleFrame.maxY - size.height - 40)
 
-        // Без кнопок «закрыть» и «свернуть»: у автора окно слайда живёт
-        // всегда — гасят показ, а не окно (владелец: «окно всегда активно и
-        // включено без возможности закрытия»).
+        // Кнопки вікна — усі три. Спершу їх не було зовсім: у автора вікно
+        // слайда живе завжди («окно всегда активно и включено без
+        // возможности закрытия»), і я сховав закриття разом зі згортанням та
+        // розгортанням. Вийшло гірше: власник — «в окне нет функций закрыть,
+        // свернуть и развернуть окно», бо на машині з одним екраном це
+        // звичайне вікно, і прибрати його з-перед очей не було чим.
+        //
+        // Тепер і те, і те: згортання й розгортання — як у будь-якого вікна,
+        // а хрестик НЕ вбиває вікно, лише ховає його. Показ у зал живий,
+        // вікно вертається само, щойно в зал піде наступний слайд.
         let window = NSWindow(contentRect: NSRect(origin: origin, size: size),
-                              styleMask: [.titled, .resizable],
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered,
                               defer: false,
                               screen: screen)
         window.title = OurWords.t("Окно слайда")
-        window.standardWindowButton(.closeButton)?.isHidden = true
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.delegate = slideWindowGuard
         window.isOpaque = true
         window.backgroundColor = .black
         window.level = .floating
@@ -533,6 +582,7 @@ final class ProjectionController: ObservableObject {
     }
 
     private func closeWindow() {
+        hiddenByHand = false
         if window != nil { NativeTrace.say("проектор: вікно слайда прибрано") }
         if let videoLayer { attachedMedia?.detach(videoLayer) }
         videoLayer = nil
