@@ -50,6 +50,11 @@ enum WebSlovoSlidePage {
           var stage = document.getElementById('stage');
           var idle = document.getElementById('idle');
           var layout = null, hidden = false;
+          // Прозорий фон: «?overlay=1» в адресі — щоб сторінку можна було
+          // класти поверх відео в OBS. Змінної тут колись не було зовсім, і
+          // `draw()` падав на першому ж рядку з нею: сторінка лишалася
+          // чорною, хоч слайд і приходив (власник: «не работают веб слайды»).
+          var overlay = /[?&]overlay=1/.test(location.search);
 
           function px(share) { return share * stage.clientHeight; }
 

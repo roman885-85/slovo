@@ -2178,6 +2178,7 @@ enum Diagnostics {
         ("презентація-знімки", { slideShotsSection(state: $0) }),
         ("курсор-дослід", { caretExperimentSection(state: $0) }),
         ("повзунки", { webKnobSection(state: $0) }),
+        ("веб-слайди", { webSlidesSection(state: $0) }),
         ("проектор-тип", { projectorTypeSwitchSection(state: $0) }),
         ("кольори-конструктора", { constructorColoursSection(state: $0) }),
         ("пам'ять", { sessionSection(state: $0) }),
