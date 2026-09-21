@@ -26,7 +26,7 @@ public struct SongMatch: Sendable, Hashable, Identifiable {
 
 extension Song {
     /// Номер пісні — її позиція у збірнику, рахуючи з одиниці. Саме так
-    /// нумерує пісні VisioBible, і за цим номером їх шукають у залі.
+    /// нумерує пісні старої програми, і за цим номером їх шукають у залі.
     public var number: Int { index + 1 }
 
     /// Властивості пісні — рядки виду `$ID$=1728`, `$TUNE$=`.

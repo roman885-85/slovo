@@ -37,6 +37,17 @@ extension Diagnostics {
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
         defer { if !hadLive { state.isLive = false } }
 
+        // Чого чекати від сторінки — беремо з того, що САМІ вивели в зал.
+        // Перевірка шукала російське «возлюбил», а в залі буває інший
+        // переклад: на машині власника основний український, і перевірка
+        // тричі кричала «помилка» на справній сторінці.
+        let hall = state.lastScreenSlide.mainText
+        let needle = hall.split(separator: " ")
+            .map { $0.trimmingCharacters(in: CharacterSet.alphanumerics.inverted) }
+            .filter { $0.count >= 5 }
+            .dropFirst()
+            .first ?? "Бог"
+
         // MARK: Сторінка віддається
         let pageURL = URL(string: "http://127.0.0.1:\(httpPort)/slovo-slide")!
         var page = ""
@@ -92,8 +103,8 @@ extension Diagnostics {
         let variant = ((slidePacket?["Slide"] as? [String: Any])?["Var0"] as? [String: Any])
         let verse = (variant?["Text"] as? String) ?? ((variant?["Out0"] as? [String: Any])?["Pages"] as? [String])?.first ?? ""
         checks.append(Check(area: area, name: "Сторінці приходить текст залу",
-                            status: verse.contains("возлюбил") ? .ok : .failed,
-                            detail: packets.isEmpty ? "жодного пакета за 12 с"
+                            status: verse.contains(needle) ? .ok : .failed,
+                            detail: packets.isEmpty ? "жодного пакета за 12 с (чекали слово «\(needle)»)"
                                 : "пакетів \(packets.count), у слайді «\(verse.prefix(40))»"))
 
         // Наша сторінка малює за розкладкою: без неї вона лишається чорною,
@@ -102,7 +113,7 @@ extension Diagnostics {
         let objects = (layout?["objects"] as? [[String: Any]]) ?? (layout?["Objects"] as? [[String: Any]]) ?? []
         let drawnText = objects.compactMap { $0["text"] as? String ?? $0["Text"] as? String }.joined(separator: " ")
         checks.append(Check(area: area, name: "У пакеті є розкладка, за якою сторінка малює",
-                            status: !objects.isEmpty && drawnText.contains("возлюбил") ? .ok : .failed,
+                            status: !objects.isEmpty && drawnText.contains(needle) ? .ok : .failed,
                             detail: layout == nil ? "секції Layout у пакеті немає — сторінка лишиться порожньою"
                                 : "об'єктів \(objects.count), у них «\(drawnText.prefix(40))»"))
 
@@ -138,18 +149,18 @@ extension Diagnostics {
                 asked.signal()
             }
             _ = asked.wait(timeout: .now() + 5)
-            if drawn.contains("возлюбил") { break }
+            if drawn.contains(needle) { break }
         }
         let parts = drawn.split(separator: "|", maxSplits: 1).map(String.init)
         let boxes = Int(parts.first ?? "") ?? 0
         checks.append(Check(area: area, name: "Сторінка малює вірш у браузері",
-                            status: boxes > 0 && drawn.contains("возлюбил") ? .ok : .failed,
+                            status: boxes > 0 && drawn.contains(needle) ? .ok : .failed,
                             detail: drawn.isEmpty ? "сторінка нічого не відповіла\(errors.isEmpty ? "" : ": " + errors)"
                                 : "об'єктів на сцені \(boxes), текст «\((parts.count > 1 ? parts[1] : "").prefix(40))»"))
 
         // MARK: Значок вкладки
         //
-        // У теці авторських сторінок лежить favicon.ico від VisioBible, і
+        // У теці авторських сторінок лежить favicon.ico від старої програми, і
         // браузер брав саме його: у вкладці з нашим слайдом світився чужий
         // знак (власник: «в веб слайдах фавикон от visiobible остался»).
         var icon = Data()
@@ -162,9 +173,9 @@ extension Diagnostics {
             gotIcon.signal()
         }.resume()
         _ = gotIcon.wait(timeout: .now() + 12)
-        // PNG починається з \u{89}PNG; значок VisioBible — .ico (00 00 01 00).
+        // PNG починається з \u{89}PNG; значок старої програми — .ico (00 00 01 00).
         let isPNG = icon.count > 8 && icon.prefix(4).elementsEqual([0x89, 0x50, 0x4E, 0x47])
-        checks.append(Check(area: area, name: "Значок вкладки — свій, не від VisioBible",
+        checks.append(Check(area: area, name: "Значок вкладки — свій, не чужий",
                             status: isPNG ? .ok : .failed,
                             detail: icon.isEmpty ? "значок не віддається"
                                 : "\(icon.count) байт, \(iconType), \(isPNG ? "наш PNG" : "чужий файл із теки")"))

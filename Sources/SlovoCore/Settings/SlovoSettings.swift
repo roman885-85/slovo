@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Поля названо за ключами ini, щоб при звірці з оригіналом не
 /// доводилося тримати в голові ще один словник імен. Значення за умовчанням
-/// — ті самі, що підставляє VisioBible при першому запуску.
+/// — ті самі, що підставляє старої програми при першому запуску.
 public struct ProgramOptions: Codable, Sendable, Hashable {
 
     // MARK: Основні (6.1.1)
@@ -305,7 +305,7 @@ public struct ModuleRosterEntry: Codable, Sendable, Hashable, Identifiable {
     }
 
     /// Модуль це чи Пісенник: у пісенників розширення `.songbook` (своє)
-    /// або `.vbm` (VisioBible).
+    /// або `.vbm` (прежняя программа).
     public var isSongBook: Bool {
         let lower = name.lowercased()
         return lower.hasSuffix(".vbm") || lower.hasSuffix(".songbook")

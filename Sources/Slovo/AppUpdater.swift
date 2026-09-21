@@ -710,7 +710,7 @@ enum ResourceOffer {
         shown = true
         let alert = NSAlert()
         alert.messageText = OurWords.t("В папке модулей пусто")
-        alert.informativeText = OurWords.t("Переводов и песенников у программы ещё нет. Загрузить их с GitHub (ресурсы «Слова» или модули «Цитата из Библии») или импортировать с этого компьютера (VisioBible, папка с модулями, архив)?")
+        alert.informativeText = OurWords.t("Переводов и песенников у программы ещё нет. Загрузить их с GitHub (ресурсы «Слова» или модули «Цитата из Библии») или импортировать с этого компьютера (папка с данными прежней программы, папка с модулями, архив)?")
         alert.addButton(withTitle: OurWords.t("Загрузить с GitHub…"))
         alert.addButton(withTitle: OurWords.t("Импортировать…"))
         alert.addButton(withTitle: OurWords.t("Позже"))

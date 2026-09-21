@@ -3,7 +3,7 @@ import SlovoCore
 
 /// Хранилище переводов интерфейса для окна «Перевод интерфейса» (7.1).
 ///
-/// Главное правило: файлы `Language/*.lng` в папке VisioBible мы только
+/// Главное правило: файлы `Language/*.lng` в папке прежней программы мы только
 /// читаем. Рядом стоит рабочая программа, служение может пройти и в ней, и
 /// испортить ей подписи нашей правкой нельзя. Поэтому изменённый перевод
 /// уходит в свою папку, а программа читает объединённый список: где есть наш
@@ -14,7 +14,7 @@ import SlovoCore
 @MainActor
 enum InterfaceLanguageStore {
 
-    /// Наши переводы. Папка данных VisioBible для записи не годится: она
+    /// Наши переводы. Папка данных прежней программы для записи не годится: она
     /// может лежать внутри бандла программы или на диске только для чтения.
     static var userDirectory: URL {
         DataHome.folder.appendingPathComponent("Language")
@@ -79,7 +79,7 @@ enum InterfaceLanguageStore {
             return originals
         }
 
-        // Ссылки, а не копии: оригиналы могут обновиться вместе с VisioBible,
+        // Ссылки, а не копии: оригиналы могут обновиться вместе с прежней программой,
         // и копия бы тихо устарела.
         let originalFiles = (try? manager.contentsOfDirectory(at: originals,
                                                               includingPropertiesForKeys: nil,
@@ -156,7 +156,7 @@ enum InterfaceLanguageStore {
     static func write(draft: Draft, code: String, displayName: String) throws {
         try FileManager.default.createDirectory(at: userDirectory, withIntermediateDirectories: true)
         let text = serialize(draft: draft, displayName: displayName)
-        // BOM и UTF-8 — как в файлах оригинала: их же читает и сам VisioBible,
+        // BOM и UTF-8 — как в файлах оригинала: их же читает и сама прежняя программа,
         // если человек решит положить наш перевод рядом с его.
         var data = Data([0xEF, 0xBB, 0xBF])
         data.append(Data(text.utf8))

@@ -3,7 +3,7 @@ import Foundation
 
 // Майстер імпорту — розділ 4.2 посібника, але лише в частині даних.
 //
-// В оригіналі майстер сам знаходив попередню версію VisioBible і переносив
+// В оригіналі майстер сам знаходив попередню версію старої програми і переносив
 // модулі, шаблони, фони та налаштування. Тут джерелом служить будь-яка тека
 // з даними або архів .zip — цим же закривається звичайне «додати модуль»:
 // людина завантажила теку з bibleqt.ini чи .vbm, показала її майстру, і
@@ -22,7 +22,7 @@ import Foundation
 /// Бібліотека самої програми: сюди майстер розкладає все, що переносить.
 ///
 /// Окремий тип потрібен з однієї причини: писати в чужі дані не можна.
-/// Робоча тека модулів може вказувати всередину `VisioBible.app` або в
+/// Робоча тека модулів може вказувати всередину `стара програма.app` або в
 /// пляшку CrossOver — туди майстер не пише за жодних умов, інакше імпорт
 /// зіпсує встановлений оригінал.
 public struct ImportDestination: Sendable, Hashable {
@@ -43,7 +43,7 @@ public struct ImportDestination: Sendable, Hashable {
     public var backgroundsFolder: URL { dataRoot.appendingPathComponent("BackGrounds") }
     public var plansFolder: URL { dataRoot.appendingPathComponent("Plans") }
 
-    /// Дані встановленого VisioBible чіпати на запис не можна: це чужа
+    /// Дані встановленої старої програми чіпати на запис не можна: це чужа
     /// програма й чужа копія модулів.
     public var isSafeToWrite: Bool {
         let path = dataRoot.path
@@ -105,7 +105,7 @@ public struct ImportSource: Sendable, Hashable, Identifiable {
 /// `ImportFromOldVersForm`, щоб людина, яка знає оригінал, побачила знайомий
 /// текст.
 public enum ImportProblem: Error, CustomStringConvertible, Sendable {
-    /// `ErrorMessages0` — «В папке "%s" нет "VisioBible"». Узагальнено: у теці
+    /// `ErrorMessages0` — «в папке "%s" нет программы». Узагальнено: у теці
     /// взагалі немає нічого, що можна перенести.
     case nothingToImport(String)
     /// `ErrorMessages1` — «В папке "%s" файл "VisioBible.ini" некорректен».
@@ -660,8 +660,8 @@ public enum ModuleImporter {
 
         switch url.pathExtension.lowercased() {
         case "vbm":
-            // Пісенник VisioBible при імпорті перетворюється у свій формат:
-            // лягає як `<ім'я>.songbook`; `.vbi` (покажчик VisioBible) не
+            // Пісенник старої програми при імпорті перетворюється у свій формат:
+            // лягає як `<ім'я>.songbook`; `.vbi` (покажчик старої програми) не
             // потрібен і не переноситься.
             let base = url.deletingPathExtension()
             let target = destination.modulesFolder
@@ -839,7 +839,7 @@ public enum ModuleImporter {
         }
     }
 
-    /// Пісенник VisioBible → свій формат: розібрати `.vbm` і записати
+    /// Пісенник старої програми → свій формат: розібрати `.vbm` і записати
     /// `.songbook`. Відкрито — щоб перевірка йшла тим самим шляхом, що й
     /// майстер.
     public static func convertSongBook(from source: URL, to destination: URL) throws {
@@ -1109,7 +1109,7 @@ public enum ModuleImporter {
             if shouldStop() { return }
             let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             guard isDirectory else { continue }
-            // Обгортки застосунків пропускаємо як теки, але всередину VisioBible.app
+            // Обгортки застосунків пропускаємо як теки, але всередину пакета .app
             // зазирнути треба — там і лежать його дані.
             let name = entry.lastPathComponent
             if entry.pathExtension == "app", !name.lowercased().hasPrefix("visiobible") { continue }

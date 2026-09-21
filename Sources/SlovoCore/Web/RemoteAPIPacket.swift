@@ -1,6 +1,6 @@
 import Foundation
 
-/// Пакети VisioBible Remote API V1.0 — рівно в тому вигляді, в якому їх чекають
+/// Пакети Remote API старої програми V1.0 — рівно в тому вигляді, в якому їх чекають
 /// авторські сторінки з теки `RemoteAPI`.
 ///
 /// Важлива розбіжність документації і реальності: `Help/RemoteAPI_ru.txt`
@@ -295,9 +295,10 @@ enum RemoteAPIPacket {
 
 /// Хто ми для клієнтів протоколу.
 public enum RemoteAPIIdentity {
-    /// Сторінки автора і сторонні клієнти звіряються з цим ім'ям, тому
-    /// підписуємося так само, як оригінал; своє ім'я іде окремим полем.
-    public static let senderName = "VisioBible"
+    /// Підписуємося своїм іменем. Колись тут стояло ім'я старої програми —
+    /// щоб її сторінки впізнавали відправника; тепер сторінки наші й на це
+    /// поле не дивляться, а власник просив прибрати чуже ім'я звідусіль.
+    public static let senderName = "Slovo"
     public static let implementationName = "Slovo"
     public static let version = (majorHi: 2, majorLo: 5, minorHi: 0, build: 1)
 

@@ -1136,7 +1136,7 @@ enum Diagnostics {
     /// Проверка не на словах: кладём в свою папку переводов пробный файл с
     /// кодом, которого у оригинала нет, объявляем о правке — и смотрим,
     /// увидел ли его каталог главного окна. Файл убирается сразу, каким бы ни
-    /// был ответ; папку `Language` рядом с VisioBible проверка не трогает
+    /// был ответ; папку `Language` рядом с прежней программой проверка не трогает
     /// вовсе — туда мы только смотрим.
     private static func languageProbe(_ state: AppState) -> [Check] {
         let area = "Інтерфейс"
@@ -2046,10 +2046,10 @@ enum Diagnostics {
                               + "resumeFromHiddenStates")]
     }
 
-    // MARK: - Автономність: програма не залежить від VisioBible
+    // MARK: - Автономність: програма не залежить від старої програми
 
     /// Програма стартує на новому комп'ютері з тим, що привезла в пакеті, і
-    /// нічого не читає з установленого VisioBible: ні його ini, ні модулів,
+    /// нічого не читає з установленого старої програми: ні його ini, ні модулів,
     /// ні бази нумерації. Майстер імпорту лишився ручним інструментом і
     /// переносить лише дані. Перевірки не копіюють і не пишуть нічого.
     private static func selfContainedSection(_ state: AppState) -> [Check] {
@@ -2069,7 +2069,7 @@ enum Diagnostics {
         ]
         paths = paths.filter { $0.1 != nil }
         let strayPaths = paths.filter { !isOwn($0.1 ?? "") }
-        checks.append(Check(area: area, name: "Робочі шляхи не ведуть у VisioBible",
+        checks.append(Check(area: area, name: "Робочі шляхи не ведуть у стару програму",
                             status: strayPaths.isEmpty ? .ok : .failed,
                             detail: strayPaths.isEmpty
                                 ? paths.map { "\($0.0): \($0.1 ?? "")" }.joined(separator: "; ")
@@ -2206,6 +2206,7 @@ enum Diagnostics {
         ("екран", { screenSection(state: $0) }),
         ("сумісність", { compatSection(state: $0) }),
         ("мережа", { networkSection(state: $0) }),
+        ("куплети", { songPartSweepSection(state: $0) }),
         ("автономність", { selfContainedSection($0) + library($0) + importWindowSection(state: $0) }),
         ("переклади", { translationsSection(state: $0) }),
         ("фонограма", { backingTrackSection(state: $0) }),

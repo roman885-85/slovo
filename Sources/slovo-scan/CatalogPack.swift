@@ -119,7 +119,7 @@ func runCatalogPack(app: URL, out: URL, base: String) -> Int32 {
     // Фони, шаблони, шрифти, веб-сторінки — одним zip-ом кожне.
     let bundles: [(String, ResourceItem.Kind, String, String)] = [
         ("BackGrounds", .backgrounds, "Фони слайдів", "картинки для підкладки слайда"),
-        ("Templates", .templates, "Шаблони слайдів VisioBible", "авторські схеми .sch з картинками"),
+        ("Templates", .templates, "Шаблони слайдів старої програми", "авторські схеми .sch з картинками"),
         ("Fonts", .fonts, "Шрифти", "шрифти для шаблонів"),
         ("RemoteAPI", .web, "Сторінки веб-слайдів", "сторінки для виводу в браузер"),
     ]

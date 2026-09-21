@@ -210,7 +210,7 @@ final class NativeSettingsSlideTab {
     private var songName: NativeForm.Group {
         NativeForm.Group(state.vb("GBSongName", OurWords.t("Название песни:")), [
             // Запасні підписи — формулювання автора з SettingsForm, а не
-            // свої: без установленої VisioBible видно саме їх.
+            // свої: без установленої старої програми видно саме їх.
             NativeForm.Row("", [NativeForm.check(state.vb("CBNumPP", "Номер по порядку"),
                                                  tie(\.songNumberPP),
                                                  hint: OurWords.t("Показывать в названии песни её номер по порядку в песеннике"))]),

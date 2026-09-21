@@ -64,8 +64,8 @@ public struct WebIndexModel: Sendable, Hashable {
 ///
 extension WebTemplate {
     /// Сторінки автора — його файли, ми їх не правимо; але в залі, коли сервер
-    /// мовчить, на екрані спливає «Connect to VisioBible WS-Server…».
-    /// Власник: «в веб-странице при отсутствии сигнала есть VisioBible».
+    /// мовчить, на екрані спливає «Connect to стара програма WS-Server…».
+    /// Власник: «в веб-странице при отсутствии сигнала есть надпись чужой программы».
     /// Підміняємо фрази на видачі — нашою мовою.
     public static func replaceAuthorPhrases(_ page: String) -> String {
         var result = page
@@ -99,7 +99,7 @@ extension WebTemplate {
     }
 }
 
-/// Свого рушія шаблонів у VisioBible немає — є кілька міток і один цикл
+/// Свого рушія шаблонів у старій програмі немає — є кілька міток і один цикл
 /// `{{#each WebSlides as WebSlide}}`. Рівно їх і підтримуємо: чужі фігурні
 /// дужки чіпати не можна, інакше поїде JavaScript сторінки, який сам
 /// порівнює текст з `'{'+'{SERVER_ADDR}'+'}'`.

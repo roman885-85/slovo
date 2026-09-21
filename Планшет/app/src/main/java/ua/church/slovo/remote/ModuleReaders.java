@@ -485,7 +485,7 @@ final class ModuleReaders {
         }
     }
 
-    // MARK: Пісенник VisioBible (.vbm)
+    // MARK: Пісенник у старому форматі (.vbm)
 
     /// Короткий заголовок і один zlib-потік; рядки всередині — UInt16 з числом
     /// символів і самі символи в UTF-16LE (див. SongBook.swift у програмі).

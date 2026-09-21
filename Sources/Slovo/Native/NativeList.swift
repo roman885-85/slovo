@@ -265,6 +265,36 @@ final class NativeList: NSView, NativeListChecking {
         return inner > 1 ? inner : max(1, scrollView.contentSize.width)
     }
 
+    /// Ширина живої клітинки й ширина стовпця, за якої її бачили.
+    private var seenCellWidth: CGFloat = 0
+    private var seenAtColumnWidth: CGFloat = 0
+
+    /// Ширина, по якій міряємо висоти, — ОДНА на весь список.
+    ///
+    /// Беремо її з живої клітинки: на macOS 15 вона дорівнює стовпцю, а на
+    /// macOS 11 виходила на 11–15 точок вужчою (смуга прокрутки там займає
+    /// місце завжди). Міряли по стовпцю — малювали по клітинці, і рядок діставав
+    /// зайву висоту; власник: «куплеты отображаются слишком широко, занимая
+    /// полезное место».
+    ///
+    /// Саме ОДНА: коли міряти кожен рядок по його власній клітинці, показані
+    /// рядки дають одну ширину, ще не показані — іншу, і список без кінця
+    /// скидає виміряне сам собі (пробував — ставало гірше). Щойно стовпець
+    /// змінив ширину, побачене більше не діє: міряємо по стовпцю, поки нова
+    /// клітинка не скаже правду.
+    private var drawWidth: CGFloat {
+        guard seenCellWidth > 1, abs(column.width - seenAtColumnWidth) < 0.5 else { return contentWidth }
+        return seenCellWidth
+    }
+
+    private func noteCellWidth(_ cell: NSView) {
+        guard cell.bounds.width > 1, column.width > 1 else { return }
+        guard abs(cell.bounds.width - seenCellWidth) > 0.5
+                || abs(column.width - seenAtColumnWidth) > 0.5 else { return }
+        seenCellWidth = cell.bounds.width
+        seenAtColumnWidth = column.width
+    }
+
     @objc private func visibleWidthChanged() {
         if pendingScroll != nil { needsLayout = true }
         guard abs(scrollView.contentSize.width - lastWidth) > 0.5 else { return }
@@ -685,6 +715,7 @@ final class NativeList: NSView, NativeListChecking {
 
     /// Наполнить клетку данными. Единственное место, где спрашивают источник.
     fileprivate func refresh(cell: NativeRowCell, tableRow row: Int) {
+        noteCellWidth(cell)
         guard let source else { cell.items = []; return }
         cell.style = style
         cell.fixedHeight = !isMeasured
@@ -765,7 +796,7 @@ final class NativeList: NSView, NativeListChecking {
     /// показалась, — на видимые два десятка строк это доли миллисекунды.
     fileprivate func noteRealHeight(ofTableRow row: Int) {
         guard case .measured = heights, row >= 0, row < measuredHeights.count, let source else { return }
-        let width = contentWidth
+        let width = drawWidth
         // Висота рядка залежить від ширини: те саме речення на вузькому місці
         // переноситься більше разів. Ширина міняється не лише коли міняється
         // наш власний розмір (тоді `layout` сам скидає виміряне), а й коли
@@ -783,7 +814,11 @@ final class NativeList: NSView, NativeListChecking {
             }
         }
         guard measuredHeights[row] == 0 else { return }
-        let layout = NativeRowLayout(row: ask(source, row), width: width, style: style, measure: true)
+        // Міряємо ТАК САМО, як малюємо: рядок «в одну лінію» міряти
+        // переносами не можна — він дістав би висоту на три рядки, а
+        // намалював би один, і під текстом лишилася б порожнеча.
+        let line = ask(source, row)
+        let layout = NativeRowLayout(row: line, width: width, style: style, measure: !line.singleLine)
         let real = max(1, layout.height)
         measuredHeights[row] = real
         // Спрашивать таблицу о её же строке, пока она эту строку строит,
@@ -831,15 +866,36 @@ final class NativeList: NSView, NativeListChecking {
     /// Ширини, за якими рахують і малюють рядок, — самоперевірці.
     /// Розійшлися вони — і текст ріжеться по нижньому краю: міряли по
     /// широкому, а малюють по вузькому (смуга прокрутки з'їдає точки).
+    /// Збудувати клітинки видимих рядків — самоперевірці.
+    ///
+    /// У вікні, якого ніхто не показує, AppKit рядків не будує: висота
+    /// лишається чорновою оцінкою, і перевірка бачила «порожнечу» там, де в
+    /// живому вікні її немає.
+    func materializeVisibleForCheck() {
+        let visible = table.rows(in: scrollView.contentView.bounds)
+        guard visible.length > 0 else { return }
+        for row in visible.location..<min(table.numberOfRows, visible.location + visible.length) {
+            _ = table.view(atColumn: 0, row: row, makeIfNecessary: true)
+        }
+    }
+
+    /// Як список рахує висоти — самоперевірці: «міряні» чи однакові.
+    var heightsKindForCheck: String {
+        switch heights {
+        case .measured(let estimate): return "міряні (оцінка \(Int(estimate)))"
+        case .uniform(let value): return "однакові по \(Int(value))"
+        }
+    }
+
     func widths(ofRow index: Int) -> (measured: CGFloat, cell: CGFloat) {
         let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false)?.bounds.width ?? 0
-        return (contentWidth, cell)
+        return (drawWidth, cell)
     }
 
     func fit(ofRow index: Int) -> (drawn: CGFloat, given: CGFloat, cut: Bool)? {
         guard let source, index >= 0, index < source.rowCount else { return nil }
         let row = ask(source, index)
-        let width = tileStep(width: contentWidth)
+        let width = tileStep(width: drawWidth)
 
         // Плитка: підпис і назва в один рядок кожен, кегль підганяється.
         if case .tiles(_, let itemHeight, _) = mode {

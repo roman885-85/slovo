@@ -289,7 +289,7 @@ public final class ResourceHub: @unchecked Sendable {
                         try fm.moveItem(at: file, to: destination.appendingPathComponent(file.lastPathComponent))
                     }
                 }
-                // Пісенник VisioBible — одразу у свій формат, старий двійник геть.
+                // Пісенник старої програми — одразу у свій формат, старий двійник геть.
                 if item.kind == .songbook {
                     let stem = destination.deletingPathExtension()
                     let own = stem.appendingPathExtension(SongBookJSON.pathExtension)

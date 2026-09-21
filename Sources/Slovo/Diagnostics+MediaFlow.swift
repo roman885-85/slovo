@@ -741,7 +741,7 @@ extension Diagnostics {
     /// Страницы автора отдаются без его имени: подмена фраз работает на выдаче.
     private static func servedPagesAreOurs(_ state: AppState) -> Check {
         let area = "Веб"
-        let name = "Сторінка автора віддається без «VisioBible» у написах"
+        let name = "Чужа сторінка віддається без назви старої програми в написах"
         guard state.web.isRunning, let port = state.web.status.httpPort else {
             return Check(area: area, name: name, status: .skipped, detail: "веб-сервер вимкнено")
         }

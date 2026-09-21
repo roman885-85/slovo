@@ -72,7 +72,7 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 let alert = NSAlert()
                 alert.messageText = OurWords.t("Песенники переведены в формат Слова")
-                alert.informativeText = OurWords.t("Песенники VisioBible (.vbm) в папке модулей переведены в свой формат .songbook. Оригиналы отложены в папку «Імпорт з VisioBible» рядом с папкой модулей — их можно удалить.")
+                alert.informativeText = OurWords.t("Песенники в старом формате .vbm переведены в свой формат .songbook. Оригиналы отложены в папку «Імпорт зі старої програми» рядом с папкой модулей — их можно удалить.")
                     + "\n\n" + note
                 alert.runModal()
             }

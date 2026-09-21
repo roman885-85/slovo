@@ -574,7 +574,7 @@ public enum SongBookImporter {
         return nil
     }
 
-    /// Слова-заголовки SoftProjector та їхня відповідність типам частин VisioBible.
+    /// Слова-заголовки SoftProjector та їхня відповідність типам частин старої програми.
     /// Порядок важливий: спершу довгі, інакше «Verš» не відрізнити від «Verse».
     private static let softProjectorHeadings: [(String, String)] = {
         let table: [(String, String)] = [
@@ -582,7 +582,7 @@ public enum SongBookImporter {
             ("Chorus", "Chorus"), ("Refrain", "Chorus"), ("Sbor", "Chorus"),
             ("Припев", "Chorus"), ("Приспів", "Chorus"), ("Refrén", "Chorus"),
             // «Слайд» і «Вставка» — вставний шматок між куплетами; найближче
-            // за змістом «Місток», окремого типу для них у VisioBible немає.
+            // за змістом «Місток», окремого типу для них у старій програмі немає.
             ("Slide", "Bridge"), ("Слайд", "Bridge"), ("Snímek", "Bridge"),
             ("Insert", "Bridge"), ("Вставка", "Bridge"), ("Einfügung", "Bridge"), ("Vložka", "Bridge"),
             ("Intro", "Intro"), ("Вступление", "Intro"), ("Einleitung", "Intro"), ("Úvod", "Intro"),

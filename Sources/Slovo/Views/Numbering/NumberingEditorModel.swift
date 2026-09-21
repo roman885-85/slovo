@@ -219,7 +219,7 @@ final class NumberingEditorModel: ObservableObject {
     }
 
     /// Окно открыли заново. База на диске могла измениться — и нашей же
-    /// кнопкой «Вернуть всё как у автора», и обновлением VisioBible; читаем
+    /// кнопкой «Вернуть всё как у автора», и обновлением прежней программы; читаем
     /// её ещё раз, а не показываем вчерашнее.
     func reopen() {
         guard !isDirty else { return }
@@ -284,7 +284,7 @@ final class NumberingEditorModel: ObservableObject {
     /// Читаем всегда её, а не оригинал: рядом с оригиналом работает программа
     /// владельца, и лезть в её папку даже на чтение мы права не имеем.
     /// Копию обновляем, когда у оригинала изменились размер или дата, — иначе
-    /// обновление VisioBible прошло бы мимо нас.
+    /// обновление прежней программы прошло бы мимо нас.
     nonisolated private static func refreshAuthorCopy(dataRoot: URL) -> (url: URL, refreshed: Bool) {
         let manager = FileManager.default
         let original = NumberingBase.originalURL(dataRoot: dataRoot)

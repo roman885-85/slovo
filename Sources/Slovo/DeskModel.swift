@@ -655,14 +655,14 @@ final class DeskModel: ObservableObject {
 
     // MARK: - Файлы плана
 
-    /// Планы храним в своей папке поддержки, а не рядом с VisioBible: чужую
+    /// Планы храним в своей папке поддержки, а не рядом с прежней программой: чужую
     /// установку программа не трогает на запись. Вид файла — тот же, что у
     /// оригинала (`<JournalFile>`), поэтому план ходит в обе стороны.
     static var plansFolder: URL {
         supportFolder.appendingPathComponent(ServicePlan.folderName, isDirectory: true)
     }
 
-    /// «При запуске VisioBible отображает последний использовавшийся вариант
+    /// «При запуске прежней программы отображает последний использовавшийся вариант
     /// плана» — у оригинала это `PlanDef.ini` рядом с программой.
     private static var autosaveURL: URL {
         supportFolder.appendingPathComponent(ServicePlan.defaultFileName)
@@ -670,7 +670,7 @@ final class DeskModel: ObservableObject {
     private static let lastPlanKey = "plan.lastFile"
 
     /// Папка планов оригинала — оттуда открываются планы, сделанные в
-    /// VisioBible. Только на чтение.
+    /// прежней программы. Только на чтение.
     private var originalPlansFolder: URL? {
         guard let dataRoot else { return nil }
         let folder = dataRoot.appendingPathComponent(ServicePlan.folderName, isDirectory: true)
@@ -754,7 +754,7 @@ final class DeskModel: ObservableObject {
         }
     }
 
-    /// «При запуске VisioBible отображает последний использовавшийся вариант
+    /// «При запуске прежней программы отображает последний использовавшийся вариант
     /// плана» — раздел 5.1.10. Держим и сам файл, и снимок несохранённой
     /// правки: план, собранный перед служением и не сохранённый в файл,
     /// пропадать при перезапуске не должен.

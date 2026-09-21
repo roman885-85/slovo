@@ -1,7 +1,7 @@
 import Foundation
 
 /// Частина пісні: куплет, приспів, місток… Назва частини задає і її колір
-/// у списку — відповідність лежить у `[SongChunksColors]` налаштувань VisioBible.
+/// у списку — відповідність лежить у `[SongChunksColors]` налаштувань старої програми.
 public struct SongPart: Sendable, Hashable, Identifiable {
     public var index: Int
     public var kind: String
@@ -60,7 +60,7 @@ public struct Song: Sendable, Hashable, Identifiable {
     }
 }
 
-/// Пісенник у форматі VisioBible (`.vbm`).
+/// Пісенник у форматі старої програми (`.vbm`).
 ///
 /// Файл — це короткий заголовок і один zlib-потік слідом. Усередині потоку все
 /// одноманітно: рядок це UInt16 з числом символів і самі символи в UTF-16LE.
@@ -125,7 +125,7 @@ public struct SongBook: Sendable {
         let data = try Data(contentsOf: url)
         let name = url.deletingPathExtension().lastPathComponent
         // Свій формат `.songbook` (JSON) — за розширенням або за першим
-        // знаком; `.vbm` VisioBible — далі, як і раніше.
+        // знаком; `.vbm` старої програми — далі, як і раніше.
         if SongBookJSON.isSongBookFile(url) || data.first == UInt8(ascii: "{") {
             self = try SongBookJSON.book(from: data, name: name)
             return

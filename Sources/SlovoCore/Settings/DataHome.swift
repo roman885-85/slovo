@@ -15,7 +15,7 @@ import Foundation
 /// `DataMigration` при запуску.
 ///
 /// Формат пісенників `.vbm` переводиться у свій `.songbook` просто в теці
-/// модулів, а оригінали відкладаються в «Імпорт з VisioBible» поруч із нею.
+/// модулів, а оригінали відкладаються в «Імпорт зі старої програми» поруч із нею.
 public enum DataHome {
 
     public static var folder: URL {
@@ -46,9 +46,9 @@ public enum DataHome {
     /// Кеші службової теки — не дані, їх не переносимо.
     public static let supportCaches: Set<String> = ["ndi", "ytdlp-build", "LanguageMerged"]
 
-    /// Залишки VisioBible: довідка `.chm`, мови `.lng`, стилі `.vsf`, знімки й
+    /// Залишки старої програми: довідка `.chm`, мови `.lng`, стилі `.vsf`, знімки й
     /// службові ini. Власник просив їх позбутися — з пакета старої збірки вони
-    /// в дім даних не їдуть. `Language` тут — саме тека VisioBible; наші
+    /// в дім даних не їдуть. `Language` тут — саме тека старої програми; наші
     /// виправлені переклади лежать у домі даних і лишаються на місці.
     public static let visioBibleLeftovers: Set<String> = [
         "Help", "Language", "Styles", "ScreenShots",
@@ -64,7 +64,7 @@ public enum DataHome {
     public static var modules: URL { folder.appendingPathComponent("Modules", isDirectory: true) }
 
     /// Куди відкладаються `.vbm`/`.vbi` після перетворення в `.songbook`.
-    public static let importArchiveName = "Імпорт з VisioBible"
+    public static let importArchiveName = "Імпорт зі старої програми"
 
     /// Теки, в яких пісенники вже перетворювали, — щоб не робити цього
     /// вдруге, коли в теці навмисно лишили `.vbm`.

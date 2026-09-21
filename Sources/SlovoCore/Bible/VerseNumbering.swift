@@ -40,7 +40,7 @@ public struct VerseSpan: Sendable, Hashable {
 
 /// Переведення адреси з однієї нумерації в іншу.
 ///
-/// Правила лежать у базі `inconsistencies.sqlite3` поруч із модулями VisioBible:
+/// Правила лежать у базі `inconsistencies.sqlite3` поруч із модулями старої програми:
 /// 338 рядків, за якими автор оригіналу лагодив розбіжності. База читається один
 /// раз і цілком розкладається в пам'яті, бо `translate` кличуть на
 /// кожне натискання стрілки — зазирати за правилом на диск у цьому місці
@@ -55,7 +55,7 @@ public final class VerseNumbering: @unchecked Sendable {
 
     // MARK: - Правило
 
-    /// Чотири види правил — рівно ті, що розрізняє сама VisioBible.
+    /// Чотири види правил — рівно ті, що розрізняє сама стара програма.
     ///
     /// Імена взято з її ж запитів (`FDQueryIncD`, `IncP`, `IncOC`, `IncOV`),
     /// сенс розібрано за ними ж:
@@ -282,7 +282,7 @@ public final class VerseNumbering: @unchecked Sendable {
     public var standards: [VerseNumberingStandard] {
         snapshot.standards.values.sorted { $0.id < $1.id }
     }
-    /// Призначення з таблиці `modules` самої VisioBible — як є, без правки.
+    /// Призначення з таблиці `modules` самої старої програми — як є, без правки.
     public var authorAssignments: [String: String] { snapshot.authorAssignments }
 
     public func standard(id: String) -> VerseNumberingStandard {
@@ -591,7 +591,7 @@ public final class VerseNumbering: @unchecked Sendable {
     // MARK: - Читання бази
 
     /// Де шукати базу правил. Порядок той самий, що в теки модулів: спершу
-    /// власний пакет, потім особиста тека. Установлений VisioBible не
+    /// власний пакет, потім особиста тека. Установлену стару програму не
     /// перевіряємо — програма везе базу з собою.
     public static func locateDatabase() -> URL? {
         let candidates = [
@@ -614,7 +614,7 @@ public final class VerseNumbering: @unchecked Sendable {
 
     /// Число з клітинки. У базі впереміш лежать NULL і порожній рядок — у
     /// чотирнадцяти рядків там саме `''`. Вважаємо їх одним «немає значення»:
-    /// сама VisioBible у запитах пише `= '' or is null` і різниці не робить.
+    /// сама стара програма у запитах пише `= '' or is null` і різниці не робить.
     private static func number(_ statement: OpaquePointer?, _ index: Int32) -> Int? {
         guard sqlite3_column_type(statement, index) != SQLITE_NULL,
               let raw = sqlite3_column_text(statement, index) else { return nil }
@@ -693,7 +693,7 @@ public final class VerseNumbering: @unchecked Sendable {
     }
 
     /// Назви стандартів словами. Потрібні й без бази: програма зобов'язана
-    /// відкриватися, коли VisioBible на цьому комп'ютері не встановлено.
+    /// відкриватися, коли старої програми на цьому комп'ютері не встановлено.
     static let builtInStandards: [String: VerseNumberingStandard] = [
         "ru": VerseNumberingStandard(id: "ru", title: OurWords.t("Восточный, по Септуагинте (Синодальный)")),
         "en": VerseNumberingStandard(id: "en", title: OurWords.t("Западный, масоретский (King James)")),
@@ -706,7 +706,7 @@ public final class VerseNumbering: @unchecked Sendable {
 
 extension VerseNumbering {
 
-    /// Діри в базі VisioBible, які видно за справжнім текстом модулів.
+    /// Діри в базі старої програми, які видно за справжнім текстом модулів.
     ///
     /// Базу автора ми не чіпаємо: вона чужа і лежить у чужій програмі. Рядки
     /// додаються поверх неї при читанні і поступаються дорогою, якщо автор

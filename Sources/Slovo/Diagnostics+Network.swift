@@ -97,11 +97,13 @@ extension Diagnostics {
         // сервер і слухає.
         let pages = state.modulesFolder.deletingLastPathComponent()
             .appendingPathComponent("RemoteAPI")
+        var isFolder: ObjCBool = false
+        let there = FileManager.default.fileExists(atPath: pages.path, isDirectory: &isFolder) && isFolder.boolValue
         let files = (try? FileManager.default.contentsOfDirectory(atPath: pages.path)) ?? []
         checks.append(Check(area: area, name: "Тека сторінок на місці",
-                            status: files.isEmpty ? .failed : .ok,
-                            detail: files.isEmpty ? "порожньо чи немає: \(pages.path)"
-                                : "\(files.count) файлів у \(pages.path)"))
+                            status: there ? .ok : (enabled ? .failed : .warning),
+                            detail: there ? "\(files.count) файлів у \(pages.path)"
+                                : "теки немає: \(pages.path) — сервер мусить завести її сам"))
         return checks
     }
 }

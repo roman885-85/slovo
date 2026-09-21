@@ -221,7 +221,7 @@ public final class SongBookEditor {
 
     /// Повертає, куди насправді лягло: пишемо у своєму форматі `.songbook`;
     /// на `.vbm` показали — файл ляже поруч як `.songbook`, а `.vbm`
-    /// лишиться для VisioBible.
+    /// лишиться для прежней программы.
     @discardableResult
     public func save(to destination: URL) throws -> URL {
         let target = try SongBookJSON.save(book, near: destination)

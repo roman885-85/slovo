@@ -1,6 +1,6 @@
 import Foundation
 
-/// Одне сполучення клавіш у записі VisioBible: `Ctrl+Alt+B`, `F5`, `Esc`.
+/// Одне сполучення клавіш у записі старої програми: `Ctrl+Alt+B`, `F5`, `Esc`.
 ///
 /// Зберігається розібраним, а не рядком, із двох причин: на вкладці
 /// «Гарячі клавіші» сполучення ловиться з клавіатури і його треба порівнювати з
@@ -44,7 +44,7 @@ public struct Hotkey: Codable, Hashable, Sendable {
     }
 
     /// Назад у запис оригіналу — порядок модифікаторів там завжди
-    /// Ctrl, Alt, Shift, і файл має лишитися читабельним для VisioBible.
+    /// Ctrl, Alt, Shift, і файл має лишитися читабельним для старої програми.
     public var text: String {
         var parts: [String] = []
         if control { parts.append("Ctrl") }
@@ -162,7 +162,7 @@ public struct HotkeySets: Codable, Sendable, Hashable {
             }
             guard !current.isEmpty, let eq = line.firstIndex(of: "=") else { continue }
             // Регістр ключів тут зберігаємо: назад у файл вони мають лягти
-            // так само, як їх пише VisioBible.
+            // так само, як їх пише стара програма.
             let key = String(line[line.startIndex..<eq]).trimmingCharacters(in: .whitespaces)
             let value = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
             sets[current]?[key] = value
@@ -219,7 +219,7 @@ public struct HotkeySets: Codable, Sendable, Hashable {
         return lines.joined(separator: "\n")
     }
 
-    /// Розкладка поставки VisioBible V2.5 — на випадок, коли файла поруч немає
+    /// Розкладка поставки старої програми V2.5 — на випадок, коли файла поруч немає
     /// і кнопці (35) «За умовчанням» нема на що спертися.
     public static let factoryDefault = HotkeySets(
         order: ["VB Version 2.4"],

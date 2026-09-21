@@ -27,11 +27,11 @@ extension Diagnostics {
                             status: readable && (chosen || !underBundle) ? .ok : .failed,
                             detail: folder.path + (chosen ? " (теку вибрала людина)" : "") + "; дім даних: " + DataHome.displayPath))
 
-        // 2. Залишків VisioBible у пакеті нема.
+        // 2. Залишків старої програми у пакеті нема.
         let app = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/app")
         let junk = ["Help", "Language", "Styles", "ScreenShots", "fonts_correct.ini", "hebrnew.ini", "shortnames.json"]
             .filter { fm.fileExists(atPath: app.appendingPathComponent($0).path) }
-        checks.append(Check(area: area, name: "У пакеті нема залишків VisioBible",
+        checks.append(Check(area: area, name: "У пакеті нема залишків старої програми",
                             status: junk.isEmpty ? .ok : .failed,
                             detail: junk.isEmpty ? "Help, Language, Styles, ScreenShots і службові ini відсутні"
                                 : "лишилося: " + junk.joined(separator: ", ")))
@@ -79,7 +79,7 @@ extension Diagnostics {
         wait(untilTrue: { state.songLibrary != nil && !state.isLoadingLibrary }, seconds: 10)
         guard let library = state.songLibrary,
               let sample = library.books.first(where: { library.book($0.id)?.songs.isEmpty == false }) else {
-            checks.append(Check(area: area, name: "Пісенники VisioBible переводяться у .songbook на місці", status: .skipped, detail: "нема пісенника для проби"))
+            checks.append(Check(area: area, name: "Пісенники .vbm переводяться у .songbook на місці", status: .skipped, detail: "нема пісенника для проби"))
             return checks
         }
         let temp = fm.temporaryDirectory.appendingPathComponent("slovo-дім-\(UUID().uuidString)")
@@ -111,7 +111,7 @@ extension Diagnostics {
         } catch {
             faults.append("\(error)")
         }
-        checks.append(Check(area: area, name: "Пісенники VisioBible переводяться у .songbook на місці",
+        checks.append(Check(area: area, name: "Пісенники .vbm переводяться у .songbook на місці",
                             status: faults.isEmpty ? .ok : .failed,
                             detail: (faults.isEmpty ? "" : faults.joined(separator: "; ") + ". ") + lines.joined(separator: "; ")))
         checks += migrationChecks(state: state)
@@ -147,7 +147,7 @@ extension Diagnostics {
             try Data("пакет".utf8).write(to: bundle.appendingPathComponent("BackGrounds/Black.jpg"))
             try Data("пакет".utf8).write(to: bundle.appendingPathComponent("BackGrounds/Cross.jpg"))
             try Data("умовчання".utf8).write(to: bundle.appendingPathComponent("Slovo.ini"))
-            // Залишок VisioBible у пакеті: мови `.lng`. Наші виправлені
+            // Залишок старої програми у пакеті: мови `.lng`. Наші виправлені
             // переклади лежать удома в теці з тим самим іменем — злити їх
             // не можна, у списку мов з'явилося б чуже.
             try fm.createDirectory(at: bundle.appendingPathComponent("Language"), withIntermediateDirectories: true)

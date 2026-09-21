@@ -85,7 +85,7 @@ public struct SchemeLibrary: Sendable {
         self.failures = failures
     }
 
-    /// `dataRoot` — тека застосунку VisioBible, та сама, що в `Modules`.
+    /// `dataRoot` — тека застосунку прежней программы, та сама, що в `Modules`.
     public init(dataRoot: URL, designHeight: Double = SchemeLibrary.defaultDesignHeight) {
         self.init(templatesRoot: dataRoot.appendingPathComponent("Templates", isDirectory: true),
                   designHeight: designHeight)

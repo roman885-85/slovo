@@ -3,7 +3,7 @@ import Network
 
 /// HTTP-сервер веб-слайдів: віддає теку `RemoteAPI` як є.
 ///
-/// Свого HTML ми не пишемо — сторінки вже написав автор VisioBible, і лежать вони
+/// Свого HTML ми не пишемо — сторінки вже написав автор старої програми, і лежать вони
 /// поруч із модулями. Задача сервера рівно одна: віддати їх без правок, підставивши
 /// адресу цього комп'ютера, щоб сторінка знайшла WebSocket, і зібрати
 /// стартовий список за `index.tpl`.
@@ -34,7 +34,7 @@ public final class HTTPStaticServer {
         /// Шрифти нинішнього шаблону — тим самим закритим списком.
         public var fonts: WebSlideImages?
         /// Значок вкладки (PNG). У теці авторських сторінок лежить
-        /// `favicon.ico` від VisioBible, і браузер брав саме його — у вкладці
+        /// `favicon.ico` від старої програми, і браузер брав саме його — у вкладці
         /// з нашим слайдом світився чужий значок (власник: «в веб слайдах
         /// фавикон от visiobible остался»). Свій значок сильніший за файл на
         /// диску: сторінки тут наші.
@@ -96,11 +96,20 @@ public final class HTTPStaticServer {
                 completion(.failure(.network(OurWords.t("HTTP-сервер уже запущен"))))
                 return
             }
+            // Теки сторінок може не бути зовсім — і це НЕ привід не вмикатися.
+            //
+            // Власник: «не работают веб слайды, даже локально», «смена порта
+            // не сработала». На його машині тека `RemoteAPI` не з'явилася
+            // ніколи (вона приходила з даними старої програми, а він ставив
+            // «Слово» начисто), і сервер мовчки не піднімався: канал 8100
+            // працював, а сторінок не було. Свої сторінки — слайд і
+            // перелік — ми малюємо кодом, файли для них не потрібні. Тому
+            // теку просто заводимо й слухаємо далі.
             var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: configuration.root.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                completion(.failure(.missingContentFolder(configuration.root.path)))
-                return
+            if !FileManager.default.fileExists(atPath: configuration.root.path, isDirectory: &isDirectory)
+                || !isDirectory.boolValue {
+                try? FileManager.default.createDirectory(at: configuration.root,
+                                                         withIntermediateDirectories: true)
             }
 
             let options = configuration.listener
@@ -292,7 +301,7 @@ public final class HTTPStaticServer {
         let path = String(request.path.split(separator: "?", maxSplits: 1,
                                              omittingEmptySubsequences: false)[0]).lowercased()
 
-        // Значок вкладки: свій, а не той, що лишився в теці від VisioBible.
+        // Значок вкладки: свій, а не той, що лишився в теці від старої програми.
         if path == "/favicon.ico" || path == "/favicon.png" || path == "/apple-touch-icon.png"
             || path == "/apple-touch-icon-precomposed.png" {
             if let icon = configuration.favicon, !icon.isEmpty {
@@ -428,7 +437,7 @@ public final class HTTPStaticServer {
         let type = Self.contentType(for: url)
         if Self.isMarkup(url) {
             // Сторінки автора бувають і в UTF-8, і у Windows-1251 — декодуємо
-            // тим самим способом, що й решту файлів VisioBible.
+            // тим самим способом, що й решту файлів старої програми.
             let text = CodePage.decode(data, declared: String(data: data, encoding: .utf8) != nil ? .utf8 : nil)
             var page = WebTemplate.renderPage(text, model: configuration.index, serverAddress: host)
             page = WebTemplate.replaceAuthorPhrases(page)
@@ -446,6 +455,17 @@ public final class HTTPStaticServer {
         // Своя сторінка стоїть у списку першою: по неї приходять найчастіше —
         // вона одна показує те саме, що й проектор.
         var model = configuration.index
+        // У переліку — лише те, що програма справді віддасть. У налаштуваннях
+        // довго живуть імена чужих сторінок, а самих файлів на чистій машині
+        // немає: посилання вели в 404. Свої сторінки малюються кодом — вони
+        // лишаються завжди, решта — тільки якщо файл на місці.
+        let mineNames = Set([WebSlovoSlidePage.fileName, "slovo-slide-overlay.html"])
+        model.entries = model.entries.filter { entry in
+            if mineNames.contains(entry.name) { return true }
+            let short = entry.name.replacingOccurrences(of: ".html", with: "")
+                .replacingOccurrences(of: ".htm", with: "")
+            return resolve(path: "/" + entry.name) != nil || resolve(path: "/" + short.lowercased()) != nil
+        }
         let mine = WebIndexModel.Entry(name: WebSlovoSlidePage.fileName,
                                        description: OurWords.t("Слово: как на проекторе — объекты шаблона, фон и шрифты"))
         if !model.entries.contains(where: { $0.name == mine.name }) {

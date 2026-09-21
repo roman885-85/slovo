@@ -444,7 +444,7 @@ final class AppState: ObservableObject {
     var isTextBlank: Bool { isTextHidden }
 
     init() {
-        // Свій дім даних: чужий корінь (пакет програми, VisioBible)
+        // Свій дім даних: чужий корінь (пакет програми, стара програма)
         // переноситься сюди один раз — див. `DataHome`.
         self.modulesFolder = Self.settleModulesFolder()
         DataPaths.roots = [modulesFolder.deletingLastPathComponent()]
@@ -503,13 +503,13 @@ final class AppState: ObservableObject {
     /// Насамперед — усередині власного пакета: повна збірка везе модулі,
     /// шаблони, фони та шрифти з собою, і її можна перенести на комп'ютер,
     /// де нічого більше не встановлено. Потім особиста тека користувача, куди
-    /// лягають додані вручну модулі. Установлений VisioBible не перевіряємо:
+    /// лягають додані вручну модулі. Установлену стару програму не перевіряємо:
     /// програма від нього не залежить.
     /// Тека модулів на старті: `~/Library/Application Support/Slovo/Modules`
     /// (дані — поза пакетом програми); вибрана вручну — збережена. Вибір, що
     /// вказує в пакет програми (так пам'ятали старі збірки), не діє: дані
     /// звідти переїхали.
-    /// Пісенники VisioBible в теці один раз переводяться у свій `.songbook`.
+    /// Пісенники старої програми в теці один раз переводяться у свій `.songbook`.
     static func settleModulesFolder() -> URL {
         let fm = FileManager.default
         let folder: URL
@@ -887,7 +887,7 @@ final class AppState: ObservableObject {
 
     private func loadBackgrounds() {
         // Фоны лежат рядом с модулями, на уровень выше — так их раскладывает
-        // и VisioBible, и наш собственный каталог.
+        // и прежняя программа, и наш собственный каталог.
         let folder = modulesFolder.deletingLastPathComponent().appendingPathComponent("BackGrounds")
         let allowed: Set<String> = ["jpg", "jpeg", "png", "bmp", "tif", "tiff", "heic"]
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
@@ -907,7 +907,7 @@ final class AppState: ObservableObject {
             originals: dataRoot.appendingPathComponent("Language"))
         let catalog = LanguageCatalog(directory: directory)
         guard !catalog.languages.isEmpty else {
-            // Файлів перекладу VisioBible немає (чиста установка «Слова»): мова —
+            // Файлів перекладу старої програми немає (чиста установка «Слова»): мова —
             // з убудованих, українська за умовчанням. Раніше тут був просто вихід,
             // наш словник лишався російським, а з ним і весь інтерфейс.
             let code = Defaults.languageCode ?? Self.systemDefaultLanguage()
@@ -947,7 +947,7 @@ final class AppState: ObservableObject {
         return "en"
     }
 
-    /// Мови, які «Слово» знає саме, без файлів перекладу VisioBible: підписи
+    /// Мови, які «Слово» знає саме, без файлів перекладу старої програми: підписи
     /// автора йдуть через наш словник так само, як і наші власні.
     static let builtInLanguages: [(code: String, name: String)] = [
         ("uk", "Українська"), ("ru", "Русский"), ("en", "English"), ("de", "Deutsch"),
@@ -985,7 +985,7 @@ final class AppState: ObservableObject {
 
     private func bumpMenu() { menuRevision += 1 }
 
-    /// Подпись элемента интерфейса из файла перевода VisioBible.
+    /// Подпись элемента интерфейса из файла перевода прежней программы.
     func text(_ key: String, form: String = "MainForm", default fallback: String) -> String {
         // Чего нет в файле перевода — берётся запасная русская подпись. Она
         // идёт через наш словарь: иначе в украинском интерфейсе оставались
@@ -1918,7 +1918,7 @@ final class AppState: ObservableObject {
             }
         }
         // Значок вкладки — наш: у теці авторських сторінок лежить favicon.ico
-        // від VisioBible, і браузер показував у вкладці зі слайдом чужий знак.
+        // від старої програми, і браузер показував у вкладці зі слайдом чужий знак.
         var webOptions = WebOutputServer.Options()
         webOptions.favicon = Self.webFavicon
         web.start(settings: outputs.web, dataRoot: modulesFolder.deletingLastPathComponent(),

@@ -10,8 +10,8 @@ guard arguments.count > 1 else {
     exit(2)
 }
 
-// Пісенники VisioBible у теці модулів → свій .songbook (оригінали — в
-// «Імпорт з VisioBible» поруч). Кличе deploy.sh до підпису пакета, щоб
+// Пісенники старої програми у теці модулів → свій .songbook (оригінали — в
+// «Імпорт зі старої програми» поруч). Кличе deploy.sh до підпису пакета, щоб
 // програмі не доводилося писати в підписаний пакет на першому запуску.
 if arguments[1] == "--songbooks", arguments.count >= 3 {
     let modules = URL(fileURLWithPath: arguments[2])

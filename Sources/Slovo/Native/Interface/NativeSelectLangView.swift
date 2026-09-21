@@ -40,7 +40,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
 
         // Все переводы: и оригинальные, и свои, сохранённые в окне 7.1.
         languages = InterfaceLanguageStore.languages(originals: originals).map { ($0.code, $0.displayName) }
-        // Убудовані мови є завжди — і там, де файлів перекладу VisioBible немає.
+        // Убудовані мови є завжди — і там, де файлів перекладу старої програми немає.
         let known = Set(languages.map { $0.code.lowercased() })
         for builtIn in AppState.builtInLanguages where !known.contains(builtIn.code) {
             languages.append((builtIn.code, builtIn.name))
@@ -134,7 +134,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
         let chosen = languages[row].code
 
         // Свой перевод (7.1 (3)) лежит в папке «Слова», а каталог языков
-        // главного окна собран из папки VisioBible. Пока в `AppState` нет
+        // главного окна собран из папки прежней программы. Пока в `AppState` нет
         // вставки на склеенную папку, `setLanguage` для такого кода молча
         // ничего не делает — и человек остаётся при старом языке, не понимая
         // почему. Проверяем результат и говорим прямо.
@@ -150,7 +150,7 @@ final class NativeSelectLangView: NSView, NSTableViewDataSource, NSTableViewDele
                                        default: "Выберите язык интерфейса программы")
         alert.informativeText = """
             Перевод «\(languages[row].name)» сохранён в папке «Слова», но главное \
-            окно читает переводы из папки VisioBible и этого файла пока не видит.
+            окно читает переводы из папки прежней программы и этого файла пока не видит.
 
             Файл лежит здесь:
             \(InterfaceLanguageStore.fileURL(code: chosen).path)

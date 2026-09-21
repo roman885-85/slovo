@@ -198,7 +198,7 @@ final class NativeImportWizard: NSView {
 
     /// «Крок 2 з 6» під заголовком сторінки.
     ///
-    /// Тут стояли номери підрозділів посібника VisioBible («4.2.1»): людині
+    /// Тут стояли номери підрозділів посібника старої програми («4.2.1»): людині
     /// без того посібника вони нічого не кажуть.
     private var pageStep: String {
         let pages = ImportWizardModel.Page.allCases

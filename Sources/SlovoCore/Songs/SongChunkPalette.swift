@@ -100,7 +100,7 @@ public struct SongChunkPalette: Sendable, Hashable {
         self.init(chunks: chunks.isEmpty ? Self.factoryDefault.chunks : chunks)
     }
 
-    /// Значення з поставки VisioBible — на випадок, коли конфігу поруч немає.
+    /// Значення з поставки старої програми — на випадок, коли конфігу поруч немає.
     public static let factoryDefault = SongChunkPalette(chunks: [
         Chunk(key: "Verse", color: SongChunkPalette.color(tColor: 16747383),
               names: ["Куплет", "Стих", "Zwrotka", "Couplet", "Copla", "Vers", "Estrofe", "Versetul", "Verš", "Kuplet", "פסוק"]),

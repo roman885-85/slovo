@@ -28,7 +28,7 @@ extension Diagnostics {
     /// бере свій файл, а не двійник `.vbm`; План знаходить збірник за старим
     /// ім'ям; планшет отримує `.vbm`, зібраний на льоту; редактор пише
     /// `.songbook` поруч із `.vbm`; майстер перетворює `.vbm` у `.songbook`.
-    /// Власник: «формат vbi/vbm — VisioBible, для нас потрібен свій, але щоб
+    /// Власник: «формат vbi/vbm — стара програма, для нас потрібен свій, але щоб
     /// не поламати імпорт».
     private static func nativeSongFormat(_ state: AppState) -> Check {
         let name = "Пісенник у своєму форматі .songbook: без втрат, з імпортом .vbm і експортом для планшета"
@@ -70,7 +70,7 @@ extension Diagnostics {
             if small.entry(fileName: source.id + ".vbm")?.id != source.id {
                 faults.append("за ім'ям «\(source.id).vbm» збірник не знайшовся")
             }
-            // 5. Експорт у .vbm — планшету й VisioBible.
+            // 5. Експорт у .vbm — планшету й старій програмі.
             let exported = try SongBookWriter.data(for: back)
             let reparsed = try SongBook(data: exported, name: source.id)
             if reparsed.songs.count != book.songs.count { faults.append("експорт у .vbm дав \(reparsed.songs.count) пісень") }
