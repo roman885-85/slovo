@@ -2206,7 +2206,7 @@ enum Diagnostics {
         ("екран", { screenSection(state: $0) }),
         ("сумісність", { compatSection(state: $0) }),
         ("мережа", { networkSection(state: $0) }),
-        ("куплети", { songPartSweepSection(state: $0) }),
+        ("куплети", { livePartHeightsSection(state: $0) + songPartSweepSection(state: $0) }),
         ("автономність", { selfContainedSection($0) + library($0) + importWindowSection(state: $0) }),
         ("переклади", { translationsSection(state: $0) }),
         ("фонограма", { backingTrackSection(state: $0) }),

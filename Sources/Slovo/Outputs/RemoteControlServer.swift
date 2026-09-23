@@ -685,6 +685,13 @@ final class RemoteControlServer {
         case "blank": state.showBlankSlide()
         case "next-chapter": state.stepChapter(by: 1, live: false)
         case "prev-chapter": state.stepChapter(by: -1, live: false)
+        case "backing-drag":
+            // Посунути межу панелі фонограм — те саме, що робить рука. Треба
+            // для розбору: саме після перетягування куплети ставали вищі за
+            // свій текст, а повторити це без живого вікна не виходило.
+            let delta = (body["delta"] as? NSNumber)?.doubleValue ?? 80
+            NativeSongsWorkspace.shared.rootForCheck?.dragBackingForCheck(by: CGFloat(delta))
+            answer["delta"] = delta
         case "window-snapshot":
             // Знімок ВІКНА програми у файл — щоб бачити те саме, що людина,
             // коли зняти екран не дає система (віддалений вхід).
@@ -695,6 +702,29 @@ final class RemoteControlServer {
             } else {
                 answer["snapshot"] = ""
             }
+            // І що список думає про висоти своїх рядків — просто з живого
+            // вікна: саме тут куплети стоять утричі вищі за свій текст, а в
+            // перевірці, яка будує своє вікно, усе рівно.
+            let list: NativeList? = NativeSongsWorkspace.shared.partList
+            let kept = list?.measuredCountForCheck ?? (kept: -1, rows: -1)
+            var rows: [[String: Any]] = []
+            for row in (list?.visibleRows ?? 0..<0) {
+                guard let fit = list?.fit(ofRow: row) else { continue }
+                rows.append([
+                    "рядок": row + 1,
+                    "дано": Int(fit.given),
+                    "треба": Int(fit.drawn),
+                    "запам'ятовано": Int(list?.measuredHeightForCheck(ofRow: row) ?? -1),
+                    "обрізано": fit.cut,
+                ])
+            }
+            answer["куплети"] = [
+                "висот": kept.kept,
+                "рядків": kept.rows,
+                "вигляд": list?.heightsKindForCheck ?? "списку немає",
+                "ширини": [Int(list?.widths(ofRow: 0).measured ?? 0), Int(list?.widths(ofRow: 0).cell ?? 0)],
+                "видимі": rows,
+            ]
         case let name where name.hasPrefix("backing-"):
             if let trouble = backingCommand(name, body: body, index: index, text: text,
                                             state: state, answer: &answer) {

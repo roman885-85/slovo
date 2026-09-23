@@ -14,6 +14,66 @@ import SlovoCore
 /// порожнеча (рядок «широкий»), `cut` — обрізаний текст.
 extension Diagnostics {
 
+    /// Куплети в ЖИВОМУ вікні програми — тому самому, що бачить людина.
+    ///
+    /// Власник прислав знімок свого вікна: у кожного куплета один рядок
+    /// тексту, а рядок заввишки 85 точок — під текстом порожнеча. Усі
+    /// попередні перевірки цього не бачили, бо будували СВОЄ вікно й свою
+    /// робочу область. Тут ми не будуємо нічого: беремо те, що стоїть у
+    /// головному вікні, і міряємо його рядки.
+    @MainActor
+    static func livePartHeightsSection(state: AppState) -> [Check] {
+        let area = "Пісні у вікні AppKit"
+        let name = "Куплети в живому вікні стоять за текстом"
+        let songs = NativeSongsWorkspace.shared
+        guard let window = NativeMainWindowController.shared.window,
+              songs.workspaceView != nil else {
+            return [Check(area: area, name: name, status: .skipped, detail: "головного вікна немає")]
+        }
+        state.mode = .songs
+        wait(untilTrue: { false }, seconds: 0.4)
+        guard let entry = state.songBooks.first(where: { $0.id.contains("pv3055") }) ?? state.songBooks.first else {
+            return [Check(area: area, name: name, status: .skipped, detail: "немає збірників")]
+        }
+        songs.selectBook(id: entry.id)
+        for _ in 0..<40 where !songs.songIndexIsReady {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        // Пісня з кількома довгими куплетами — на такій порожнеча видніша.
+        if let book = state.songLibrary?.book(entry.id) {
+            let heavy = book.songs.max { left, right in
+                left.parts.reduce(0) { $0 + $1.text.count } < right.parts.reduce(0) { $0 + $1.text.count }
+            }
+            if let heavy { songs.reveal(song: heavy.index, part: nil, live: false) }
+        }
+        wait(untilTrue: { false }, seconds: 0.8)
+        window.displayIfNeeded()
+        wait(untilTrue: { false }, seconds: 0.5)
+
+        let kept = songs.partList.measuredCountForCheck
+        var waste: CGFloat = 0
+        var worst = ""
+        var rows = 0
+        for row in songs.partList.visibleRows {
+            guard let fit = songs.partList.fit(ofRow: row) else { continue }
+            rows += 1
+            let extra = fit.given - fit.drawn
+            if extra > waste {
+                waste = extra
+                worst = "частина \(row + 1): дано \(Int(fit.given)), треба \(Int(fit.drawn)), "
+                    + "запам'ятовано \(Int(songs.partList.measuredHeightForCheck(ofRow: row)))"
+            }
+        }
+        NativeTrace.snapshot(songs.partList, to: "slovo-куплети-живе-вікно.png")
+        return [Check(area: area, name: name,
+                      status: rows > 0 && waste <= 24 ? .ok : .failed,
+                      detail: "рядків видно \(rows), висот \(kept.kept) на \(kept.rows) рядків, "
+                          + "вигляд \(songs.partList.heightsKindForCheck); "
+                          + "найбільша порожнеча \(Int(waste)) тчк"
+                          + (worst.isEmpty ? "" : " — \(worst)")
+                          + "; знімок slovo-куплети-живе-вікно.png")]
+    }
+
     @MainActor
     static func songPartSweepSection(state: AppState) -> [Check] {
         let area = "Пісні у вікні AppKit"
