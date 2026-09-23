@@ -493,6 +493,14 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
 
     /// 60 кадрів на секунду, поки грає або поки рівень ще не опустився:
     /// власник просив індикатор «более мягким и плавным».
+    /// Розбудити індикатор — самоперевірці.
+    ///
+    /// Хід кадрів зупиняється, коли панель виймають з вікна (а перевірки
+    /// саме так і роблять, коли будують своє). Після цього рівень стоїть на
+    /// дні, і перевірка пік-метра падала не через програму, а через порядок
+    /// прогону.
+    func startMeterForCheck() { startAnimation() }
+
     private func startAnimation() {
         guard animation == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in

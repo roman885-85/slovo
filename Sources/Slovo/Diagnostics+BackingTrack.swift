@@ -485,6 +485,7 @@ extension Diagnostics {
         // друге було саме по собі, не було видно, де губиться рівень —
         // у звуці чи в смузі; тепер це видно з одного рядка звіту.
         backing.volume = 0.8
+        bar.startMeterForCheck()
         _ = backing.levels.take()
         backing.levels.resetLoudestForCheck()
         wait(untilTrue: { (bar.meter.decibelsForCheck.max() ?? -100) > -40 }, seconds: 3)
@@ -647,6 +648,7 @@ extension Diagnostics {
         wait(untilTrue: { backing.url == steady }, seconds: 2)
         backing.volume = 0.8
         backing.play()
+        bar.startMeterForCheck()
         wait(untilTrue: { backing.isPlaying }, seconds: 1)
         // Звук іде не з першої миті, а м'який підйом займає частку секунди:
         // міряємо рівність, коли смуга вже піднялася, а не сам підйом.

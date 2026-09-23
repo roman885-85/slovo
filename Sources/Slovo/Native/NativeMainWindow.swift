@@ -246,16 +246,25 @@ final class NativeBottomHeightGrip: NSView {
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2, let onReset { onReset(); last = nil; return }
-        last = convert(event.locationInWindow, from: nil).y
+        last = event.locationInWindow.y
         onBegin?()
     }
 
     override func mouseDragged(with event: NSEvent) {
-        let now = convert(event.locationInWindow, from: nil).y
+        // Рахуємо ПРИРІСТ у координатах ВІКНА, а не зсув від точки натиску в
+        // координатах самої межі.
+        //
+        // Межа їде разом із панеллю, і зсув, міряний у її власних
+        // координатах, кожного разу — це відстань від початку тягання. Хто
+        // складає такі зсуви, рахує один і той самий рух багато разів:
+        // панель розкривалася майже на весь екран замість мінімальної висоти
+        // (власник: «распахивание происходит почти на максимальный размер»).
+        // Приріст у вікні від цього не залежить зовсім.
+        let now = event.locationInWindow.y
         guard let was = last else { last = now; return }
-        // Вид рухається разом із межею, тому рахуємо зсув у координатах вікна.
-        let delta = now - was
+        let delta = was - now            // «вниз» — додатне, як і було
         guard abs(delta) >= 1 else { return }
+        last = now
         onDrag?(delta)
     }
 
