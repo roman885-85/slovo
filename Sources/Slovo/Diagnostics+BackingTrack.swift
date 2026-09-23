@@ -277,6 +277,42 @@ extension Diagnostics {
             faults.append(String(format: "нижня межа не повернула панель: %.0f", bar.frame.height))
         }
         if bar.list.isHidden { faults.append("після повернення список не з'явився") }
+        // Тягнемо ДРІБНИМИ рухами, як рука: миша йде по кілька точок за
+        // подію. Власник: «тяну, а разворачивание происходит, когда мышка
+        // уже высоко за пределами границы, и то не с первого раза» — саме
+        // тому, що дрібні зсуви губилися.
+        root.heightGrip.onDrag?(5000)          // спершу в смужку
+        settleBackingGlide(root)
+        root.heightGrip.onBegin?()
+        var steps = 0
+        while steps < 12, bar.frame.height <= NativeBackingTrackBar.collapsedHeight + 1 {
+            root.heightGrip.onDrag?(-5)        // вгору по п'ять точок
+            steps += 1
+        }
+        root.heightGrip.onEnd?()
+        settleBackingGlide(root)
+        if bar.frame.height < NativeBackingTrackBar.minimumHeight - 1 {
+            faults.append(String(format: "дрібними рухами панель не розгорнулася: %.0f після %d кроків",
+                                 bar.frame.height, steps))
+        } else if steps > 8 {
+            faults.append("щоб розгорнути, довелося проїхати \(steps * 5) точок")
+        }
+        // І назад — так само дрібно.
+        root.heightGrip.onBegin?()
+        var back = 0
+        while back < 12, bar.frame.height > NativeBackingTrackBar.collapsedHeight + 1 {
+            root.heightGrip.onDrag?(5)
+            back += 1
+        }
+        root.heightGrip.onEnd?()
+        settleBackingGlide(root)
+        if bar.frame.height > NativeBackingTrackBar.collapsedHeight + 1 {
+            faults.append(String(format: "дрібними рухами панель не згорнулася: %.0f після %d кроків",
+                                 bar.frame.height, back))
+        }
+        root.bottomGrip.onDrag?(300)
+        settleBackingGlide(root)
+
         root.heightGrip.onReset?()
         settleBackingGlide(root)
         if defaults.object(forKey: "backingPanelHeight") != nil || abs(bar.frame.height - barBefore) > 1 {

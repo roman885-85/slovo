@@ -1006,6 +1006,10 @@ final class NativeSongsRootView: NSView {
         bottomGrip.toolTip = heightGrip.toolTip
         heightGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: -delta) }
         bottomGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: delta) }
+        heightGrip.onBegin = { [weak self] in self?.beginBackingDrag() }
+        bottomGrip.onBegin = { [weak self] in self?.beginBackingDrag() }
+        heightGrip.onEnd = { [weak self] in self?.endBackingDrag() }
+        bottomGrip.onEnd = { [weak self] in self?.endBackingDrag() }
         heightGrip.onReset = { [weak self] in
             guard let self else { return }
             let was = self.backing.frame.height
@@ -1026,22 +1030,46 @@ final class NativeSongsRootView: NSView {
     /// смужка в один ряд. Проміжні висоти лишали б половину панелі порожньою,
     /// тому висота прилипає: нижче за повну — стає смужкою, вище — повною.
     private func resizeBacking(by delta: CGFloat) {
-        let was = backing.frame.height
-        let wanted = was + delta
-        let collapsing = wanted < NativeBackingTrackBar.minimumHeight - 24
-        let snapped = collapsing
-            ? NativeBackingTrackBar.collapsedHeight
-            : max(NativeBackingTrackBar.minimumHeight, wanted)
+        // Рахунок ведемо від СВОГО числа, а не від висоти панелі.
+        //
+        // Панель «прилипає» до двох станів, і поки поріг не взято, висота не
+        // міняється. Якщо додавати зсув до неї, кожен рух руки губиться —
+        // спрацьовував лише один різкий ривок, та й той не завжди. Власник:
+        // «тяну, а разворачивание происходит, когда мышка уже высоко за
+        // пределами границы, и то не с первого раза». Тепер зсуви
+        // складаються: рука веде своє число, а панель прилипає до
+        // найближчого стану.
+        // Відштовхуємося від ЦІЛІ, а не від кадру: поки панель плавно їде,
+        // її висота проміжна, і рішення «смужка чи повна» стрибало б туди-сюди.
+        let goal = backingTarget ?? backingHeight
+        let base = handHeight ?? goal
+        let raw = min(maximumBackingHeight + 120, max(0, base + delta))
+        handHeight = raw
+        let wasCollapsed = goal <= NativeBackingTrackBar.collapsedHeight + 1
+        // Пороги невеликі й однакові в обидва боки: 24 точки руху — і панель
+        // міняє стан. Раніше з ростом від смужки треба було проїхати 112.
+        let snapped: CGFloat
+        if wasCollapsed {
+            snapped = raw > NativeBackingTrackBar.collapsedHeight + 24
+                ? max(NativeBackingTrackBar.minimumHeight, raw)
+                : NativeBackingTrackBar.collapsedHeight
+        } else {
+            snapped = raw < NativeBackingTrackBar.minimumHeight - 24
+                ? NativeBackingTrackBar.collapsedHeight
+                : max(NativeBackingTrackBar.minimumHeight, raw)
+        }
         NativeWidths.set(Self.heightKey, snapped,
                          min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight)
-        // Панель «прилипає»: або смужка, або повна. Цей стрибок і робимо
-        // плавним — власник: «сделай схлопывание и развертывание блока
-        // минусовок плавным с анимацией». Звичайне перетягування за межу
-        // плавності не отримує: воно має йти за рукою, без відставання.
-        let jumped = abs(snapped - was) > 24
-            && (snapped == NativeBackingTrackBar.collapsedHeight
-                || was <= NativeBackingTrackBar.collapsedHeight + 1)
-        if jumped {
+        // Плавним робимо лише перехід між станами: смужка ↔ повна панель.
+        // Звичайне тягання в межах повного вигляду йде за рукою, без
+        // відставання.
+        let was = backing.frame.height
+        let changedState = (snapped == NativeBackingTrackBar.collapsedHeight) != wasCollapsed
+        backingTarget = snapped
+        if changedState {
+            // Рука вже «перетягнула» панель у новий стан — далі число руки
+            // веде від нього, інакше зворотний рух знову довелося б копити.
+            handHeight = snapped
             glideBacking(from: was, to: snapped)
         } else {
             stopBackingGlide()
@@ -1049,6 +1077,22 @@ final class NativeSongsRootView: NSView {
             layoutSubtreeIfNeeded()
         }
     }
+
+    /// Число, яке веде рука під час тягання, — своє, не прив'язане до
+    /// «прилиплої» висоти панелі.
+    private var handHeight: CGFloat?
+
+    /// Куди панель їде (або вже приїхала): смужка чи повна висота.
+    private var backingTarget: CGFloat?
+
+    /// Тягання почалося чи скінчилося: рахунок руки починаємо з нуля.
+    func beginBackingDrag() {
+        // Плавний хід не зупиняємо: рука може вести далі, поки панель їде,
+        // а рахунок піде від цілі.
+        handHeight = backingTarget ?? backingHeight
+    }
+
+    func endBackingDrag() { handHeight = nil }
 
     /// Плавний перехід панелі між смужкою й повним виглядом.
     ///

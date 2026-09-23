@@ -214,6 +214,13 @@ final class NativeBottomHeightGrip: NSView {
     var onDrag: ((CGFloat) -> Void)?
     /// Подвійне клацання: повернути висоту автоматичну (де це має сенс).
     var onReset: (() -> Void)?
+    /// Початок і кінець тягання — щоб той, хто слухає, міг вести свій
+    /// рахунок від однієї точки. Без цього кожен зсув доводиться додавати
+    /// до ПОТОЧНОГО розміру, а коли розмір «прилипає» й не міняється, рух
+    /// руки просто губиться: власник — «тяну, а разворачивание происходит,
+    /// когда мышка уже высоко за пределами границы, и то не с первого раза».
+    var onBegin: (() -> Void)?
+    var onEnd: (() -> Void)?
     private var last: CGFloat?
 
     /// Рахунок згори вниз — як у всієї розкладки вікна: тоді «потягнули
@@ -240,6 +247,7 @@ final class NativeBottomHeightGrip: NSView {
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2, let onReset { onReset(); last = nil; return }
         last = convert(event.locationInWindow, from: nil).y
+        onBegin?()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -251,7 +259,10 @@ final class NativeBottomHeightGrip: NSView {
         onDrag?(delta)
     }
 
-    override func mouseUp(with event: NSEvent) { last = nil }
+    override func mouseUp(with event: NSEvent) {
+        last = nil
+        onEnd?()
+    }
 }
 
 /// Главное окно на AppKit.

@@ -690,8 +690,15 @@ final class RemoteControlServer {
             // для розбору: саме після перетягування куплети ставали вищі за
             // свій текст, а повторити це без живого вікна не виходило.
             let delta = (body["delta"] as? NSNumber)?.doubleValue ?? 80
-            NativeSongsWorkspace.shared.rootForCheck?.dragBackingForCheck(by: CGFloat(delta))
+            // `steps` — тягнути ДРІБНИМИ рухами, як рука: саме на дрібних і
+            // ламалося (зсуви губилися, поки висота «прилипала»).
+            let steps = max(1, min(60, (body["steps"] as? NSNumber)?.intValue ?? 1))
+            let root = NativeSongsWorkspace.shared.rootForCheck
+            if steps > 1 { root?.beginBackingDrag() }
+            for _ in 0..<steps { root?.dragBackingForCheck(by: CGFloat(delta) / CGFloat(steps)) }
+            if steps > 1 { root?.endBackingDrag() }
             answer["delta"] = delta
+            answer["steps"] = steps
         case "window-snapshot":
             // Знімок ВІКНА програми у файл — щоб бачити те саме, що людина,
             // коли зняти екран не дає система (віддалений вхід).
