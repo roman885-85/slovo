@@ -285,31 +285,52 @@ extension Diagnostics {
         settleBackingGlide(root)
         root.heightGrip.onBegin?()
         var steps = 0
-        while steps < 12, bar.frame.height <= NativeBackingTrackBar.collapsedHeight + 1 {
+        while steps < 12, root.backingTargetForCheck <= NativeBackingTrackBar.collapsedHeight + 1 {
             root.heightGrip.onDrag?(-5)        // вгору по п'ять точок
             steps += 1
         }
         root.heightGrip.onEnd?()
         settleBackingGlide(root)
-        if bar.frame.height < NativeBackingTrackBar.minimumHeight - 1 {
+        if root.backingTargetForCheck < NativeBackingTrackBar.minimumHeight - 1 {
             faults.append(String(format: "дрібними рухами панель не розгорнулася: %.0f після %d кроків",
-                                 bar.frame.height, steps))
+                                 root.backingTargetForCheck, steps))
         } else if steps > 8 {
             faults.append("щоб розгорнути, довелося проїхати \(steps * 5) точок")
         }
         // І назад — так само дрібно.
         root.heightGrip.onBegin?()
         var back = 0
-        while back < 12, bar.frame.height > NativeBackingTrackBar.collapsedHeight + 1 {
+        while back < 12, root.backingTargetForCheck > NativeBackingTrackBar.collapsedHeight + 1 {
             root.heightGrip.onDrag?(5)
             back += 1
         }
         root.heightGrip.onEnd?()
         settleBackingGlide(root)
-        if bar.frame.height > NativeBackingTrackBar.collapsedHeight + 1 {
+        if root.backingTargetForCheck > NativeBackingTrackBar.collapsedHeight + 1 {
             faults.append(String(format: "дрібними рухами панель не згорнулася: %.0f після %d кроків",
-                                 bar.frame.height, back))
+                                 root.backingTargetForCheck, back))
         }
+        // Дрож на порозі. Власник: «на пороге схлопывания или развертывания
+        // полоса ведет себя нестабильно, прыгает». Підводимо панель рівно до
+        // порога й тремтимо рукою по десять точок: стан мінятися НЕ має.
+        root.heightGrip.onDrag?(5000)          // у смужку
+        settleBackingGlide(root)
+        root.heightGrip.onBegin?()
+        for _ in 0..<6 { root.heightGrip.onDrag?(-5) }   // рівно за поріг
+        settleBackingGlide(root)
+        let afterFlip = root.backingTargetForCheck
+        var flips = 0
+        for step in 0..<8 {
+            root.heightGrip.onDrag?(step % 2 == 0 ? 10 : -10)
+            settleBackingGlide(root)
+            if abs(root.backingTargetForCheck - afterFlip) > 6 { flips += 1 }
+        }
+        root.heightGrip.onEnd?()
+        settleBackingGlide(root)
+        if flips > 0 {
+            faults.append("на порозі панель смикається: за вісім дрібних рухів стан мінявся \(flips) разів")
+        }
+
         root.bottomGrip.onDrag?(300)
         settleBackingGlide(root)
 

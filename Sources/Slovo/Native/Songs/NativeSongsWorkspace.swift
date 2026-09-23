@@ -1048,7 +1048,7 @@ final class NativeSongsRootView: NSView {
         let wasCollapsed = goal <= NativeBackingTrackBar.collapsedHeight + 1
         // Пороги невеликі й однакові в обидва боки: 24 точки руху — і панель
         // міняє стан. Раніше з ростом від смужки треба було проїхати 112.
-        let snapped: CGFloat
+        var snapped: CGFloat
         if wasCollapsed {
             snapped = raw > NativeBackingTrackBar.collapsedHeight + 24
                 ? max(NativeBackingTrackBar.minimumHeight, raw)
@@ -1058,6 +1058,11 @@ final class NativeSongsRootView: NSView {
                 ? NativeBackingTrackBar.collapsedHeight
                 : max(NativeBackingTrackBar.minimumHeight, raw)
         }
+        // Запас ходу. На самому порозі дрібний дрож руки перекидав панель
+        // туди-сюди (власник: «на пороге схлопывания или развертывания
+        // полоса ведет себя нестабильно, прыгает»). Тому після кожного
+        // перемикання треба відійти на сорок точок, щоб перемкнути назад.
+        if let flip = flipGuard, abs(raw - flip) < 40 { snapped = goal }
         NativeWidths.set(Self.heightKey, snapped,
                          min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight)
         // Плавним робимо лише перехід між станами: смужка ↔ повна панель.
@@ -1070,9 +1075,13 @@ final class NativeSongsRootView: NSView {
             // Рука вже «перетягнула» панель у новий стан — далі число руки
             // веде від нього, інакше зворотний рух знову довелося б копити.
             handHeight = snapped
+            flipGuard = raw
+            glideBacking(from: was, to: snapped)
+        } else if backingGlide != nil {
+            // Хід іще йде, а рука вже веде далі: не обриваємо його ривком —
+            // переводимо на нову ціль від того місця, де панель зараз.
             glideBacking(from: was, to: snapped)
         } else {
-            stopBackingGlide()
             needsLayout = true
             layoutSubtreeIfNeeded()
         }
@@ -1085,14 +1094,28 @@ final class NativeSongsRootView: NSView {
     /// Куди панель їде (або вже приїхала): смужка чи повна висота.
     private var backingTarget: CGFloat?
 
+    /// Число руки в мить останнього перемикання — від нього рахується запас
+    /// ходу, щоб панель не тремтіла на порозі.
+    private var flipGuard: CGFloat?
+
     /// Тягання почалося чи скінчилося: рахунок руки починаємо з нуля.
     func beginBackingDrag() {
         // Плавний хід не зупиняємо: рука може вести далі, поки панель їде,
         // а рахунок піде від цілі.
         handHeight = backingTarget ?? backingHeight
+        flipGuard = nil
     }
 
-    func endBackingDrag() { handHeight = nil }
+    func endBackingDrag() {
+        handHeight = nil
+        flipGuard = nil
+        // Руку відпустили — доводимо панель до її стану плавно, якщо вона
+        // ще не там.
+        let target = backingTarget ?? backingHeight
+        if abs(backing.frame.height - target) > 1 {
+            glideBacking(from: backing.frame.height, to: target)
+        }
+    }
 
     /// Плавний перехід панелі між смужкою й повним виглядом.
     ///
@@ -1140,6 +1163,10 @@ final class NativeSongsRootView: NSView {
 
     /// Посунути межу панелі фонограм — самоперевірці: те саме, що робить рука.
     func dragBackingForCheck(by delta: CGFloat) { resizeBacking(by: delta) }
+
+    /// Куди панель їде — самоперевірці: поки триває плавний хід, її висота
+    /// проміжна, і судити по ній не можна.
+    var backingTargetForCheck: CGFloat { backingTarget ?? backingHeight }
 
     /// Вище панель не піднімається: спискам пісень лишається хоч кілька рядків.
     private var maximumBackingHeight: CGFloat {
