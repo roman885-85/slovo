@@ -475,6 +475,11 @@ extension Diagnostics {
             host.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             window.displayIfNeeded()
+            // У вікні, якого ніхто не показує, AppKit рядків не будує, а
+            // сторож висот скидає виміряне: без цього перевірка міряла
+            // чорнову оцінку й кричала «порожнеча 59 точок» там, де в
+            // живому вікні рядок стоїть за текстом.
+            songs.partList.materializeVisibleForCheck()
             var waste: CGFloat = 0
             var cut = 0
             var rows = 0

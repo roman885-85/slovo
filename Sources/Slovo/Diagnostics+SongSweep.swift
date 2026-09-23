@@ -109,48 +109,46 @@ extension Diagnostics {
                         let rows = songs.partList.rowsNow
                         guard rows > 0 else { continue }
                         songsSeen += 1
-                        // Гортаємо, як людина: рядок, якого ще не показували,
-                        // стоїть на чорновій оцінці висоти — міряти його
-                        // марно. Дивимося лише на те, що справді показалося.
-                        var seen: [Int] = []
+                        // Гортаємо, як людина, і міряємо КОЖНУ сторінку
+                        // одразу: сторож висот скидає виміряне в тих рядків,
+                        // що поїхали з очей, і міряти їх потім — те саме, що
+                        // міряти невидиме.
                         var reached = -1
-                        while reached < rows - 1 {
+                        var pages = 0
+                        while reached < rows - 1, pages < 12 {
+                            pages += 1
                             songs.partList.scrollTo(reached + 1, place: .top)
-                            // Будуємо рядки, як їх побудувало б показане
-                            // вікно, і чекаємо довше за сторожа висот (він
-                            // міряє через чверть секунди після показу).
                             songs.partList.materializeVisibleForCheck()
-                            settle(0.35)
+                            settle(0.3)
                             songs.partList.materializeVisibleForCheck()
                             let visible = songs.partList.visibleRows
                             guard !visible.isEmpty else { break }
-                            for row in visible where !seen.contains(row) { seen.append(row) }
+                            for row in visible {
+                                guard let fit = songs.partList.fit(ofRow: row) else { continue }
+                                measured += 1
+                                let waste = fit.given - fit.drawn
+                                if waste > emptiness.points {
+                                    emptiness.points = waste
+                                    let pair = songs.partList.widths(ofRow: row)
+                                    emptiness.where_ = "«\(entry.id)» / «\(titles[song] ?? "?")», частина \(row + 1), "
+                                        + "\(Int(shape.width)) пт, кегль \(Int(shape.font)), "
+                                        + (mode == .singleLine ? "одна лінія" : "багато рядків")
+                                        + "; дано \(Int(fit.given)), треба \(Int(fit.drawn)), "
+                                        + "міряно по \(Int(pair.measured)), клітинка \(Int(pair.cell)), "
+                                        + "запам'ятовано \(Int(songs.partList.measuredHeightForCheck(ofRow: row)))"
+                                }
+                                if fit.cut || fit.drawn > fit.given + 0.5 {
+                                    cuts += 1
+                                    if cutExample.isEmpty {
+                                        cutExample = "«\(entry.id)» / «\(titles[song] ?? "?")», частина \(row + 1), "
+                                            + "треба \(Int(fit.drawn)), дали \(Int(fit.given)), "
+                                            + "\(Int(shape.width)) пт, кегль \(Int(shape.font))"
+                                    }
+                                }
+                            }
                             let last = visible.upperBound - 1
                             if last <= reached { break }
                             reached = last
-                        }
-                        for row in seen {
-                            guard let fit = songs.partList.fit(ofRow: row) else { continue }
-                            measured += 1
-                            let waste = fit.given - fit.drawn
-                            if waste > emptiness.points {
-                                emptiness.points = waste
-                                let pair = songs.partList.widths(ofRow: row)
-                                emptiness.where_ = "«\(entry.id)» / «\(titles[song] ?? "?")», частина \(row + 1), "
-                                    + "\(Int(shape.width)) пт, кегль \(Int(shape.font)), "
-                                    + (mode == .singleLine ? "одна лінія" : "багато рядків")
-                                    + "; дано \(Int(fit.given)), треба \(Int(fit.drawn)), "
-                                    + "міряно по \(Int(pair.measured)), клітинка \(Int(pair.cell)), "
-                                    + "висоти списку: \(songs.partList.heightsKindForCheck)"
-                            }
-                            if fit.cut || fit.drawn > fit.given + 0.5 {
-                                cuts += 1
-                                if cutExample.isEmpty {
-                                    cutExample = "«\(entry.id)» / «\(titles[song] ?? "?")», частина \(row + 1), "
-                                        + "треба \(Int(fit.drawn)), дали \(Int(fit.given)), "
-                                        + "\(Int(shape.width)) пт, кегль \(Int(shape.font))"
-                                }
-                            }
                         }
                         if widthsMismatch.isEmpty {
                             let pair = songs.partList.widths(ofRow: 0)
