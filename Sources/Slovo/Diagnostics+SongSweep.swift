@@ -163,6 +163,64 @@ extension Diagnostics {
         }
 
         var checks: [Check] = []
+
+        // MARK: Перетягування панелі фонограм
+        //
+        // Власник: «песенник 3055, песня 2176, при перетягивании размера
+        // блока минусовок слова опять растягиваются по ширине». Тягнемо межу
+        // панелі так само, як рука, і одразу міряємо куплети: після зміни
+        // висоти списку на нього стає (чи зникає) смуга прокрутки, а з нею
+        // міняється ширина — рівно той випадок, на якому висоти лишалися
+        // чорновими.
+        var gripTrouble = ""
+        if let songs3055 = entries.first(where: { $0.id.contains("pv3055") }) ?? entries.first,
+           let root = songs.rootForCheck {
+            songs.selectBook(id: songs3055.id)
+            for _ in 0..<40 where !songs.songIndexIsReady {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            }
+            window.setContentSize(NSSize(width: 1920, height: 1000))
+            host.frame = NSRect(x: 0, y: 0, width: 1920, height: 1000)
+            view.frame = host.bounds
+            state.listFontSize = 13
+            songs.applyInterfaceNow()
+            settle(0.3)
+            // Пісня 2176 у збірнику: шукаємо за номером, а не за місцем.
+            if let book = library.book(songs3055.id),
+               let wanted = book.songs.first(where: { $0.number == 2176 }) ?? book.songs.last {
+                songs.reveal(song: wanted.index, part: nil, live: false)
+                settle(0.4)
+                for step in [CGFloat(-160), 160, -90, 60] {
+                    root.dragBackingForCheck(by: step)
+                    settle(0.4)
+                    songs.partList.materializeVisibleForCheck()
+                    settle(0.3)
+                    songs.partList.materializeVisibleForCheck()
+                    for row in songs.partList.visibleRows {
+                        guard let fit = songs.partList.fit(ofRow: row) else { continue }
+                        measured += 1
+                        let waste = fit.given - fit.drawn
+                        if waste > 24, gripTrouble.isEmpty {
+                            gripTrouble = "після зсуву на \(Int(step)) тчк: частина \(row + 1), "
+                                + "дано \(Int(fit.given)), треба \(Int(fit.drawn)), "
+                                + "запам'ятовано \(Int(songs.partList.measuredHeightForCheck(ofRow: row)))"
+                        }
+                        if waste > emptiness.points {
+                            emptiness.points = waste
+                            emptiness.where_ = "«\(songs3055.id)», пісня 2176, частина \(row + 1), "
+                                + "після перетягування панелі фонограм на \(Int(step)) тчк"
+                        }
+                    }
+                }
+            }
+        }
+        checks.append(Check(area: area, name: "Куплети після перетягування панелі фонограм",
+                            status: gripTrouble.isEmpty ? .ok : .failed,
+                            detail: gripTrouble.isEmpty
+                                ? "межу панелі посунуто чотири рази — рядки лишилися за текстом"
+                                : gripTrouble))
+
+
         // Ширини звіряємо, але за ними не судимо: клітинка встигає побути
         // вужчою під час перерозкладки, а важить те, чи вийшла від цього
         // зайва висота або обрізаний текст. Їх і питаємо.

@@ -685,6 +685,16 @@ final class RemoteControlServer {
         case "blank": state.showBlankSlide()
         case "next-chapter": state.stepChapter(by: 1, live: false)
         case "prev-chapter": state.stepChapter(by: -1, live: false)
+        case "window-snapshot":
+            // Знімок ВІКНА програми у файл — щоб бачити те саме, що людина,
+            // коли зняти екран не дає система (віддалений вхід).
+            if let content = NativeMainWindowController.shared.window?.contentView {
+                content.layoutSubtreeIfNeeded()
+                NativeTrace.snapshot(content, to: "slovo-вікно-на-вимогу.png")
+                answer["snapshot"] = NSString(string: "~/Library/Logs/slovo-вікно-на-вимогу.png").expandingTildeInPath
+            } else {
+                answer["snapshot"] = ""
+            }
         case let name where name.hasPrefix("backing-"):
             if let trouble = backingCommand(name, body: body, index: index, text: text,
                                             state: state, answer: &answer) {

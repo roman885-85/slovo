@@ -1033,6 +1033,9 @@ final class NativeSongsRootView: NSView {
         layoutSubtreeIfNeeded()
     }
 
+    /// Посунути межу панелі фонограм — самоперевірці: те саме, що робить рука.
+    func dragBackingForCheck(by delta: CGFloat) { resizeBacking(by: delta) }
+
     /// Вище панель не піднімається: спискам пісень лишається хоч кілька рядків.
     private var maximumBackingHeight: CGFloat {
         let free = max(0, bounds.height - NativeSongHeader.height - 1 - 8)
