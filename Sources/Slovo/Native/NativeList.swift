@@ -326,9 +326,20 @@ final class NativeList: NSView, NativeListChecking {
             // клетки считается заново от видимой области.
             refreshVisibleCells()
         } else if case .measured = heights {
-            // Ширина изменилась — все посчитанные высоты недействительны.
+            // Ширина змінилася — усі пораховані висоти недійсні.
             measuredHeights = Array(repeating: 0, count: measuredHeights.count)
             table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
+            remeasureVisible()
+            // …і ОДРАЗУ міряємо наново те, що на екрані.
+            //
+            // Без цього рядки лишалися з чорновою оцінкою назавжди: клітинки
+            // вже збудовані, тож AppKit більше не питає нас про них, а самі
+            // ми міряємо лише тоді, коли рядок будується. Власник: потягнув
+            // межу панелі фонограм — куплети стали втричі вищі за свій текст
+            // і лишалися такими, доки не перемкнеш пісню. Саме так: зміна
+            // ширини панелі міняє ширину списку (стає смуга прокрутки).
+            refreshVisibleCells()
+            scheduleFitGuard()
         }
     }
 
@@ -408,10 +419,47 @@ final class NativeList: NSView, NativeListChecking {
         NativeTrace.say(tight
                         ? "список: рядкам було замало місця при першому показі — переміряв"
                         : "список: рядки стояли вищі за свій текст — переміряв")
-        measuredAtWidth = contentWidth
-        measuredHeights = Array(repeating: 0, count: measuredHeights.count)
-        table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
+        remeasureVisible()
+    }
+
+    /// Переміряти те, що на екрані, і зайти ще раз, якщо з'явилися нові рядки.
+    ///
+    /// Міряємо ПО ТЕКСТУ, не чекаючи, поки AppKit збудує клітинку: рядок,
+    /// клітинка якого вже стоїть, наново нас не питають, і висота лишалася
+    /// чорновою — 86 точок під текстом на 27. Власник ловив це так: потягнув
+    /// межу панелі фонограм (у списку з'явилася смуга прокрутки — ширина
+    /// інша — усі висоти скинуто) і куплети ставали втричі вищими, доки не
+    /// перемкнеш пісню.
+    ///
+    /// Прохід повторюється: коли висоти стали правильними, у те саме вікно
+    /// влазить більше рядків, і їх теж треба зміряти. Лічильник тримає це в
+    /// межах — нескінченного кола не буде.
+    private func remeasureVisible(pass: Int = 0) {
+        guard case .measured = heights, source != nil, table.numberOfRows > 0 else { return }
+        let visible = table.rows(in: scrollView.contentView.bounds)
+        guard visible.length > 0 else { return }
+        measuredAtWidth = drawWidth
+        var touched = IndexSet()
+        for row in visible.location..<min(table.numberOfRows, visible.location + visible.length) {
+            guard row < measuredHeights.count else { continue }
+            measuredHeights[row] = 0
+            noteRealHeight(ofTableRow: row)
+            touched.insert(row)
+        }
+        guard !touched.isEmpty else { return }
+        table.noteHeightOfRows(withIndexesChanged: touched)
         refreshVisibleCells()
+        // Після зміни висот видно вже інші рядки — міряємо і їх.
+        guard pass < 4 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            let now = self.table.rows(in: self.scrollView.contentView.bounds)
+            let ends = min(self.table.numberOfRows, now.location + now.length)
+            let unmeasured = (now.location..<max(now.location, ends)).contains { row in
+                row < self.measuredHeights.count && self.measuredHeights[row] == 0
+            }
+            if unmeasured { self.remeasureVisible(pass: pass + 1) }
+        }
     }
 
     /// Перечитать содержимое стоящих на экране клеток из источника.
