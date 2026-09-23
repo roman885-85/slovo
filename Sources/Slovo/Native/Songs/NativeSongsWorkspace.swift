@@ -1007,8 +1007,11 @@ final class NativeSongsRootView: NSView {
         heightGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: -delta) }
         bottomGrip.onDrag = { [weak self] delta in self?.resizeBacking(by: delta) }
         heightGrip.onReset = { [weak self] in
+            guard let self else { return }
+            let was = self.backing.frame.height
             NativeWidths.reset(Self.heightKey)
-            self?.needsLayout = true
+            // Подвійне клацання вертає звичну висоту — теж плавно.
+            self.glideBacking(from: was, to: self.backingHeight)
         }
         bottomGrip.onReset = heightGrip.onReset
     }
@@ -1023,14 +1026,72 @@ final class NativeSongsRootView: NSView {
     /// смужка в один ряд. Проміжні висоти лишали б половину панелі порожньою,
     /// тому висота прилипає: нижче за повну — стає смужкою, вище — повною.
     private func resizeBacking(by delta: CGFloat) {
-        let wanted = backing.frame.height + delta
-        let snapped = wanted < NativeBackingTrackBar.minimumHeight - 24
+        let was = backing.frame.height
+        let wanted = was + delta
+        let collapsing = wanted < NativeBackingTrackBar.minimumHeight - 24
+        let snapped = collapsing
             ? NativeBackingTrackBar.collapsedHeight
             : max(NativeBackingTrackBar.minimumHeight, wanted)
         NativeWidths.set(Self.heightKey, snapped,
                          min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight)
-        needsLayout = true
-        layoutSubtreeIfNeeded()
+        // Панель «прилипає»: або смужка, або повна. Цей стрибок і робимо
+        // плавним — власник: «сделай схлопывание и развертывание блока
+        // минусовок плавным с анимацией». Звичайне перетягування за межу
+        // плавності не отримує: воно має йти за рукою, без відставання.
+        let jumped = abs(snapped - was) > 24
+            && (snapped == NativeBackingTrackBar.collapsedHeight
+                || was <= NativeBackingTrackBar.collapsedHeight + 1)
+        if jumped {
+            glideBacking(from: was, to: snapped)
+        } else {
+            stopBackingGlide()
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+        }
+    }
+
+    /// Плавний перехід панелі між смужкою й повним виглядом.
+    ///
+    /// Кадри рахуємо самі: розкладка тут ручна (frame за frame), і
+    /// `NSAnimationContext` їй не указ. Двадцять кадрів за 0,22 с — рух
+    /// помітний, але не змушує чекати.
+    private func glideBacking(from: CGFloat, to target: CGFloat) {
+        stopBackingGlide()
+        guard abs(target - from) > 1 else {
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            return
+        }
+        let started = ProcessInfo.processInfo.systemUptime
+        let duration = 0.22
+        glidingBackingHeight = from
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let part = min(1, (ProcessInfo.processInfo.systemUptime - started) / duration)
+                // М'який хід: швидше на початку, спокійніше в кінці.
+                let eased = 1 - pow(1 - part, 3)
+                self.glidingBackingHeight = from + (target - from) * CGFloat(eased)
+                self.needsLayout = true
+                self.layoutSubtreeIfNeeded()
+                if part >= 1 {
+                    timer.invalidate()
+                    self.backingGlide = nil
+                    self.glidingBackingHeight = nil
+                    self.needsLayout = true
+                    self.layoutSubtreeIfNeeded()
+                }
+            }
+        }
+        // У режимі відстеження (тягнуть межу) звичайний таймер стоїть.
+        RunLoop.main.add(timer, forMode: .common)
+        backingGlide = timer
+    }
+
+    private func stopBackingGlide() {
+        backingGlide?.invalidate()
+        backingGlide = nil
+        glidingBackingHeight = nil
     }
 
     /// Посунути межу панелі фонограм — самоперевірці: те саме, що робить рука.
@@ -1042,8 +1103,15 @@ final class NativeSongsRootView: NSView {
         return max(NativeBackingTrackBar.collapsedHeight, free - 180)
     }
 
+    /// Поки панель їде — висота проміжна, і її беруть замість збереженої.
+    private var glidingBackingHeight: CGFloat?
+    private var backingGlide: Timer?
+
     /// Висота панелі зараз — самоперевірці й раскладці.
     var backingHeight: CGFloat {
+        if let gliding = glidingBackingHeight {
+            return min(maximumBackingHeight, max(NativeBackingTrackBar.collapsedHeight, gliding))
+        }
         let saved = min(maximumBackingHeight,
                         NativeWidths.value(Self.heightKey, auto: NativeBackingTrackBar.minimumHeight + 40,
                                            min: NativeBackingTrackBar.collapsedHeight, max: maximumBackingHeight))

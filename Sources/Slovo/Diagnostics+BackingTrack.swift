@@ -258,7 +258,9 @@ extension Diagnostics {
         // остаться». Тягнемо донизу до упору: панель стає смужкою, у якій
         // лишаються кнопки, назва, час, смуга перемотування й гучність.
         root.heightGrip.onDrag?(5000)
-        root.layoutSubtreeIfNeeded()
+        // Панель тепер згортається плавно (0,22 с): чекаємо, поки доїде,
+        // інакше міряли б її на півдорозі.
+        settleBackingGlide(root)
         if abs(bar.frame.height - NativeBackingTrackBar.collapsedHeight) > 6 {
             faults.append(String(format: "униз до упору — %.0f замість %.0f",
                                  bar.frame.height, NativeBackingTrackBar.collapsedHeight))
@@ -270,13 +272,13 @@ extension Diagnostics {
         if !bar.list.isHidden { faults.append("у стиснутій смужці лишився список") }
         // І назад: нижня межа тягне так само, тільки навпаки.
         root.bottomGrip.onDrag?(300)
-        root.layoutSubtreeIfNeeded()
+        settleBackingGlide(root)
         if bar.frame.height < NativeBackingTrackBar.minimumHeight - 1 {
             faults.append(String(format: "нижня межа не повернула панель: %.0f", bar.frame.height))
         }
         if bar.list.isHidden { faults.append("після повернення список не з'явився") }
         root.heightGrip.onReset?()
-        root.layoutSubtreeIfNeeded()
+        settleBackingGlide(root)
         if defaults.object(forKey: "backingPanelHeight") != nil || abs(bar.frame.height - barBefore) > 1 {
             faults.append(String(format: "подвійне клацання не вернуло як було: %.0f замість %.0f, ключ %@, область %.0f×%.0f",
                                  bar.frame.height, barBefore,
@@ -351,6 +353,13 @@ extension Diagnostics {
     /// перетягивании… она добавляется в общий плейлист медиа» і далі — «пик
     /// метр и графический просмотр трека (как в audacity)… играть с
     /// указанного пользователем места. Добавить кнопку паузы».
+    /// Дочекатися, поки панель фонограм доїде до свого стану.
+    @MainActor
+    private static func settleBackingGlide(_ root: NSView) {
+        wait(untilTrue: { false }, seconds: 0.35)
+        root.layoutSubtreeIfNeeded()
+    }
+
     static func backingPanelChecks(state: AppState, wave: URL, folder: URL) -> [Check] {
         let area = "Фонограма"
         var checks: [Check] = []
