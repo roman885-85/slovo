@@ -328,17 +328,22 @@ final class NativeList: NSView, NativeListChecking {
         } else if case .measured = heights {
             // Ширина змінилася — усі пораховані висоти недійсні.
             measuredHeights = Array(repeating: 0, count: measuredHeights.count)
-            table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
-            remeasureVisible()
-            // …і ОДРАЗУ міряємо наново те, що на екрані.
+            noteHeights(IndexSet(integersIn: 0..<table.numberOfRows))
+            // …і міряємо наново те, що на екрані, — але НЕ зараз.
             //
+            // Ми всередині розкладки таблиці: чіпати її рядки звідси не
+            // можна, AppKit не терпить повторного входу. Спершу я зробив це
+            // просто тут — і рядки лишилися без тексту, самі кольорові
+            // смужки (власник: «стало еще хуже»). Тому — наступним кроком
+            // циклу, коли розкладка завершиться.
+            RunLoop.main.perform(inModes: [.common]) { [weak self] in
+                self?.remeasureVisible()
+            }
             // Без цього рядки лишалися з чорновою оцінкою назавжди: клітинки
             // вже збудовані, тож AppKit більше не питає нас про них, а самі
             // ми міряємо лише тоді, коли рядок будується. Власник: потягнув
             // межу панелі фонограм — куплети стали втричі вищі за свій текст
-            // і лишалися такими, доки не перемкнеш пісню. Саме так: зміна
-            // ширини панелі міняє ширину списку (стає смуга прокрутки).
-            refreshVisibleCells()
+            // і лишалися такими, доки не перемкнеш пісню.
             scheduleFitGuard()
         }
     }
@@ -422,6 +427,23 @@ final class NativeList: NSView, NativeListChecking {
         remeasureVisible()
     }
 
+    /// Оголосити таблиці нові висоти рядків — без анімації й із перемалюванням.
+    ///
+    /// `noteHeightOfRows` за умовчанням МІНЯЄ висоти плавно, і посеред тієї
+    /// плавності рядки стоять на старих місцях: між ними лишаються порожні
+    /// смуги без тексту. Власник побачив саме це («стало еще хуже»), коли
+    /// висоти почали перераховуватися частіше. Тому міняємо миттєво й
+    /// просимо намалювати заново.
+    private func noteHeights(_ indexes: IndexSet) {
+        guard !indexes.isEmpty else { return }
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        table.noteHeightOfRows(withIndexesChanged: indexes)
+        NSAnimationContext.endGrouping()
+        table.needsDisplay = true
+        scrollView.contentView.needsDisplay = true
+    }
+
     /// Переміряти те, що на екрані, і зайти ще раз, якщо з'явилися нові рядки.
     ///
     /// Міряємо ПО ТЕКСТУ, не чекаючи, поки AppKit збудує клітинку: рядок,
@@ -447,7 +469,7 @@ final class NativeList: NSView, NativeListChecking {
             touched.insert(row)
         }
         guard !touched.isEmpty else { return }
-        table.noteHeightOfRows(withIndexesChanged: touched)
+        noteHeights(touched)
         refreshVisibleCells()
         // Після зміни висот видно вже інші рядки — міряємо і їх.
         guard pass < 4 else { return }
@@ -938,6 +960,15 @@ final class NativeList: NSView, NativeListChecking {
 
     /// Скільки висот список тримає — і скільки рядків у таблиці.
     var measuredCountForCheck: (kept: Int, rows: Int) { (measuredHeights.count, table.numberOfRows) }
+
+    /// Що НАМАЛЬОВАНО в рядку — самоперевірці: порожня клітинка при
+    /// правильній висоті виглядає як кольорова смужка без тексту.
+    func textForCheck(ofRow index: Int) -> String {
+        guard let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? NativeRowCell else {
+            return "клітинки немає"
+        }
+        return cell.items.map { $0.row.text }.joined(separator: " ")
+    }
 
     /// Як список рахує висоти — самоперевірці: «міряні» чи однакові.
     var heightsKindForCheck: String {

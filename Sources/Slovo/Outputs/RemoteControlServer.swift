@@ -716,6 +716,7 @@ final class RemoteControlServer {
                     "треба": Int(fit.drawn),
                     "запам'ятовано": Int(list?.measuredHeightForCheck(ofRow: row) ?? -1),
                     "обрізано": fit.cut,
+                    "текст": String((list?.textForCheck(ofRow: row) ?? "").prefix(24)),
                 ])
             }
             answer["куплети"] = [
