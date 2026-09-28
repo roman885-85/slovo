@@ -16,11 +16,11 @@ import Foundation
 /// влізе в рамку, але не дрібніше за `MinimumScale`. Рахує це сам браузер —
 /// двійковим пошуком за висотою, за пару десятків проб; на зміну вірша йдуть
 /// частки мілісекунди, і текст не «стрибає».
-enum WebSlovoSlidePage {
+public enum WebSlovoSlidePage {
 
     static let fileName = "slovo-slide.html"
 
-    static func html(webSocketPort: Int, host: String) -> String {
+    public static func html(webSocketPort: Int, host: String) -> String {
         let address = "ws://\(host):\(webSocketPort)/ws"
         return """
         <!DOCTYPE html>
@@ -32,7 +32,11 @@ enum WebSlovoSlidePage {
         <style>
           html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
           #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden;
-                   background-position: center; background-repeat: no-repeat; }
+                   background-position: center; background-repeat: no-repeat;
+                   /* Гасіння — плавне: власник просив, щоб слайд не зникав
+                      ривком ні на проекторі, ні в мережі, ні на сторінці. */
+                   opacity: 1; transition: opacity .4s ease; }
+          #stage.gone { opacity: 0; }
           #stage.tile { background-repeat: repeat; }
           .obj { position: absolute; display: flex; box-sizing: border-box;
                  overflow: hidden; white-space: pre-wrap; }
@@ -92,8 +96,21 @@ enum WebSlovoSlidePage {
           }
 
           function draw() {
+            // Гасне — не стираємо зміст: хай він розчиниться. Сторінка чорна
+            // під сценою, тож зникає саме зображення, а не блимає біле.
+            if (!layout || hidden) {
+              stage.classList.add('gone');
+              idle.style.display = '';
+              // Прибираємо намальоване вже після того, як воно згасло.
+              clearTimeout(stage.fadeTimer);
+              stage.fadeTimer = setTimeout(function () {
+                if (!layout || hidden) { stage.innerHTML = ''; stage.style.background = '#000'; }
+              }, 420);
+              return;
+            }
+            clearTimeout(stage.fadeTimer);
+            stage.classList.remove('gone');
             stage.innerHTML = '';
-            if (!layout || hidden) { idle.style.display = ''; stage.style.background = '#000'; return; }
             idle.style.display = 'none';
 
             fonts(layout.Fonts || {});

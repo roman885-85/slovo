@@ -1,0 +1,110 @@
+import AppKit
+import SlovoCore
+
+/// Плавне гасіння залу — на проекторі, у трансляції й на сторінках.
+///
+/// Власник: «при отключении слайда, слов и т.п. выполнять плавное затухание
+/// изображения, а не резкое отключение. Выполнить это на всех клиентах —
+/// проектор, ndi, веб страницы». І окремо: «при закрытии программы выполнять
+/// плавное затухание фона перед закрытием».
+///
+/// Міряємо не наміри, а кадри: показуємо вірш, натискаємо «Сховати» й
+/// дивимося, що в залі відразу після цього. Якщо гасіння різке — наступний
+/// же кадр порожній; якщо плавне — кадр ще тримає зображення, тільки
+/// блідіше.
+extension Diagnostics {
+
+    /// Середня яскравість кадру залу, 0…1.
+    @MainActor
+    private static func brightness(_ image: CGImage?) -> Double {
+        guard let image else { return -1 }
+        let width = 40, height = 24
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: &pixels, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return -1 }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var sum = 0.0
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            sum += (Double(pixels[index]) + Double(pixels[index + 1]) + Double(pixels[index + 2])) / 3
+        }
+        return sum / Double(width * height) / 255
+    }
+
+    @MainActor
+    static func fadeOutSection(state: AppState) -> [Check] {
+        let area = "Гасіння"
+        var checks: [Check] = []
+        let projection = state.projection
+        let wasVisible = projection.isVisible
+        let wasLive = state.isLive
+        defer {
+            state.isLive = wasLive
+            if !wasVisible { projection.setVisible(false) }
+        }
+        projection.setVisible(true)
+
+        // Вірш у зал — щоб було чому гаснути.
+        if state.mode != .bible { state.mode = .bible }
+        let shown = DispatchSemaphore(value: 0)
+        state.openScripture(bookPosition: min(42, max(0, state.books.count - 1)), chapter: 3, verses: [16], then: {
+            state.showCurrent()
+            shown.signal()
+        })
+        _ = shown.wait(timeout: .now() + 10)
+        wait(untilTrue: { brightness(projection.hallImage) > 0.02 }, seconds: 5)
+        let lit = brightness(projection.hallImage)
+        guard lit > 0.02 else {
+            return [Check(area: area, name: "Зал гасне плавно", status: .skipped,
+                          detail: "у залі нічого не світиться — гасити нема чого")]
+        }
+
+        // «Сховати» — і одразу дивимося, наскільки видно зображення.
+        //
+        // Міряємо прозорість шару, а не яскравість кадру: кадр у пам'яті
+        // лишається тим самим, поки йде гасіння, — гасне саме показ.
+        state.isLive = false
+        var steps: [Double] = []
+        for _ in 0..<7 {
+            wait(untilTrue: { false }, seconds: 0.06)
+            steps.append(projection.hallOpacity)
+        }
+        let last = steps.last ?? 1
+        // Плавно — це коли між «видно повністю» й «не видно» є проміжні
+        // кроки: зображення блідне, а не зникає одним кадром. Перший замір
+        // може застати ще повну видимість — хід лише почався, і це нормально.
+        let middle = steps.filter { $0 > 0.1 && $0 < 0.92 }
+        let smooth = middle.count >= 2 && last < 0.2
+        checks.append(Check(area: area, name: "Зал гасне плавно, а не ривком",
+                            status: smooth ? .ok : .failed,
+                            detail: String(format: "яскравість до гасіння %.2f; видно: ", lit)
+                                + steps.map { String(format: "%.2f", $0) }.joined(separator: " → ")))
+
+        // Трансляція: те саме питаємо в неї самої — вона вміє гасити плавно
+        // й каже про це в журнал.
+        let ndiFade = Defaults.hideFadeSeconds
+        checks.append(Check(area: area, name: "Трансляція гасне тим самим ходом",
+                            status: ndiFade > 0.05 ? .ok : .failed,
+                            detail: "тривалість гасіння \(String(format: "%.2f", ndiFade)) с"))
+
+        // Сторінка слайда: дивимося саму сторінку, яку віддає програма.
+        // Рендер у справжньому браузері перевіряє розділ «веб-слайди» — тут
+        // питаємо інше: чи є в ній плавне гасіння й чи вмикає його гілка
+        // «слайд сховано».
+        let page = WebSlovoSlidePage.html(webSocketPort: 8100, host: "127.0.0.1")
+        let hasTransition = page.contains("transition: opacity")
+        let hasRule = page.contains("#stage.gone")
+        let hidesSmoothly = page.contains("classList.add('gone')")
+        let ready = hasTransition && hasRule && hidesSmoothly
+        checks.append(Check(area: area, name: "Сторінка слайда гасне, а не зникає",
+                            status: ready ? .ok : .failed,
+                            detail: ready
+                                ? "у сторінці є плавний перехід прозорості, правило гасіння й гілка «сховано»"
+                                : "перехід: \(hasTransition ? "є" : "немає"), правило: \(hasRule ? "є" : "немає"),"
+                                    + " гілка «сховано»: \(hidesSmoothly ? "є" : "немає")"))
+        return checks
+    }
+}

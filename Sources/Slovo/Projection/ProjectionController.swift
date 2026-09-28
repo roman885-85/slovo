@@ -138,7 +138,10 @@ final class ProjectionController: ObservableObject {
     func update(slide: Slide, style: SlideStyle,
                 preset: SlidePreset? = nil, texts: ConstructorSample = ConstructorSample(),
                 backgroundOverride: String? = nil,
+                fadingOut: Bool = false, fadeSeconds: Double = 0.35,
                 imageURL: ((String?) -> URL?)? = nil) {
+        content.fadingOut = fadingOut
+        content.fadeOutSeconds = fadeSeconds
         content.slide = slide
         content.style = style
         content.preset = preset
@@ -157,6 +160,9 @@ final class ProjectionController: ObservableObject {
 
     /// Что сейчас нарисовано в окне зала — для самопроверки.
     var hallImage: CGImage? { canvas?.currentImage }
+
+    /// Наскільки зображення зала зараз видно — самоперевірці гасіння.
+    var hallOpacity: Double { canvas?.shownOpacity ?? 1 }
 
     func setVisible(_ visible: Bool) {
         guard visible != isVisible else { return }
@@ -608,6 +614,14 @@ final class SlideBox: ObservableObject {
     @Published var texts = ConstructorSample()
     /// Фон, выбранный человеком: он важнее фона шаблона.
     @Published var backgroundOverride: String?
+    /// Зал ГАСНЕ: «Сховати», затемнення, вихід із програми.
+    ///
+    /// Власник: «при отключении слайда, слов и т.п. выполнять плавное
+    /// затухание изображения, а не резкое отключение». Гасіння завжди йде
+    /// розчиненням, хоч би який перехід стояв у налаштуваннях, — і триває
+    /// стільки, скільки сказано тут.
+    @Published var fadingOut = false
+    @Published var fadeOutSeconds: Double = 0.35
     /// Как искать картинки объектов. Живёт в коробке, потому что окно
     /// проекции стоит вне обычного дерева видов и своего состояния не имеет.
     var imageURL: (String?) -> URL? = { _ in nil }

@@ -1436,6 +1436,16 @@ final class AppState: ObservableObject {
         if let raw = Defaults.lastMode, let value = WorkMode(rawValue: raw) { mode = value }
     }
 
+    /// Погасити зал перед виходом із програми.
+    ///
+    /// Те саме, що «Сховати», але без запам'ятовування: програма зараз
+    /// закриється, і ми лише не хочемо, щоб стіна блимнула чорним ривком.
+    func fadeHallForExit() {
+        isLive = false
+        isBlackout = false
+        pushToOutputs()
+    }
+
     /// Поднять окно слайда. Зовётся один раз при запуске программы.
     func startProjection() {
         projection.setVisible(true)
@@ -1575,12 +1585,21 @@ final class AppState: ObservableObject {
         // кадром всё время показа, и при каждом закрытии на миг показывался
         // из-под уходящей картинки. Убирать его надо не поверх, а вовсе.
         let underMedia = media.isVideoOnScreen
+        // Що було в залі до цього кадру: гасінням вважаємо перехід
+        // «щось було» → «порожньо», а не кожен порожній кадр поспіль.
+        let wasBlank = lastScreenSlide.isBlank
         lastScreenSlide = screen.compose(underMedia ? .blank : hall)
+        // Зал гасне тоді, коли слайд став порожнім, а перед тим не був:
+        // «Сховати», затемнення, «без тексту», вихід із програми. Саме цей
+        // перехід власник просив зробити плавним.
+        let goesDark = lastScreenSlide.isBlank && !wasBlank
         projection.update(slide: lastScreenSlide,
                           style: screenStyle,
                           preset: screenPreset,
                           texts: slideTexts,
                           backgroundOverride: backgroundOverride,
+                          fadingOut: goesDark,
+                          fadeSeconds: Defaults.hideFadeSeconds,
                           imageURL: { [weak self] name in self?.presetImageURL(name) })
 
         // Кадр плеера — в то же окно слайда, поверх текста; и в сеть — по
@@ -1694,7 +1713,11 @@ final class AppState: ObservableObject {
         // Гашение вслед за показом растворяем: рывок на микшере читается
         // как сбой связи. «Убрать» при обычном слайде гасит по-прежнему разом.
         guard !hall.isBlank else {
-            ndi.blank(fade: media.still != nil || media.hasVideo ? Defaults.mediaFadeSeconds : 0)
+            // Плавно ЗАВЖДИ. Колись «Убрать» гасила трансляцію разом —
+            // власник просив навпаки: «выполнять плавное затухание
+            // изображения, а не резкое отключение… на всех клиентах».
+            ndi.blank(fade: media.still != nil || media.hasVideo
+                      ? Defaults.mediaFadeSeconds : Defaults.hideFadeSeconds)
             return
         }
         ndi.update(slide: network.compose(hall), preset: preset(for: .ndi), texts: slideTexts,
@@ -2734,6 +2757,14 @@ enum Defaults {
     static var mediaFadeSeconds: Double {
         get { store.object(forKey: "mediaFade") as? Double ?? 0.35 }
         set { store.set(newValue, forKey: "mediaFade") }
+    }
+
+    /// За скільки гасне зал: «Сховати», затемнення, «без тексту», вихід із
+    /// програми. Власник: «выполнять плавное затухание изображения, а не
+    /// резкое отключение».
+    static var hideFadeSeconds: Double {
+        get { store.object(forKey: "hideFade") as? Double ?? 0.4 }
+        set { store.set(newValue, forKey: "hideFade") }
     }
 
     /// Путь к yt-dlp, указанный руками: программа или папка исходников.

@@ -109,6 +109,7 @@ enum Diagnostics {
         run.add(webEditorSection(state: state))
         run.add(compatSection(state: state))
         run.add(networkSection(state: state))
+        run.add(fadeOutSection(state: state))
         run.add(nativeSection(state: state))
         run.add(nativeTopSection(state: state))
         run.add(nativeBibleSection(state: state))
@@ -2206,6 +2207,7 @@ enum Diagnostics {
         ("екран", { screenSection(state: $0) }),
         ("сумісність", { compatSection(state: $0) }),
         ("мережа", { networkSection(state: $0) }),
+        ("гасіння", { fadeOutSection(state: $0) }),
         ("куплети", { livePartHeightsSection(state: $0) + songPartSweepSection(state: $0) }),
         ("автономність", { selfContainedSection($0) + library($0) + importWindowSection(state: $0) }),
         ("переклади", { translationsSection(state: $0) }),

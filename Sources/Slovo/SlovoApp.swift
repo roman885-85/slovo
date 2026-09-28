@@ -41,6 +41,27 @@ final class SlovoDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    /// Виходимо — спершу гасимо зал, потім закриваємося.
+    ///
+    /// Власник: «при закрытии программы выполнять плавное затухание фона
+    /// перед закрытием». Раніше вікно зала зникало разом із програмою, і на
+    /// стіні це читалося як зрив: рвучкий чорний кадр посеред служіння.
+    /// Тепер програма просить систему зачекати, гасить зал і трансляцію тим
+    /// самим плавним ходом, що й «Сховати», і аж тоді закривається.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !fading, state.projection.isSlideWindowVisible else { return .terminateNow }
+        fading = true
+        NativeTrace.say("вихід: гашу зал за \(Defaults.hideFadeSeconds) с")
+        state.fadeHallForExit()
+        let seconds = Defaults.hideFadeSeconds + 0.1
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private var fading = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Словари наших подписей на других языках — раньше всего: язык
         // интерфейса читается из настроек следом, и подписи должны быть уже на месте.

@@ -115,6 +115,23 @@ final class SlideCanvasView: NSView {
         let hadPicture = previous != nil
         drawn = image
         guard let layer else { return }
+        // Зал гасне — гасимо САМЕ ЗОБРАЖЕННЯ, а не підміняємо його порожнім.
+        //
+        // Власник: «при отключении слайда, слов и т.п. выполнять плавное
+        // затухание изображения, а не резкое отключение». Перехресне
+        // розчинення тут не годиться: новий кадр — це фон шаблону або чорне
+        // поле, і глядач бачить не згасання, а підміну. Тому ведемо
+        // прозорість шару від того, що є, до нуля; під ним чорне вікно.
+        if box.fadingOut, hadPicture, box.fadeOutSeconds > 0.01 {
+            fadeAway(layer: layer, to: image, previous: previous, seconds: box.fadeOutSeconds)
+            return
+        }
+        // Показали щось знову — прозорість вертаємо.
+        if layer.opacity < 1 || fading {
+            fading = false
+            layer.removeAnimation(forKey: "гасіння")
+            layer.opacity = 1
+        }
         if animated, kind != .none, hadPicture, seconds > 0 {
             SlideTransitionAnimator.play(on: layer, from: previous, to: image,
                                          kind: kind, duration: seconds, easing: easing)
@@ -128,4 +145,40 @@ final class SlideCanvasView: NSView {
 
     /// Кадр, который сейчас в окне, — его снимает самопроверка.
     var currentImage: CGImage? { drawn }
+
+    /// Наскільки зображення зараз видно (1 — повністю, 0 — згасло).
+    /// Самоперевірці: по ньому видно, що гасіння справді плавне.
+    var shownOpacity: Double {
+        Double(layer?.presentation()?.opacity ?? layer?.opacity ?? 1)
+    }
+
+    private var fading = false
+
+    /// Згасити те, що на екрані, і аж тоді покласти порожній кадр.
+    private func fadeAway(layer: CALayer, to image: CGImage, previous: CGImage?, seconds: Double) {
+        fading = true
+        // Малюємо старий кадр: новий (порожній) ляже, коли вже згасне.
+        if let previous {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            SlideTransitionAnimator.settle(layer, contents: previous)
+            CATransaction.commit()
+        }
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        animation.toValue = 0
+        animation.duration = seconds
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        animation.fillMode = .forwards
+        animation.isRemovedOnCompletion = false
+        layer.add(animation, forKey: "гасіння")
+        layer.opacity = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, self.fading else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            SlideTransitionAnimator.settle(layer, contents: image)
+            CATransaction.commit()
+        }
+    }
 }
