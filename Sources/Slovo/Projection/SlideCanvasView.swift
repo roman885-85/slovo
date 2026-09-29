@@ -115,23 +115,21 @@ final class SlideCanvasView: NSView {
         let hadPicture = previous != nil
         drawn = image
         guard let layer else { return }
-        // Зал гасне — розчиняємо ТЕКСТ, а фон лишається.
+        // Зал гасне — тим самим розчиненням, яким міняються слайди.
         //
-        // Власник: «при отключении слайда изображение плавно исчезает, но не
-        // появляется фон, а просто черный экран». Спершу я гасив прозорість
-        // усього шару — виходило чорне поле. Тепер новий кадр (це фон без
-        // тексту) кладеться ОДРАЗУ, а старий лишається зверху окремим шаром
-        // і згасає: глядач бачить, як зі сторінки зникає текст, а фон стоїть.
-        if box.fadingOut, hadPicture, box.fadeOutSeconds > 0.01, let previous {
-            fadeAway(layer: layer, to: image, previous: previous, seconds: box.fadeOutSeconds)
+        // Дві мої спроби зробити «краще» вийшли гірше: прозорість усього
+        // шару дала чорне поле замість фону, а окремий шар, що догорає, —
+        // різке зникнення й одиничне мигтіння прибраного слайда. Тому тут
+        // рівно той механізм, який у залі працює щодня: `CATransition`
+        // розчиняє старий кадр у новий. Старий — це текст на фоні, новий —
+        // той самий фон без тексту; отже на стіні зникає саме текст.
+        if box.fadingOut, hadPicture, box.fadeOutSeconds > 0.01 {
+            NativeTrace.say("зал: гасіння — розчиняю за \(box.fadeOutSeconds) с")
+            fadingUntil = Date().addingTimeInterval(box.fadeOutSeconds)
+            SlideTransitionAnimator.play(on: layer, from: previous, to: image,
+                                         kind: .fade, duration: box.fadeOutSeconds,
+                                         easing: .easeOut)
             return
-        }
-        // Показали щось знову — прозорість вертаємо.
-        if fading || fadeLayer?.contents != nil {
-            fading = false
-            fadeLayer?.removeAnimation(forKey: "гасіння")
-            fadeLayer?.contents = nil
-            layer.opacity = 1
         }
         if animated, kind != .none, hadPicture, seconds > 0 {
             SlideTransitionAnimator.play(on: layer, from: previous, to: image,
@@ -147,52 +145,19 @@ final class SlideCanvasView: NSView {
     /// Кадр, который сейчас в окне, — его снимает самопроверка.
     var currentImage: CGImage? { drawn }
 
-    /// Наскільки зображення зараз видно (1 — повністю, 0 — згасло).
-    /// Самоперевірці: по ньому видно, що гасіння справді плавне.
-    var shownOpacity: Double {
-        guard fading, let top = fadeLayer else { return 1 }
-        return Double(top.presentation()?.opacity ?? top.opacity)
+    /// Чи йде зараз розчинення гасіння — самоперевірці.
+    ///
+    /// Перехід живе не на самому шарі, а в його підшарах «уходящий» і
+    /// «входящий»: саме вони й розчиняються. Дивитися на анімації
+    /// батьківського шару марно — їх там немає.
+    var isFadingOutForCheck: Bool {
+        guard let until = fadingUntil, Date() < until, let layer else { return false }
+        let leaving = layer.sublayers?.first { $0.name == "уходящий" }
+        guard let leaving else { return false }
+        return !(leaving.animationKeys() ?? []).isEmpty
     }
 
-    private var fading = false
-    /// Шар, на якому догорає те, що було в залі.
-    private var fadeLayer: CALayer?
+    /// Доки триває розчинення гасіння.
+    private var fadingUntil: Date?
 
-    /// Покласти новий кадр (фон), а старий лишити зверху й згасити.
-    private func fadeAway(layer: CALayer, to image: CGImage, previous: CGImage, seconds: Double) {
-        fading = true
-        // Новий кадр — одразу: під тим, що догорає, має стояти фон.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        SlideTransitionAnimator.settle(layer, contents: image)
-        let top = fadeLayer ?? {
-            let fresh = CALayer()
-            fresh.contentsGravity = .resize
-            layer.addSublayer(fresh)
-            fadeLayer = fresh
-            return fresh
-        }()
-        top.frame = layer.bounds
-        top.contents = previous
-        top.opacity = 1
-        CATransaction.commit()
-
-        let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 1
-        animation.toValue = 0
-        animation.duration = seconds
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        animation.fillMode = .forwards
-        animation.isRemovedOnCompletion = false
-        top.add(animation, forKey: "гасіння")
-        top.opacity = 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.05) { [weak self] in
-            guard let self, self.fading else { return }
-            self.fading = false
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            self.fadeLayer?.contents = nil
-            CATransaction.commit()
-        }
-    }
 }

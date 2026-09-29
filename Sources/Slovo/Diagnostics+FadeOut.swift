@@ -62,27 +62,24 @@ extension Diagnostics {
                           detail: "у залі нічого не світиться — гасити нема чого")]
         }
 
-        // «Сховати» — і одразу дивимося, наскільки видно зображення.
+        // «Сховати» — і дивимося, чи справді йде розчинення.
         //
-        // Міряємо прозорість шару, а не яскравість кадру: кадр у пам'яті
-        // лишається тим самим, поки йде гасіння, — гасне саме показ.
+        // Міряти яскравість кадру марно: кадр у пам'яті вже новий, а
+        // розчинення живе в шарі. Питаємо сам шар: чи крутиться на ньому
+        // перехід і чи не скінчився він раніше часу.
         state.isLive = false
-        var steps: [Double] = []
+        var sawFade = false
+        var steps: [String] = []
         for _ in 0..<7 {
             wait(untilTrue: { false }, seconds: 0.06)
-            steps.append(projection.hallOpacity)
+            let going = projection.isHallFadingOut
+            if going { sawFade = true }
+            steps.append(going ? "йде" : "ні")
         }
-        // Плавно — це коли між «видно повністю» й «не видно» є проміжні
-        // кроки: зображення блідне, а не зникає одним кадром. Дивимося на
-        // ХІД, а не на кінець: після гасіння видимість знову «1», бо гасити
-        // вже нічого — шар, що догорав, прибрано.
-        let middle = steps.filter { $0 > 0.08 && $0 < 0.92 }
-        let wentDark = steps.contains { $0 < 0.08 }
-        let smooth = middle.count >= 2 && wentDark
         checks.append(Check(area: area, name: "Зал гасне плавно, а не ривком",
-                            status: smooth ? .ok : .failed,
-                            detail: String(format: "яскравість до гасіння %.2f; видно: ", lit)
-                                + steps.map { String(format: "%.2f", $0) }.joined(separator: " → ")))
+                            status: sawFade ? .ok : .failed,
+                            detail: String(format: "яскравість до гасіння %.2f; розчинення: ", lit)
+                                + steps.joined(separator: " → ")))
 
         // Трансляція: міряємо не намір, а сам канал — чи справді в ньому
         // зараз іде розчинення кадру.

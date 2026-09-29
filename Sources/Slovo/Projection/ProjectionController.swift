@@ -161,8 +161,8 @@ final class ProjectionController: ObservableObject {
     /// Что сейчас нарисовано в окне зала — для самопроверки.
     var hallImage: CGImage? { canvas?.currentImage }
 
-    /// Наскільки зображення зала зараз видно — самоперевірці гасіння.
-    var hallOpacity: Double { canvas?.shownOpacity ?? 1 }
+    /// Чи розчиняється зараз зал (гасіння) — самоперевірці.
+    var isHallFadingOut: Bool { canvas?.isFadingOutForCheck ?? false }
 
     func setVisible(_ visible: Bool) {
         guard visible != isVisible else { return }
