@@ -110,6 +110,29 @@ final class NativeSettingsSlideTab {
                                   range: 0...10000),
                 NativeForm.label(state.vb("Label17", "мс")),
             ]),
+            // Гасіння — своє. Власник: «затухание работает, нужна настройка
+            // по длительности и скорости». Нуль означає «разом», без
+            // розчинення: хтось саме так і захоче.
+            NativeForm.Row(OurWords.t("Время затухания при скрытии:"), width: 200, [
+                NativeForm.number(NativeForm.Tie(get: { [store] in
+                                                     store.settings.options.hideFadeTime ?? 400
+                                                 }, set: { [store] value in
+                                                     store.settings.options.hideFadeTime = max(0, min(5000, value))
+                                                 }),
+                                  range: 0...5000),
+                NativeForm.label(OurWords.t("мс")),
+            ]),
+            NativeForm.Row(OurWords.t("Кривая затухания:"), width: 200, [
+                NativeForm.popup(SlideStyle.Easing.allCases.map { OurWords.t($0.title) },
+                                 NativeForm.Tie(get: { [store] in
+                                     let raw = store.settings.options.hideFadeEasing ?? SlideStyle.Easing.easeOut.rawValue
+                                     return SlideStyle.Easing.allCases.firstIndex { $0.rawValue == raw } ?? 2
+                                 }, set: { [store] index in
+                                     let all = SlideStyle.Easing.allCases
+                                     guard all.indices.contains(index) else { return }
+                                     store.settings.options.hideFadeEasing = all[index].rawValue
+                                 }), width: 160),
+            ]),
         ])
     }
 

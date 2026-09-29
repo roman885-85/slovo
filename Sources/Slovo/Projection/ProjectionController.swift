@@ -139,9 +139,11 @@ final class ProjectionController: ObservableObject {
                 preset: SlidePreset? = nil, texts: ConstructorSample = ConstructorSample(),
                 backgroundOverride: String? = nil,
                 fadingOut: Bool = false, fadeSeconds: Double = 0.35,
+                fadeEasing: SlideStyle.Easing = .easeOut,
                 imageURL: ((String?) -> URL?)? = nil) {
         content.fadingOut = fadingOut
         content.fadeOutSeconds = fadeSeconds
+        content.fadeOutEasing = fadeEasing
         content.slide = slide
         content.style = style
         content.preset = preset
@@ -622,6 +624,8 @@ final class SlideBox: ObservableObject {
     /// стільки, скільки сказано тут.
     @Published var fadingOut = false
     @Published var fadeOutSeconds: Double = 0.35
+    /// Крива ходу гасіння — з налаштувань.
+    @Published var fadeOutEasing: SlideStyle.Easing = .easeOut
     /// Как искать картинки объектов. Живёт в коробке, потому что окно
     /// проекции стоит вне обычного дерева видов и своего состояния не имеет.
     var imageURL: (String?) -> URL? = { _ in nil }

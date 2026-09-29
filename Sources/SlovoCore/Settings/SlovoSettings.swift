@@ -52,6 +52,13 @@ public struct ProgramOptions: Codable, Sendable, Hashable {
     /// із двадцяти шаблонів на вкладці «Додаткові».
     public var slideTransition: String?
     public var slideTransitionEasing: String?
+    /// Гасіння залу: «Сховати», затемнення, «без тексту», вихід із програми.
+    ///
+    /// Власник: «затухание работает, нужна настройка по длительности и
+    /// скорости». Тривалість — у мілісекундах, як і `crossfadeTime`; крива
+    /// каже, як саме розчинення набирає й віддає хід.
+    public var hideFadeTime: Int?
+    public var hideFadeEasing: String?
     /// Перехід між сторінками показу і зображеннями — окремий від слайда.
     ///
     /// Власник: «Пункт презентация — добавить эффекты затуханий, наплывов и

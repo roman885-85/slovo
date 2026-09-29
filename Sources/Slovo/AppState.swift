@@ -1436,6 +1436,19 @@ final class AppState: ObservableObject {
         if let raw = Defaults.lastMode, let value = WorkMode(rawValue: raw) { mode = value }
     }
 
+    /// За скільки гасне зал — із налаштувань («Гасіння залу»).
+    ///
+    /// Нуль означає «разом», без розчинення: хтось може захотіти саме так.
+    var hideFadeSeconds: Double {
+        let ms = programOptions.hideFadeTime ?? Int(Defaults.hideFadeSeconds * 1000)
+        return max(0, min(5, Double(ms) / 1000))
+    }
+
+    /// Як саме розчиняється гасіння — крива ходу.
+    var hideFadeEasing: SlideStyle.Easing {
+        SlideStyle.Easing(rawValue: programOptions.hideFadeEasing ?? "") ?? .easeOut
+    }
+
     /// Погасити зал перед виходом із програми.
     ///
     /// Те саме, що «Сховати», але без запам'ятовування: програма зараз
@@ -1599,7 +1612,8 @@ final class AppState: ObservableObject {
                           texts: slideTexts,
                           backgroundOverride: backgroundOverride,
                           fadingOut: goesDark,
-                          fadeSeconds: Defaults.hideFadeSeconds,
+                          fadeSeconds: hideFadeSeconds,
+                          fadeEasing: hideFadeEasing,
                           imageURL: { [weak self] name in self?.presetImageURL(name) })
 
         // Кадр плеера — в то же окно слайда, поверх текста; и в сеть — по
@@ -1712,7 +1726,7 @@ final class AppState: ObservableObject {
         // в мережі лишалося ривком (власник: «в ndi тоже нет плавного
         // отключения»), бо коротка дорога малювання обминала.
         ndi.hideFadeSeconds = media.still != nil || media.hasVideo
-            ? Defaults.mediaFadeSeconds : Defaults.hideFadeSeconds
+            ? Defaults.mediaFadeSeconds : hideFadeSeconds
         ndi.update(slide: network.compose(hall), preset: preset(for: .ndi), texts: slideTexts,
                    imageURL: { [weak self] name in self?.presetImageURL(name) })
     }

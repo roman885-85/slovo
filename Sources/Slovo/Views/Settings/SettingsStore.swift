@@ -201,7 +201,8 @@ final class SettingsStore: ObservableObject {
         var optionKeys: [String] {
             switch self {
             case .slide:
-                return ["crossfadeTime", "pointerColour", "pointerNDI", "pointerOpacity",
+                return ["crossfadeTime", "hideFadeEasing", "hideFadeTime",
+                        "pointerColour", "pointerNDI", "pointerOpacity",
                         "pointerProjector", "pointerSize", "refAllMain", "refAllSec", "refMain",
                         "refSec", "refsSeparated", "showTransition", "showTransitionEasing",
                         "showTransitionTime", "slideTransition", "slideTransitionEasing",

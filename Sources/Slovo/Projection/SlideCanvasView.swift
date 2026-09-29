@@ -128,7 +128,7 @@ final class SlideCanvasView: NSView {
             fadingUntil = Date().addingTimeInterval(box.fadeOutSeconds)
             SlideTransitionAnimator.play(on: layer, from: previous, to: image,
                                          kind: .fade, duration: box.fadeOutSeconds,
-                                         easing: .easeOut)
+                                         easing: box.fadeOutEasing)
             return
         }
         if animated, kind != .none, hadPicture, seconds > 0 {
