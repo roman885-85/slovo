@@ -72,23 +72,37 @@ extension Diagnostics {
             wait(untilTrue: { false }, seconds: 0.06)
             steps.append(projection.hallOpacity)
         }
-        let last = steps.last ?? 1
         // Плавно — це коли між «видно повністю» й «не видно» є проміжні
-        // кроки: зображення блідне, а не зникає одним кадром. Перший замір
-        // може застати ще повну видимість — хід лише почався, і це нормально.
-        let middle = steps.filter { $0 > 0.1 && $0 < 0.92 }
-        let smooth = middle.count >= 2 && last < 0.2
+        // кроки: зображення блідне, а не зникає одним кадром. Дивимося на
+        // ХІД, а не на кінець: після гасіння видимість знову «1», бо гасити
+        // вже нічого — шар, що догорав, прибрано.
+        let middle = steps.filter { $0 > 0.08 && $0 < 0.92 }
+        let wentDark = steps.contains { $0 < 0.08 }
+        let smooth = middle.count >= 2 && wentDark
         checks.append(Check(area: area, name: "Зал гасне плавно, а не ривком",
                             status: smooth ? .ok : .failed,
                             detail: String(format: "яскравість до гасіння %.2f; видно: ", lit)
                                 + steps.map { String(format: "%.2f", $0) }.joined(separator: " → ")))
 
-        // Трансляція: те саме питаємо в неї самої — вона вміє гасити плавно
-        // й каже про це в журнал.
-        let ndiFade = Defaults.hideFadeSeconds
+        // Трансляція: міряємо не намір, а сам канал — чи справді в ньому
+        // зараз іде розчинення кадру.
+        let wasNDI = state.outputs[.ndi].isEnabled
+        if !wasNDI { state.setNDIEnabled(true) }
+        defer { if !wasNDI { state.setNDIEnabled(false) } }
+        state.showCurrent()
+        wait(untilTrue: { state.ndi.isFadingForCheck == false }, seconds: 2)
+        wait(untilTrue: { false }, seconds: 0.6)
+        state.isLive = false
+        var fadingSeen = false
+        for _ in 0..<6 {
+            wait(untilTrue: { false }, seconds: 0.06)
+            if state.ndi.isFadingForCheck { fadingSeen = true }
+        }
         checks.append(Check(area: area, name: "Трансляція гасне тим самим ходом",
-                            status: ndiFade > 0.05 ? .ok : .failed,
-                            detail: "тривалість гасіння \(String(format: "%.2f", ndiFade)) с"))
+                            status: fadingSeen ? .ok : .failed,
+                            detail: fadingSeen
+                                ? "кадр у мережі розчиняється за \(String(format: "%.2f", Defaults.hideFadeSeconds)) с"
+                                : "у каналі не видно розчинення — гасіння йде ривком"))
 
         // Сторінка слайда: дивимося саму сторінку, яку віддає програма.
         // Рендер у справжньому браузері перевіряє розділ «веб-слайди» — тут

@@ -365,22 +365,21 @@ final class NativeList: NSView, NativeListChecking {
         selection = selection.filteredIndexSet(includeInteger: { $0 < itemCount })
         if let anchor, anchor >= itemCount { self.anchor = nil }
 
-        // Число строк не изменилось — клетки обновляются на месте.
+        // Перечитуємо ВЕСЬ список, а не лише видимі клітинки.
         //
-        // `reloadData()` снимает виды всех видимых строк и ставит новые, а
-        // AppKit для каждого нового вида заново строит дерево слоёв: в
-        // профиле смены кегля на это уходила половина главного потока. Те же
-        // клетки с новым содержимым — это только перерисовка.
-        let rows = columnsPerRow > 1 ? (itemCount + columnsPerRow - 1) / columnsPerRow : itemCount
-        if rows > 0, rows == table.numberOfRows {
-            refreshVisibleCells()
-            if case .measured = heights {
-                table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows))
-            }
-            scheduleFitGuard()
-            return
-        }
+        // Колись тут був короткий шлях: якщо число рядків те саме, оновити
+        // лише видиме, бо `reloadData()` знімає види й будує їх заново
+        // (на зміні кегля це коштувало пів головного потоку). Але переклади
+        // Біблії мають однакове число книг — і після зміни перекладу частина
+        // списку лишалася від колишнього: клітинки поза очима ніхто не
+        // питав заново. Власник: «при смене перевода Библии список книг не
+        // всегда подтягивается от перевода и частично остается от
+        // предыдущего». Кегль же й так перебудовує стиль, а той кличе
+        // `reloadData()` сам — короткий шлях нічого не заощаджував.
         table.reloadData()
+        if case .measured = heights, table.numberOfRows > 0 {
+            noteHeights(IndexSet(integersIn: 0..<table.numberOfRows))
+        }
         scheduleFitGuard()
     }
 

@@ -1574,8 +1574,14 @@ public enum WebSlideTemplates {
         .idle::after { content: var(--sl-idle, ""); }
 
         .empty { display: none !important; }
-        body.hide-all .box, body.hide-all .nextbar { visibility: hidden; }
-        body.hide-idle .box, body.hide-idle .nextbar { display: none; }
+        /* Гасіння — плавне, а не зникнення разом. Власник: «при отключении
+           слайда… выполнять плавное затухание изображения, а не резкое
+           отключение… в веб страницах плавное отключение не появилось».
+           Тривалість беремо з «Плавность смены» (--sl-fade), щоб сторінка
+           гасла так само, як міняє слайди. */
+        .box, .nextbar { transition: opacity calc(var(--sl-fade, 300) * 1ms) ease; }
+        body.hide-all .box, body.hide-all .nextbar { opacity: 0; }
+        body.hide-idle .box, body.hide-idle .nextbar { opacity: 0; }
         body.hide-idle .idle { display: block; }
 
         .mark, .status {

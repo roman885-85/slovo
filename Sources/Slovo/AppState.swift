@@ -1707,19 +1707,12 @@ final class AppState: ObservableObject {
         let hall = blanked ? Slide.blank : hallSlide
         NDITrace.say("зал: показ=\(isLive) затемнення=\(isBlackout) без тексту=\(isTextHidden)"
                      + " режим=\(mode.rawValue) пусто=\(hall.isBlank)")
-        // Гашение идёт своей короткой дорогой: пустой кадр отдаётся очереди
-        // напрямую, без отрисовки и без сверки отпечатков. Так у кнопки
-        // «Убрать» не остаётся ни одного места, где она может промолчать.
-        // Гашение вслед за показом растворяем: рывок на микшере читается
-        // как сбой связи. «Убрать» при обычном слайде гасит по-прежнему разом.
-        guard !hall.isBlank else {
-            // Плавно ЗАВЖДИ. Колись «Убрать» гасила трансляцію разом —
-            // власник просив навпаки: «выполнять плавное затухание
-            // изображения, а не резкое отключение… на всех клиентах».
-            ndi.blank(fade: media.still != nil || media.hasVideo
-                      ? Defaults.mediaFadeSeconds : Defaults.hideFadeSeconds)
-            return
-        }
+        // Порожній слайд більше не йде короткою дорогою «пустий кадр»: він
+        // малюється, як усі інші, і розчиняється переходом. Інакше гасіння
+        // в мережі лишалося ривком (власник: «в ndi тоже нет плавного
+        // отключения»), бо коротка дорога малювання обминала.
+        ndi.hideFadeSeconds = media.still != nil || media.hasVideo
+            ? Defaults.mediaFadeSeconds : Defaults.hideFadeSeconds
         ndi.update(slide: network.compose(hall), preset: preset(for: .ndi), texts: slideTexts,
                    imageURL: { [weak self] name in self?.presetImageURL(name) })
     }

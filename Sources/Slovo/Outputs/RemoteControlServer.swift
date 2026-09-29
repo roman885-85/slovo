@@ -709,6 +709,18 @@ final class RemoteControlServer {
             } else {
                 answer["snapshot"] = ""
             }
+            // І кадр самого залу — той, що зараз на проекторі. Знімок екрана
+            // через віддалений вхід macOS не дає, а бачити, що на стіні,
+            // треба: власник каже «при гашении должен быть не черный фон, а
+            // фон, который выставлен».
+            if let hall = state.projection.hallImage {
+                let path = NSString(string: "~/Library/Logs/slovo-зал.png").expandingTildeInPath
+                let rep = NSBitmapImageRep(cgImage: hall)
+                if let data = rep.representation(using: .png, properties: [:]) {
+                    try? data.write(to: URL(fileURLWithPath: path))
+                    answer["зал"] = path
+                }
+            }
             // І що список думає про висоти своїх рядків — просто з живого
             // вікна: саме тут куплети стоять утричі вищі за свій текст, а в
             // перевірці, яка будує своє вікно, усе рівно.

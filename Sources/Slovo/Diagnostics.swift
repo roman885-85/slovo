@@ -2208,6 +2208,7 @@ enum Diagnostics {
         ("сумісність", { compatSection(state: $0) }),
         ("мережа", { networkSection(state: $0) }),
         ("гасіння", { fadeOutSection(state: $0) }),
+        ("книги", { bibleBooksSection(state: $0) }),
         ("куплети", { livePartHeightsSection(state: $0) + songPartSweepSection(state: $0) }),
         ("автономність", { selfContainedSection($0) + library($0) + importWindowSection(state: $0) }),
         ("переклади", { translationsSection(state: $0) }),

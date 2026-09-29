@@ -728,6 +728,12 @@ final class NDIOutput: ObservableObject {
         NDITrace.say("гашение: пустой кадр \(width)×\(height) отдан очереди")
     }
 
+    /// За скільки гасне трансляція: стільки ж, скільки зал і сторінки.
+    var hideFadeSeconds: Double = 0.4
+
+    /// Чи розчиняється зараз кадр у мережі — самоперевірці.
+    var isFadingForCheck: Bool { pump.isFadingForCheck }
+
     /// Разовый кадр текущего слайда — для «сохранить слайд картинкой» и для
     /// проверок. Работает и когда канал остановлен.
     func snapshotFrame(slide: Slide? = nil, style: SlideStyle? = nil) -> RenderedFrame? {
@@ -845,9 +851,21 @@ final class NDIOutput: ObservableObject {
 
         // Переход рисуем сами: в сеть уходит поток кадров, и «как сменяется
         // слайд» здесь надо не объявить, а нарисовать — по кадру на такт.
-        let effect = preset?.transition ?? currentRules.style.transition
-        let seconds = preset?.transitionDuration ?? currentRules.style.transitionDuration
-        if effect != .none, seconds > 0.01, let previous = lastSnapshot?.image, !composed.isBlank {
+        var effect = preset?.transition ?? currentRules.style.transition
+        var seconds = preset?.transitionDuration ?? currentRules.style.transitionDuration
+        // Гасіння — теж перехід, і теж плавний.
+        //
+        // Порожній кадр раніше йшов у мережу разом: «Убрать» на мікшері
+        // читалося як зрив. Власник: «при отключении слайда… выполнять
+        // плавное затухание изображения… в ndi тоже нет плавного
+        // отключения». Тепер текст розчиняється так само, як при зміні
+        // слайда, а фон (якщо канал його малює) лишається.
+        if composed.isBlank {
+            effect = .fade
+            seconds = hideFadeSeconds
+        }
+        if effect != .none, seconds > 0.01, let previous = lastSnapshot?.image {
+            NDITrace.say("перехід: \(composed.isBlank ? "гашення" : "зміна слайда") за \(seconds) с")
             pump.beginTransition(from: previous, to: snapshot.image,
                                  identity: identity, duration: seconds,
                                  transition: effect, alpha: .straight)
@@ -1205,6 +1223,12 @@ private final class FramePump: @unchecked Sendable {
     var currentImage: CGImage? {
         lock.lock(); defer { lock.unlock() }
         return frame?.image
+    }
+
+    /// Чи йде зараз плавний перехід — самоперевірці гасіння.
+    var isFadingForCheck: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return fading != nil
     }
 
     /// Что сейчас стоит в очереди — это смотрит самопроверка. Отпечаток
