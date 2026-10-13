@@ -177,7 +177,11 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         toneLabel.action = #selector(resetTone)
 
         list.source = self
-        list.onSelect = { [weak self] _, active, _ in self?.selected = active }
+        // Виділили іншу фонограму — напис і кнопки тону показують уже її тон.
+        list.onSelect = { [weak self] _, active, _ in
+            self?.selected = active
+            self?.refresh()
+        }
         // Двойной щелчок или Enter — открыть и сразу играть: так пускают
         // минусовку, когда уже начали петь.
         list.onActivate = { [weak self] index in
@@ -239,7 +243,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         volume.toolTip = OurWords.t("Громкость фонограммы")
         toneDown.toolTip = OurWords.t("Понизить тон на 0,5 (полтона); темп не меняется")
         toneUp.toolTip = OurWords.t("Повысить тон на 0,5 (полтона); темп не меняется")
-        toneLabel.toolTip = OurWords.t("Тон фонограммы; щелчок — вернуть исходный. Запоминается для каждого файла")
+        toneLabel.toolTip = OurWords.t("Тон фонограммы, выделенной в списке (без выделения — открытой); щелчок — вернуть исходный. Запоминается для каждого файла")
         refresh()
     }
 
@@ -461,10 +465,6 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         removeButton.isEnabled = !player.playlist.isEmpty
         clearButton.isEnabled = !player.playlist.isEmpty
         count.stringValue = player.playlist.isEmpty ? "" : "· \(player.playlist.count)"
-        toneLabel.title = OurWords.t("Тон: %s", Self.toneText(player.pitchTones))
-        toneLabel.contentTintColor = player.pitchTones == 0 ? .secondaryLabelColor : .controlAccentColor
-        toneDown.isEnabled = player.pitchTones > -BackingTrackPlayer.pitchLimit
-        toneUp.isEnabled = player.pitchTones < BackingTrackPlayer.pitchLimit
 
         if waveformView.waveform?.url != player.waveform?.url { waveformView.waveform = player.waveform }
         waveformView.isLoading = hasFile && player.waveform == nil && player.error == nil
@@ -480,8 +480,17 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
             list.reload()
             let active = player.playlistIndex
             list.setSelection(active.map { IndexSet(integer: $0) } ?? IndexSet(), active: active)
-            if let selected, selected >= shownList.count { self.selected = nil }
+            // Виділення повернулося на відкриту фонограму — і тон тепер її:
+            // інакше кнопки правили б рядок, якого вже не видно виділеним.
+            self.selected = nil
         }
+        // Напис і кнопки тону — після списку: виділення щойно могло
+        // повернутися на відкриту фонограму.
+        let tone = shownTone
+        toneLabel.title = OurWords.t("Тон: %s", Self.toneText(tone))
+        toneLabel.contentTintColor = tone == 0 ? .secondaryLabelColor : .controlAccentColor
+        toneDown.isEnabled = tone > -BackingTrackPlayer.pitchLimit
+        toneUp.isEnabled = tone < BackingTrackPlayer.pitchLimit
         if player.isPlaying { startAnimation() }
         needsLayout = true
     }
@@ -622,9 +631,34 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
     @objc private func stopPlay() { player.stop(); refresh() }
     @objc private func toggleLoop() { player.loops.toggle(); refresh() }
     @objc private func toggleNext() { player.playsNext.toggle(); refresh() }
-    @objc private func lowerTone() { player.shiftPitch(by: -BackingTrackPlayer.pitchStep); refresh() }
-    @objc private func raiseTone() { player.shiftPitch(by: BackingTrackPlayer.pitchStep); refresh() }
-    @objc private func resetTone() { player.setPitch(0); refresh() }
+    /// Фонограма, якої стосуються кнопки тону: виділена в списку, а коли
+    /// нічого не виділено — відкрита в програвачі.
+    private var toneTarget: URL? {
+        if let selected, player.playlist.indices.contains(selected) { return player.playlist[selected] }
+        return player.url
+    }
+
+    /// Тон, який показує напис, — тієї самої фонограми.
+    private var shownTone: Double { toneTarget.map { player.pitch(of: $0) } ?? player.pitchTones }
+
+    private func setTone(_ tones: Double) {
+        if let target = toneTarget { player.setPitch(tones, of: target) } else { player.setPitch(tones) }
+        refresh()
+    }
+
+    @objc private func lowerTone() { setTone(shownTone - BackingTrackPlayer.pitchStep) }
+    @objc private func raiseTone() { setTone(shownTone + BackingTrackPlayer.pitchStep) }
+    @objc private func resetTone() { setTone(0) }
+
+    /// Самоперевірці: виділити рядок списку так, як це робить клацання.
+    func selectForCheck(_ index: Int?) {
+        // Спершу звірити список із програвачем: людина клацає по рядку вже
+        // показаного списку, а не того, що зміниться наступної миті.
+        refresh()
+        selected = index
+        list.setSelection(index.map { IndexSet(integer: $0) } ?? IndexSet(), active: index)
+        refresh()
+    }
 
     /// «0», «+0,5», «−1» — з комою там, де пишуть комою.
     static func toneText(_ tones: Double) -> String {

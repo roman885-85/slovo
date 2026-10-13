@@ -1676,7 +1676,7 @@
     "Только вкладку": "Nur diese Seite",
     "Только просмотр: страница показывает зал, но не управляет": "Nur Ansicht: die Seite zeigt den Saal, steuert aber nicht",
     "Только свои строки": "Nur eigene Zeilen",
-    "Тон фонограммы; щелчок — вернуть исходный. Запоминается для каждого файла": "Tonart des Playbacks; Klick stellt das Original wieder her. Wird je Datei gemerkt",
+    "Тон фонограммы, выделенной в списке (без выделения — открытой); щелчок — вернуть исходный. Запоминается для каждого файла": "Tonart des in der Liste markierten Playbacks (ohne Markierung – des geöffneten); Klick stellt das Original wieder her. Wird je Datei gemerkt",
     "Тон: %s": "Tonart: %s",
     "Тональность:": "Tonart:",
     "Точка после номера": "Punkt nach der Nummer",

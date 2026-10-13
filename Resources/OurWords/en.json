@@ -1676,7 +1676,7 @@
     "Только вкладку": "This tab only",
     "Только просмотр: страница показывает зал, но не управляет": "View only: the page shows the hall but does not control it",
     "Только свои строки": "Only own lines",
-    "Тон фонограммы; щелчок — вернуть исходный. Запоминается для каждого файла": "Backing track key; click to return to the original. Remembered for each file",
+    "Тон фонограммы, выделенной в списке (без выделения — открытой); щелчок — вернуть исходный. Запоминается для каждого файла": "Key of the backing track selected in the list (or the open one if none is selected); click to return to the original. Remembered for each file",
     "Тон: %s": "Key: %s",
     "Тональность:": "Key:",
     "Точка после номера": "Dot after the number",

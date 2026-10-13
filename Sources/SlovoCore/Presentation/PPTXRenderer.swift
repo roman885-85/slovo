@@ -101,6 +101,12 @@ public enum PPTXRenderer {
             context.setFillColor(color)
             context.fillPath()
             context.restoreGState()
+        } else if case .gradient(let gradient) = shape.fill {
+            context.saveGState()
+            context.addPath(path)
+            context.clip()
+            draw(gradient: gradient, in: rect, context: context)
+            context.restoreGState()
         }
         context.restoreGState()
 
@@ -130,6 +136,80 @@ public enum PPTXRenderer {
         case .texture(let part, let tileScale, let duotone):
             draw(texture: part, tileScale: tileScale, duotone: duotone,
                  in: rect, document: document, context: context)
+        case .gradient(let gradient):
+            context.saveGState()
+            context.clip(to: rect)
+            draw(gradient: gradient, in: rect, context: context)
+            context.restoreGState()
+        }
+    }
+
+    /// Перехід кольору в рамці. Обрізку формою фігури ставить той, хто кличе.
+    ///
+    /// Зупинки рахуються від осердя (чи від початку прямого переходу) до
+    /// краю: у темі «Твердий переплет» прозоре біле стоїть на 83 %, а
+    /// кремове — на 100 %, тобто по самому краю слайда.
+    private static func draw(gradient: PPTXDocument.Gradient, in rect: CGRect, context: CGContext) {
+        let colors = gradient.stops.map(\.color) as CFArray
+        let places = gradient.stops.map { CGFloat($0.position) }
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let shade = CGGradient(colorsSpace: space, colors: colors, locations: places) else { return }
+        let both: CGGradientDrawingOptions = [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        func absolute(_ focus: CGRect) -> CGRect {
+            CGRect(x: rect.minX + focus.minX * rect.width, y: rect.minY + focus.minY * rect.height,
+                   width: focus.width * rect.width, height: focus.height * rect.height)
+        }
+        switch gradient.kind {
+        case .linear(let angle):
+            let radians = angle * .pi / 180
+            let direction = CGPoint(x: cos(radians), y: sin(radians))
+            let half = (abs(direction.x) * rect.width + abs(direction.y) * rect.height) / 2
+            context.drawLinearGradient(shade,
+                                       start: CGPoint(x: rect.midX - direction.x * half, y: rect.midY - direction.y * half),
+                                       end: CGPoint(x: rect.midX + direction.x * half, y: rect.midY + direction.y * half),
+                                       options: both)
+        case .radial(let focus):
+            let core = absolute(focus)
+            let center = CGPoint(x: core.midX, y: core.midY)
+            let reach = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                         CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY)]
+                .map { hypot($0.x - center.x, $0.y - center.y) }.max() ?? 0
+            context.drawRadialGradient(shade, startCenter: center, startRadius: 0,
+                                       endCenter: center, endRadius: reach, options: both)
+        case .rectangular(let focus):
+            // Рамка картини: чотири трапеції від осердя до країв, у кожній
+            // свій прямий перехід. Згладжування на цей час вимикаємо: інакше
+            // по діагоналях, де трапеції сходяться, напівпрозорі краї
+            // накладалися б і давали видимі промені з кутів.
+            let core = absolute(focus)
+            context.setShouldAntialias(false)
+            let sides: [(points: [CGPoint], from: CGPoint, to: CGPoint)] = [
+                ([CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                  CGPoint(x: core.maxX, y: core.minY), CGPoint(x: core.minX, y: core.minY)],
+                 CGPoint(x: rect.midX, y: core.minY), CGPoint(x: rect.midX, y: rect.minY)),
+                ([CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY),
+                  CGPoint(x: core.maxX, y: core.maxY), CGPoint(x: core.minX, y: core.maxY)],
+                 CGPoint(x: rect.midX, y: core.maxY), CGPoint(x: rect.midX, y: rect.maxY)),
+                ([CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.minX, y: rect.maxY),
+                  CGPoint(x: core.minX, y: core.maxY), CGPoint(x: core.minX, y: core.minY)],
+                 CGPoint(x: core.minX, y: rect.midY), CGPoint(x: rect.minX, y: rect.midY)),
+                ([CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY),
+                  CGPoint(x: core.maxX, y: core.maxY), CGPoint(x: core.maxX, y: core.minY)],
+                 CGPoint(x: core.maxX, y: rect.midY), CGPoint(x: rect.maxX, y: rect.midY)),
+            ]
+            for side in sides {
+                context.saveGState()
+                context.beginPath()
+                context.addLines(between: side.points)
+                context.closePath()
+                context.clip()
+                context.drawLinearGradient(shade, start: side.from, end: side.to, options: both)
+                context.restoreGState()
+            }
+            if core.width > 0, core.height > 0, let first = gradient.stops.first {
+                context.setFillColor(first.color)
+                context.fill(core)
+            }
         }
     }
 
@@ -317,7 +397,13 @@ public enum PPTXRenderer {
                 let font = font(named: mark.font ?? lead.fontName, size: max(4, points), traits: [])
                 // Після маркера — табуляція до лівого відступу тексту.
                 style.tabStops = [NSTextTab(textAlignment: .left, location: head, options: [:])]
-                result.append(NSAttributedString(string: mark.text + "\t",
+                // Великий маркер буває ширший за свій відступ (стрілка кеглем
+                // 54 при відступі 45 пунктів). Табуляція тоді стрибає аж до
+                // наступної зупинки, і текст від'їжджає на пів слайда; у
+                // PowerPoint він стає одразу за маркером.
+                let width = NSAttributedString(string: mark.text, attributes: [.font: font]).size().width
+                let gap = width >= head - first ? "" : "\t"
+                result.append(NSAttributedString(string: mark.text + gap,
                                                  attributes: [.font: font,
                                                               .foregroundColor: paragraph.bulletColor ?? lead.color,
                                                               .paragraphStyle: style]))

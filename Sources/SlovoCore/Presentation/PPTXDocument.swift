@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import CoreText
 import ImageIO
 
 /// Розбір презентації PowerPoint (`.pptx`) — свій, без чужих бібліотек.
@@ -9,8 +10,8 @@ import ImageIO
 /// картинками. Ми читаємо рівно те, з чого складається вигляд слайда на екрані:
 /// розмір полотна, фон, картинки і написи з їхнім місцем, кеглем і кольором.
 ///
-/// Чого тут немає — і це сказано чесно: складних заливок з переходом кольору,
-/// таблиць, діаграм, тіні й об'єму, анімації всередині слайда. Для проповіді з
+/// Чого тут немає — і це сказано чесно: переходу кольору у фоні слайда й
+/// в обведенні (у заливці фігур він є), таблиць, діаграм, тіні й об'єму, анімації всередині слайда. Для проповіді з
 /// текстом на картинці цього не потрібно; якщо знадобиться — доберемо по одному,
 /// а не будемо обіцяти «повну сумісність», якої не буває.
 ///
@@ -45,6 +46,26 @@ public final class PPTXDocument {
         case texture(part: String, tileScale: Double?, duotone: Duotone?)
         /// Ім'я частини архіву з картинкою — її дістає сам документ.
         case picture(String)
+        /// Перехід кольору (`gradFill`). Ним у темах роблять «пергамент»:
+        /// прямокутник зразка на весь слайд, прозорий посередині й кремовий
+        /// по краях. Без нього слайд лишався рівним сірим аркушем — власник:
+        /// «сторінка має вигляд пергаменту, а в програмі просто білий лист».
+        case gradient(Gradient)
+    }
+
+    public struct Gradient {
+        public enum Kind {
+            /// Прямий перехід; кут у градусах за стрілкою годинника від «вправо».
+            case linear(angle: Double)
+            /// Від прямокутника-осердя (у частках фігури) до її країв —
+            /// `path="rect"`; рамка картини.
+            case rectangular(focus: CGRect)
+            /// Колами від осердя — `path="circle"`.
+            case radial(focus: CGRect)
+        }
+        /// Місце зупинки (0…1, від осердя чи початку) і її колір із прозорістю.
+        public var stops: [(position: Double, color: CGColor)]
+        public var kind: Kind
     }
 
     /// Форма фігури. У презентаціях проповідей трапляються рівно ці:
@@ -198,6 +219,9 @@ public final class PPTXDocument {
         guard !parts.isEmpty else { throw Failure(OurWords.t("в презентации нет ни одного слайда")) }
 
         theme = Self.readTheme(archive)
+        themeFonts = Self.readThemeFonts(archive)
+        presentationDocument = presentation
+        defaultTextStyle = (try? presentation.nodes(forXPath: "//*[local-name()='defaultTextStyle']"))?.first as? XMLElement
         themeEffects = Self.readThemeEffects(archive, theme: theme)
         (themePart, themeBackgroundStyles, themeRelations) = Self.readThemeBackgrounds(archive)
         slides = parts.map { read(slide: $0) }
@@ -205,6 +229,14 @@ public final class PPTXDocument {
 
     /// Кольори теми: `schemeClr` посилається на них за іменем.
     private var theme: [String: CGColor] = [:]
+    /// Шрифти теми: «+mj-lt» (заголовки) і «+mn-lt» (текст) — це не імена
+    /// шрифтів, а посилання сюди.
+    private var themeFonts: (major: String?, minor: String?) = (nil, nil)
+    /// Стилі тексту презентації за умовчанням (`defaultTextStyle`) — останнє,
+    /// звідки напис бере кегль і колір, якщо ніхто ближчий їх не назвав.
+    private var defaultTextStyle: XMLElement?
+    /// Тримає документ живим: `defaultTextStyle` — вузол усередині нього.
+    private var presentationDocument: XMLDocument?
     /// Стилі фону теми (`bgFillStyleLst`), частина теми і її зв'язки — щоб
     /// `<p:bgRef idx="1002">` дійшов до текстури.
     private var themeBackgroundStyles: [XMLElement] = []
@@ -391,6 +423,8 @@ public final class PPTXDocument {
             shapeFill = .none
         } else if let properties, let solid = Self.directColor(in: properties, theme: theme) {
             shapeFill = .solid(solid)
+        } else if let properties, let gradient = Self.gradient(in: properties, theme: theme) {
+            shapeFill = .gradient(gradient)
         }
 
         var strokeColor: CGColor?
@@ -428,8 +462,21 @@ public final class PPTXDocument {
         }
 
         let body = (try? element.nodes(forXPath: ".//*[local-name()='bodyPr']"))?.first as? XMLElement
+        // Куди притиснуто текст, заповнювач успадковує: у слайді `bodyPr`
+        // здебільшого порожній, а «посередині» сказано в розмітці чи зразку.
+        // Без цього заголовок сідав на верх рамки, вище, ніж у PowerPoint.
+        var anchorValue = body?.attribute(forName: "anchor")?.stringValue
+        if anchorValue == nil, let wanted = Self.placeholder(of: element) {
+            for root in [layout, master] {
+                guard let root, let twin = Self.placeholderElement(wanted, in: root) else { continue }
+                if let found = Self.attribute(twin, path: ".//*[local-name()='bodyPr']", name: "anchor") {
+                    anchorValue = found
+                    break
+                }
+            }
+        }
         let anchor: String
-        switch body?.attribute(forName: "anchor")?.stringValue {
+        switch anchorValue {
         case "ctr": anchor = "center"
         case "b":   anchor = "bottom"
         default:    anchor = "top"
@@ -625,19 +672,13 @@ public final class PPTXDocument {
         // свій `lstStyle`, той самий заповнювач у розмітці й зразку, стилі
         // зразка. Доти брався лише `pPr` самого абзацу, і маркери, задані
         // рівнем, пропадали.
-        let inherited = Self.levelStyles(of: element, layout: layout, master: master)
+        var inherited = Self.levelStyles(of: element, layout: layout, master: master)
+        if let defaultTextStyle { inherited.append(defaultTextStyle) }
         var numbering: [Int: Int] = [:]
         for node in (try? element.nodes(forXPath: ".//*[local-name()='txBody']/*[local-name()='p']")) ?? [] {
             guard let paragraph = node as? XMLElement else { continue }
             let properties = (try? paragraph.nodes(forXPath: "./*[local-name()='pPr']"))?
                 .first as? XMLElement
-            let alignment: String
-            switch properties?.attribute(forName: "algn")?.stringValue {
-            case "ctr":  alignment = "center"
-            case "r":    alignment = "right"
-            case "just": alignment = "justify"
-            default:     alignment = "left"
-            }
             let levelNumber = Int(properties?.attribute(forName: "lvl")?.stringValue ?? "0") ?? 0
             let level = Double(levelNumber)
             // Ланцюжок: свій pPr, далі lvlNpPr звідусіль, де він є.
@@ -653,6 +694,27 @@ public final class PPTXDocument {
                     if let value = item.attribute(forName: name)?.stringValue, let number = Double(value) { return number }
                 }
                 return nil
+            }
+            // Вирівнювання — теж за ланцюжком: заголовок «посередині» сказано
+            // в стилі зразка, а не в кожному абзаці.
+            let alignment: String
+            switch chain.lazy.compactMap({ $0.attribute(forName: "algn")?.stringValue }).first {
+            case "ctr":  alignment = "center"
+            case "r":    alignment = "right"
+            case "just": alignment = "justify"
+            default:     alignment = "left"
+            }
+            // Властивості літер за умовчанням (`defRPr`) з того ж ланцюжка.
+            // Доти кегль брався лише з самого шматка тексту, а коли його там
+            // не було — ставало 18 пунктів. У презентаціях же кегль часто
+            // названо один раз, у стилі напису (54 пункти), і весь текст
+            // виходив утричі дрібнішим — власник: «сторінка має великий
+            // шрифт, а на виході дрібні літери, які важко прочитати».
+            let defaults = chain.compactMap {
+                (try? $0.nodes(forXPath: "./*[local-name()='defRPr']"))?.first as? XMLElement
+            }
+            func inheritedText(_ name: String) -> String? {
+                defaults.lazy.compactMap { $0.attribute(forName: name)?.stringValue }.first
             }
             // Маркер: перший у ланцюжку, хто щось про нього каже — `buNone`,
             // `buChar` чи `buAutoNum`; шрифт і колір маркера — так само.
@@ -712,15 +774,22 @@ public final class PPTXDocument {
                     text = Self.text(of: node)
                 }
                 let style = (try? run.nodes(forXPath: "./*[local-name()='rPr']"))?.first as? XMLElement
-                let size = Double(style?.attribute(forName: "sz")?.stringValue ?? "") ?? 1800
+                func own(_ name: String) -> String? {
+                    style?.attribute(forName: name)?.stringValue ?? inheritedText(name)
+                }
+                let size = Double(own("sz") ?? "") ?? 1800
+                let color = style.flatMap { Self.solidColor(in: $0, theme: theme) }
+                    ?? defaults.lazy.compactMap { Self.directColor(in: $0, theme: self.theme) }.first
+                    ?? CGColor(red: 0, green: 0, blue: 0, alpha: 1)
+                let font = Self.fontName(in: style)
+                    ?? defaults.lazy.compactMap { Self.fontName(in: $0) }.first
                 runs.append(Run(text: text,
                                 size: size / 100,
-                                isBold: style?.attribute(forName: "b")?.stringValue == "1",
-                                isItalic: style?.attribute(forName: "i")?.stringValue == "1",
-                                isUnderlined: (style?.attribute(forName: "u")?.stringValue ?? "none") != "none",
-                                color: style.flatMap { Self.solidColor(in: $0, theme: theme) }
-                                    ?? CGColor(red: 0, green: 0, blue: 0, alpha: 1),
-                                fontName: Self.fontName(in: style)))
+                                isBold: own("b") == "1",
+                                isItalic: own("i") == "1",
+                                isUnderlined: (own("u") ?? "none") != "none",
+                                color: color,
+                                fontName: resolved(font: font)))
             }
             // Порожній абзац — це порожній рядок між блоками тексту, і він
             // тримає вигляд слайда: викидати його не можна.
@@ -851,6 +920,72 @@ public final class PPTXDocument {
             }
         }
         return nil
+    }
+
+    /// Ім'я шрифту з посилання на шрифт теми: «+mj-lt» — заголовний,
+    /// «+mn-lt» — основний. Звичайне ім'я повертається як є.
+    private func resolved(font name: String?) -> String? {
+        guard let name, name.hasPrefix("+") else { return name }
+        return name.hasPrefix("+mj") ? themeFonts.major : themeFonts.minor
+    }
+
+    /// Шрифти теми. Латинського шрифту теми на цьому комп'ютері може не
+    /// бути (Book Antiqua ставить лише Office) — тоді беремо той, що тема
+    /// сама називає для кирилиці: ним PowerPoint і малює український текст,
+    /// а системний шрифт без зарубок на його місці міняв би вигляд слайда.
+    private static func readThemeFonts(_ archive: ZipArchive.Reader) -> (major: String?, minor: String?) {
+        let part = archive.names.first { $0.hasPrefix("ppt/theme/") && $0.hasSuffix(".xml") }
+        guard let part, let text = try? archive.text(part),
+              let document = try? XMLDocument(xmlString: text, options: xmlOptions) else { return (nil, nil) }
+        func installed(_ name: String) -> Bool {
+            let wanted = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: name] as CFDictionary)
+            let mandatory: Set<String> = [kCTFontFamilyNameAttribute as String]
+            return CTFontDescriptorCreateMatchingFontDescriptor(wanted, mandatory as CFSet) != nil
+        }
+        func face(_ group: String) -> String? {
+            let base = "//*[local-name()='fontScheme']/*[local-name()='\(group)']"
+            let latin = ((try? document.nodes(forXPath: base + "/*[local-name()='latin']"))?.first as? XMLElement)?
+                .attribute(forName: "typeface")?.stringValue
+            let cyrillic = ((try? document.nodes(forXPath: base + "/*[local-name()='font'][@script='Cyrl']"))?.first as? XMLElement)?
+                .attribute(forName: "typeface")?.stringValue
+            for candidate in [latin, cyrillic] {
+                if let candidate, !candidate.isEmpty, installed(candidate) { return candidate }
+            }
+            return [latin, cyrillic].compactMap { $0 }.first { !$0.isEmpty }
+        }
+        return (face("majorFont"), face("minorFont"))
+    }
+
+    /// Перехід кольору ПРЯМОГО нащадка `<a:gradFill>`.
+    private static func gradient(in element: XMLElement, theme: [String: CGColor]) -> Gradient? {
+        guard let fill = (try? element.nodes(forXPath: "./*[local-name()='gradFill']"))?.first as? XMLElement
+        else { return nil }
+        var stops: [(position: Double, color: CGColor)] = []
+        for node in (try? fill.nodes(forXPath: "./*[local-name()='gsLst']/*[local-name()='gs']")) ?? [] {
+            guard let stop = node as? XMLElement, let colour = color(of: stop, theme: theme) else { continue }
+            let position = (Double(stop.attribute(forName: "pos")?.stringValue ?? "") ?? 0) / 100_000
+            stops.append((min(1, max(0, position)), colour))
+        }
+        guard !stops.isEmpty else { return nil }
+        stops.sort { $0.position < $1.position }
+        if let path = (try? fill.nodes(forXPath: "./*[local-name()='path']"))?.first as? XMLElement {
+            var focus = CGRect(x: 0.5, y: 0.5, width: 0, height: 0)
+            if let to = (try? path.nodes(forXPath: "./*[local-name()='fillToRect']"))?.first as? XMLElement {
+                func part(_ name: String) -> Double {
+                    (Double(to.attribute(forName: name)?.stringValue ?? "") ?? 0) / 100_000
+                }
+                focus = CGRect(x: part("l"), y: part("t"),
+                               width: max(0, 1 - part("l") - part("r")),
+                               height: max(0, 1 - part("t") - part("b")))
+            }
+            let kind: Gradient.Kind = path.attribute(forName: "path")?.stringValue == "circle"
+                ? .radial(focus: focus) : .rectangular(focus: focus)
+            return Gradient(stops: stops, kind: kind)
+        }
+        let angle = ((try? fill.nodes(forXPath: "./*[local-name()='lin']"))?.first as? XMLElement)
+            .flatMap { Double($0.attribute(forName: "ang")?.stringValue ?? "") }
+            .map { $0 / 60_000 } ?? 0
+        return Gradient(stops: stops, kind: .linear(angle: angle))
     }
 
     /// Чи є в елемента такий прямий нащадок — наприклад `<a:noFill/>`.

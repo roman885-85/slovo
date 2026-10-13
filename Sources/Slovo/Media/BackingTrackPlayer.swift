@@ -143,14 +143,84 @@ final class BackingTrackPlayer: ObservableObject {
     func shiftPitch(by tones: Double) { setPitch(pitchTones + tones) }
 
     func setPitch(_ tones: Double) {
-        let stepped = (tones / Self.pitchStep).rounded() * Self.pitchStep
-        pitchTones = min(Self.pitchLimit, max(-Self.pitchLimit, stepped))
+        pitchTones = Self.steppedPitch(tones)
         pitchUnit.pitch = Float(pitchTones * 200)
-        if let url, remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) {
-            var saved = store.dictionary(forKey: Self.pitchKey) as? [String: Double] ?? [:]
-            if pitchTones == 0 { saved[url.path] = nil } else { saved[url.path] = pitchTones }
-            store.set(saved, forKey: Self.pitchKey)
+        if let track = pitchSource ?? url { rememberPitch(pitchTones, of: track) }
+        notify()
+    }
+
+    private static func steppedPitch(_ tones: Double) -> Double {
+        let stepped = (tones / pitchStep).rounded() * pitchStep
+        return min(pitchLimit, max(-pitchLimit, stepped))
+    }
+
+    /// Файл, за яким записано тон відкритої фонограми. Здебільшого це вона
+    /// сама; але коли файл довелося перетворити, грає тимчасова копія, а
+    /// тон має лишатися за тим файлом, який людина бачить у списку.
+    private var pitchSource: URL?
+    /// Вихідний файл, поки `open` відкриває його перетворену копію.
+    private var openingOriginal: URL?
+    /// Тон, названий у цьому запуску, — щоб він тримався за файлом і там,
+    /// де пам'ять між запусками вимкнено. Пам'ятає і «повернули на нуль»:
+    /// без цього старий запис із минулого запуску оживав би знову.
+    private var sessionPitch: [String: Double] = [:]
+    /// Перетворена копія → вихідний файл. У списку може стояти і той, і
+    /// той (копія потрапляє туди, щойно її відкрили), а для тону це одна
+    /// фонограма: записи обох тримаємо однаковими.
+    private var convertedFrom: [URL: URL] = [:]
+
+    /// Файли, які для тону є тією самою фонограмою: сам файл, той, із якого
+    /// його перетворено, і його перетворені копії.
+    private func twins(of track: URL) -> [URL] {
+        var all = [track]
+        if let original = convertedFrom[track] { all.append(original) }
+        all.append(contentsOf: convertedFrom.filter { $0.value == track }.map(\.key))
+        return all
+    }
+
+    private func rememberPitch(_ tones: Double, of track: URL) {
+        let files = twins(of: track)
+        for file in files { sessionPitch[file.path] = tones }
+        guard remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) else { return }
+        var saved = store.dictionary(forKey: Self.pitchKey) as? [String: Double] ?? [:]
+        for file in files {
+            if tones == 0 { saved[file.path] = nil } else { saved[file.path] = tones }
         }
+        store.set(saved, forKey: Self.pitchKey)
+    }
+
+    /// Чи це та фонограма, що зараз відкрита.
+    private func isOpen(_ track: URL) -> Bool { track == url || track == pitchSource }
+
+    /// Тон, записаний за фонограмою зі списку, — відкритою чи ні.
+    func pitch(of track: URL) -> Double {
+        isOpen(track) ? pitchTones : recordedPitch(of: track)
+    }
+
+    /// Те, що записано за файлом, — без огляду на те, що стоїть у звуці.
+    private func recordedPitch(of track: URL) -> Double {
+        let files = twins(of: track)
+        // Назване в цьому запуску — головніше за записане раніше.
+        for file in files {
+            if let fresh = sessionPitch[file.path] { return fresh }
+        }
+        guard remembers, let saved = store.dictionary(forKey: Self.pitchKey) as? [String: Double] else { return 0 }
+        for file in files {
+            if let old = saved[file.path] { return old }
+        }
+        return 0
+    }
+
+    /// Поставити тон фонограмі зі списку.
+    ///
+    /// Власник: «тональність прив'язується до конкретної фонограми, яка
+    /// вибрана, і не зачіпає інші у списку». Доти кнопки тону міняли тон
+    /// тієї, що відкрита в програвачі, хоч би яку виділили в списку: виділив
+    /// наступну пісню, опустив їй тон — а змінилася та, що грає. Тепер тон
+    /// невідкритої лише записується за нею і стане у звук, коли її відкриють.
+    func setPitch(_ tones: Double, of track: URL) {
+        if isOpen(track) { setPitch(tones); return }
+        rememberPitch(Self.steppedPitch(tones), of: track)
         notify()
     }
     @Published var volume: Float = 0.8 {
@@ -215,9 +285,17 @@ final class BackingTrackPlayer: ObservableObject {
             // стоять на мікшері й чують уже змінений тон.
             engine.connect(node, to: pitchUnit, format: opened.processingFormat)
             engine.connect(pitchUnit, to: engine.mainMixerNode, format: opened.processingFormat)
-            let saved = remembers ? (store.dictionary(forKey: Self.pitchKey) as? [String: Double])?[target.path] : nil
-            pitchTones = saved ?? 0
+            let source = openingOriginal ?? convertedFrom[target] ?? target
+            openingOriginal = nil
+            if source != target { convertedFrom[target] = source }
+            // Шукаємо і за вихідним файлом, і за копією: до цієї версії тон
+            // перетвореної фонограми записувався за копією.
+            pitchTones = recordedPitch(of: source)
+            pitchSource = source
             pitchUnit.pitch = Float(pitchTones * 200)
+            // Пара «вихідний — копія» щойно стала відомою: зрівняти записи,
+            // щоб тон не залежав від того, котрий із двох рядків відкриють.
+            if source != target, pitchTones != 0 { rememberPitch(pitchTones, of: source) }
             loadWaveform(for: target)
             // Відкрита фонограма завжди стоїть у своєму списку: відкрили
             // кнопкою чи перетягуванням — вона там, і її видно виділеною.
@@ -234,6 +312,7 @@ final class BackingTrackPlayer: ObservableObject {
             // формат mp3» — такі MP3 з довгими тегами чи хибним розширенням
             // трапляються). Розкодовуємо в тимчасовий .caf і граємо його.
             if let ready = Self.decoded(target), ready != target {
+                openingOriginal = openingOriginal ?? target
                 open(ready)
                 title = target.deletingPathExtension().lastPathComponent
                 notify()
@@ -241,6 +320,7 @@ final class BackingTrackPlayer: ObservableObject {
             }
             // Далі — чужі формати (.ogg, .opus, .wma…): їх бере ffmpeg.
             if let ready = Self.converted(target), ready != target {
+                openingOriginal = openingOriginal ?? target
                 open(ready)
                 // Назву лишаємо від вихідного файла: у кеші вона службова.
                 title = target.deletingPathExtension().lastPathComponent
@@ -249,6 +329,8 @@ final class BackingTrackPlayer: ObservableObject {
             }
             file = nil
             url = nil
+            openingOriginal = nil
+            pitchSource = nil
             title = ""
             duration = 0
             self.error = Self.explain(error, for: target)
@@ -518,6 +600,7 @@ final class BackingTrackPlayer: ObservableObject {
         stopEngine()
         file = nil
         url = nil
+        pitchSource = nil
         waveform = nil
         playlistIndex = nil
         title = ""

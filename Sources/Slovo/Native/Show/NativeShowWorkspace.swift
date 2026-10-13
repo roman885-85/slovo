@@ -487,8 +487,29 @@ final class NativeShowWorkspace: NSView, NativeListSource {
     @objc private func stepBack() { step(by: -1) }
     @objc private func stepForward() { step(by: 1) }
 
+    /// Котру сторінку показано востаннє — щоб відрізнити «показати ту
+    /// саму ще раз» від переходу на іншу. Одна на обидві вкладки
+    /// («Презентація» й «Зображення»): зал один, і коли кожна вкладка
+    /// пам'ятала своє, наближення, зроблене на картинці, переходило на
+    /// сторінку презентації, щойно до неї поверталися.
+    private static var shownPageMark: String?
+
+    /// Чи стоїть саме ця сторінка в залі просто зараз. Лише тоді «Показати»
+    /// вдруге лишає наближення. Сторінка, яку сховали, перекрили текстом
+    /// або зупинили, вже не поточна — і повертається цілою.
+    private func isStillInHall(_ mark: String?) -> Bool {
+        guard let state, let mark, mark == Self.shownPageMark else { return false }
+        return state.isLive && state.media.still != nil
+            && state.media.screenSuppression.isDisjoint(with: [.slideTookOver, .stopped])
+    }
+
     @objc private func show() {
         guard let state, let image = model.currentImage else { return }
+        // Наближення стосується лише тієї сторінки, на якій його зробили:
+        // інша сторінка (і та сама після повернення) приходить цілою.
+        let mark = model.currentPageMark
+        if !isStillInHall(mark) { SlideFocus.shared.dropForNewPage() }
+        Self.shownPageMark = mark
         state.media.showStill(image, title: model.currentTitle)
         // Показ в зале включаем так же, как для стиха: одной кнопкой.
         if !state.isLive { state.isLive = true }

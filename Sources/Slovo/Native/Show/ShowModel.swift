@@ -214,6 +214,21 @@ final class ShowModel {
         return pages[index].title
     }
 
+    /// Знак поточної сторінки, сталий, доки відкрито той самий файл: файл і
+    /// номер сторінки в ньому. Номер у списку для цього не годиться: він
+    /// зсувається, коли файл прибирають, і той самий номер дістається зовсім
+    /// іншій сторінці.
+    var currentPageMark: String? {
+        guard let index, pages.indices.contains(index) else { return nil }
+        switch pages[index].source {
+        case .picture(let url):
+            return "зображення|" + url.path
+        case .slides(_, let page):
+            let file = decks.first { $0.range.contains(index) }?.url.path ?? ""
+            return "сторінка|\(file)|\(page)"
+        }
+    }
+
     // MARK: - Открытие
 
     /// Добавить выбранное к тому, что уже открыто.
