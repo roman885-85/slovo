@@ -2214,6 +2214,7 @@ enum Diagnostics {
         ("переклади", { translationsSection(state: $0) }),
         ("фонограма", { backingTrackSection(state: $0) }),
         ("сторінки-тон", { pagesAndToneSection(state: $0) }),
+        ("фонограма-коло", { backingLoopSection(state: $0) }),
         ("передпоказ", { previewTextSection(state: $0) }),
         ("пошук-пісні", { songSearchSection(state: $0) }),
         ("швидкість", { speedSection(state: $0) }),

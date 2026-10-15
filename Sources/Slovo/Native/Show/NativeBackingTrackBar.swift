@@ -650,6 +650,12 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
     @objc private func raiseTone() { setTone(shownTone + BackingTrackPlayer.pitchStep) }
     @objc private func resetTone() { setTone(0) }
 
+    /// Самоперевірці: що написано в рядку часу.
+    var timeTextForCheck: String { time.stringValue }
+
+    /// Самоперевірці: натиснути «по колу» так, як це робить рука.
+    func clickLoopForCheck() { loopButton.performClick(nil) }
+
     /// Самоперевірці: виділити рядок списку так, як це робить клацання.
     func selectForCheck(_ index: Int?) {
         // Спершу звірити список із програвачем: людина клацає по рядку вже

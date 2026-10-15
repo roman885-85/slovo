@@ -73,6 +73,22 @@ final class BackingLevels: @unchecked Sendable {
         lock.lock(); loudest = 0; lock.unlock()
     }
 
+    /// Кадри тиші, що пройшли відводом, поки фонограма грала, — тільки для
+    /// самоперевірки: так видно щілину на стику кіл «по колу» в мілісекундах,
+    /// а не на слух.
+    private var silent = 0
+    var silentFramesForCheck: Int {
+        lock.lock(); defer { lock.unlock() }
+        return silent
+    }
+    func resetSilentForCheck() {
+        lock.lock(); silent = 0; lock.unlock()
+    }
+    func countSilence(_ frames: Int) {
+        guard frames > 0 else { return }
+        lock.lock(); silent += frames; lock.unlock()
+    }
+
     func push(left newLeft: Float, right newRight: Float) {
         lock.lock()
         left = max(left, newLeft)
@@ -254,6 +270,10 @@ final class BackingTrackPlayer: ObservableObject {
     private var sampleRate: Double = 44_100
     /// С какого отсчёта пошёл текущий отрезок: позиция считается от него.
     private var segmentStart: AVAudioFramePosition = 0
+    /// З якого відліку часу програвача почався поточний відрізок. На колах
+    /// «по колу» програвач не зупиняється, і його лічильник іде далі: без
+    /// цієї поправки позиція впиралася в кінець файла вже на другому колі.
+    private var segmentPlayerStart: AVAudioFramePosition = 0
     private var ticker: Timer?
     private var tapInstalled = false
     /// Номер расписания: завершение старого отрезка (после перемотки или
@@ -615,6 +635,10 @@ final class BackingTrackPlayer: ObservableObject {
 
     func play() {
         guard let file else { return }
+        // Уже грає — нічого не робити. Пульт шле «грати» й тоді, коли
+        // фонограма грає, і новий відрізок ставав слідом за тим, що звучить:
+        // хвіст треку звучав двічі — та сама біда, що й після паузи.
+        guard !isPlaying else { return }
         // Дошли до конца и жмут «играть» — с начала, иначе кнопка выглядит
         // сломанной.
         if position >= duration - 0.05 { position = 0 }
@@ -630,7 +654,13 @@ final class BackingTrackPlayer: ObservableObject {
     func pause() {
         guard isPlaying else { return }
         position = currentPosition()
-        node.pause()
+        // Зупинка, а не `node.pause()`: пауза лишала в програвачі недограний
+        // відрізок, і «Грати» ставило новий слідом за ним — після паузи хвіст
+        // треку звучав двічі, а позиція забігала вперед на вже зігране.
+        // Зупинений програвач і лічильник часу починає з нуля, тож «Грати»
+        // продовжує рівно з місця паузи.
+        node.stop()
+        scheduleGeneration &+= 1
         isPlaying = false
         feeding = false
         stopTicker()
@@ -707,6 +737,14 @@ final class BackingTrackPlayer: ObservableObject {
         let start = max(0, min(file.length, frame))
         let count = AVAudioFrameCount(max(0, file.length - start))
         segmentStart = start
+        // Зупинений програвач почне лічильник з нуля на «Грати»; той, що грає
+        // (нове коло), — продовжить, і відрізок стане приблизно з поточного
+        // відліку, з точністю до однієї порції звуку.
+        segmentPlayerStart = 0
+        if node.isPlaying, let nodeTime = node.lastRenderTime,
+           let now = node.playerTime(forNodeTime: nodeTime) {
+            segmentPlayerStart = max(0, now.sampleTime)
+        }
         scheduleGeneration &+= 1
         let generation = scheduleGeneration
         guard count > 0 else { finished(generation) ; return }
@@ -722,6 +760,12 @@ final class BackingTrackPlayer: ObservableObject {
     private func finished(_ generation: Int) {
         guard generation == scheduleGeneration, isPlaying else { return }
         if loops, let file {
+            // Нове коло — без зупинки програвача: зупинка подовжувала тишу на
+            // стику кіл з 126 до 160 мс (замір). Позицію рахуємо від відліку,
+            // з якого почалося коло, — доти вона впиралася в кінець файла вже
+            // на другому колі: смуга стояла повною, напис «2:30 / 2:30», а
+            // пауза запам'ятовувала кінець (власник: «полоса воспроизведения
+            // отсутствует, кнопки… становятся не активными»).
             position = 0
             schedule(from: 0, file: file)
             node.play()
@@ -748,7 +792,10 @@ final class BackingTrackPlayer: ObservableObject {
     private func currentPosition() -> Double {
         guard isPlaying, let nodeTime = node.lastRenderTime,
               let played = node.playerTime(forNodeTime: nodeTime) else { return position }
-        return min(duration, (Double(segmentStart) + Double(played.sampleTime)) / max(1, sampleRate))
+        // Щойно після «Грати» лічильник програвача ще буває від'ємним — до
+        // першого кадру позиція стоїть там, звідки почали.
+        let elapsed = max(0, Double(played.sampleTime - segmentPlayerStart))
+        return min(duration, (Double(segmentStart) + elapsed) / max(1, sampleRate))
     }
 
     private func startTicker() {
@@ -791,6 +838,11 @@ final class BackingTrackPlayer: ObservableObject {
                 peaks[channel] = top
             }
             levels.push(left: peaks[0], right: count > 1 ? peaks[1] : peaks[0])
+            // Тиша — справжні нулі: перевірка грає тихо, і поріг «майже
+            // нуль» ловив би звичайні відліки тихого синуса.
+            var quiet = 0
+            for i in 0..<frames where abs(channels[0][i]) < 1e-7 { quiet += 1 }
+            levels.countSilence(quiet)
             guard !self.mainPlayerIsPlaying, let sink = self.networkAudioSink else { return }
             var planar = Data(count: frames * count * MemoryLayout<Float>.size)
             planar.withUnsafeMutableBytes { raw in
