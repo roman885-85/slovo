@@ -606,17 +606,21 @@ extension Diagnostics {
             again.remembers = true
             again.restore()
             first.setPitch(-1)
+            first.volume = 0.37
             let againPitch = BackingTrackPlayer()
             againPitch.store = suite
             againPitch.remembers = true
             againPitch.restore()
             let pitchRemembered = againPitch.pitchTones == -1
+            let volumeRemembered = againPitch.volume == 0.37
             againPitch.close()
             memoryOK = again.playlist == [wave, wave2] && again.url == wave2 && again.playlistIndex == 1 && pitchRemembered
+                && volumeRemembered
             memoryDetail = "після «перезапуску» у списку \(again.playlist.count) з 2, відкрито \(again.url?.deletingPathExtension().lastPathComponent ?? "нічого") (пункт \(again.playlistIndex.map { String($0 + 1) } ?? "—")); тон −1 для файлу запам'ятався: \(pitchRemembered ? "так" : "ні")"
             // Прибрати зайве: пункт 2 зі списку — закриває відкрите.
             again.removeFromPlaylist(at: 1)
             memoryOK = memoryOK && again.url == nil && again.playlist == [wave]
+            memoryDetail += "; гучність 0,37 запам'яталася: \(volumeRemembered ? "так" : "НІ (\(againPitch.volume))")"
             memoryDetail += "; прибрали відкритий — закрився: \(again.url == nil ? "так" : "ні")"
             first.close()
             again.close()

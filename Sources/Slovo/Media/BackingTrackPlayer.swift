@@ -240,7 +240,20 @@ final class BackingTrackPlayer: ObservableObject {
         notify()
     }
     @Published var volume: Float = 0.8 {
-        didSet { node.volume = MediaPlayerModel.gain(Double(volume)) }
+        didSet {
+            node.volume = MediaPlayerModel.gain(Double(volume))
+            rememberVolume()
+        }
+    }
+    private static let volumeKey = "backingVolume"
+
+    /// Гучність фонограми — між запусками, як «далі», тон і список. Власник:
+    /// «при выборе громкости минусовки, громкость при новом запуске программы
+    /// сбрасывается, а не сохраняется»: повзунок міняв звук, а записано не
+    /// було ніде, і кожен запуск починався з 0,8.
+    private func rememberVolume() {
+        guard remembers, !(store === UserDefaults.standard && SessionMemory.isSuspended) else { return }
+        store.set(Double(volume), forKey: Self.volumeKey)
     }
 
     /// Хвиля відкритого файлу; `nil`, поки будується або файла немає.
@@ -605,6 +618,7 @@ final class BackingTrackPlayer: ObservableObject {
     func restore() {
         guard remembers, url == nil else { return }
         if store.object(forKey: Self.playsNextKey) != nil { playsNext = store.bool(forKey: Self.playsNextKey) }
+        if let saved = store.object(forKey: Self.volumeKey) as? Double { volume = Float(min(1, max(0, saved))) }
         // Спершу список: інакше відкрита фонограма стала б у ньому першою,
         // а решта — після неї, не в тому порядку, як їх складали.
         let saved = (store.stringArray(forKey: Self.playlistKey) ?? [])

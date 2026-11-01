@@ -677,9 +677,12 @@ final class RemoteControlServer {
         NativeTrace.say("пульт: команда \(command)\(index.map { " \($0)" } ?? "")\(text.isEmpty ? "" : " «\(text)»")")
         var answer: [String: Any] = ["ok": true]
         switch command {
-        case "next": step(1, state: state)
-        case "prev": step(-1, state: state)
-        case "show": state.showCurrent()
+        case "next":
+            if !showFromPhone(tab: body["tab"] as? String, delta: 1, state: state) { step(1, state: state) }
+        case "prev":
+            if !showFromPhone(tab: body["tab"] as? String, delta: -1, state: state) { step(-1, state: state) }
+        case "show":
+            if !showFromPhone(tab: body["tab"] as? String, delta: 0, state: state) { state.showCurrent() }
         case "hide": state.isLive = false
         case "black": state.showBlackScreen()
         case "blank": state.showBlankSlide()
@@ -893,6 +896,35 @@ final class RemoteControlServer {
         NativeBibleBridge.shared.sync()
         noteChange()
         respond(connection, 200, answer)
+    }
+
+    /// Телефон на вкладці «Показ»: «Показати», «Далі» й «Назад» стосуються
+    /// показу, хоч би що стояло на компʼютері.
+    ///
+    /// Власник: «презентация загружена и готова к показу. Во время служения
+    /// выводится текст Библии, песни, затем требуется вывод загруженной
+    /// презентации с пульта, а пульт после этого выводит только последний
+    /// слайд, который был показан». Ці кнопки діяли в режимі програми: після
+    /// Біблії й пісень «Показати» виводило останній вірш чи куплет, і
+    /// презентацію доводилося завантажувати з телефона наново — лише це
+    /// перемикало програму на показ.
+    ///
+    /// Якщо показ ще не на стіні, перше «Далі» чи «Назад» повертає ту саму
+    /// сторінку, де зупинилися, а не перескакує через неї. Телефон до 2.5
+    /// вкладки не шле — тоді все як раніше; і коли показувати нічого.
+    /// Повертає `true`, коли команду виконано тут.
+    private func showFromPhone(tab: String?, delta: Int, state: AppState) -> Bool {
+        guard tab == "show" else { return false }
+        let wasShowing = state.mode == .presentation || state.mode == .pictures
+        let workspace = state.mode == .pictures ? NativeShowWorkspace.pictures : NativeShowWorkspace.presentation
+        guard !workspace.model.isEmpty else { return false }
+        if !wasShowing { state.mode = .presentation }
+        if workspace.model.index == nil { workspace.selectPage(workspace.model.currentRange.lowerBound) }
+        if wasShowing, delta != 0, state.media.still != nil {
+            workspace.step(by: delta, live: false)
+        }
+        workspace.showCurrentPage()
+        return true
     }
 
     /// «Дальше» и «назад» — то же, что стрелки в главном окне, но всегда с

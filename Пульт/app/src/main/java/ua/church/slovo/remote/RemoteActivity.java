@@ -428,9 +428,16 @@ public final class RemoteActivity extends Activity {
     private void send(String command) {
         Api current = api;
         if (current == null) return;
+        // Разом із командою — вкладка, з якої натиснули. На вкладці «Показ»
+        // «Показати», «Далі» й «Назад» стосуються презентації, хоч би що стояло
+        // на компʼютері. Власник: після Біблії й пісень «Показати» виводило
+        // останній показаний слайд, а не завантажену презентацію, і її
+        // доводилося надсилати наново. «Слово» до 1.3.9 це поле пропускає.
+        final JSONObject body = new JSONObject();
+        try { body.put("tab", tab.name().toLowerCase(java.util.Locale.ROOT)); } catch (org.json.JSONException ignored) { }
         commands.execute(() -> {
             try {
-                current.command(command);
+                current.command(command, body);
             } catch (Exception error) {
                 showFailure(error);
             }

@@ -886,12 +886,27 @@ final class NativeSongsWorkspace {
         return "\(model.bookID)#\(songs.count)#\(editions[model.bookID] ?? 0)"
     }
 
+    /// Скільки разів пісня зі стану прийшла раніше за свій збірник — самоперевірці:
+    /// так видно, чи траплявся в цьому запуску «невдалий» порядок поводів.
+    private(set) var bookOpenedForStateSongForCheck = 0
+
     /// Выбор песни могли сменить со стороны: пункт Плана и запись «Истории»
     /// пишут номер прямо в `AppState`.
     /// Повертає `true`, коли пісню взято з `AppState` (План, «Історія»).
     @discardableResult
     private func adoptSongFromState() -> Bool {
         guard let wanted = state?.songIndex, wanted != lastStateSong else { return false }
+        // Пісня з Плану буває з іншого збірника, а повод «збірник» може ще
+        // бути в дорозі: поводи однієї пачки приходять у порядку, що міняється
+        // з кожним запуском програми. Тоді спершу відкрити збірник зі стану:
+        // інакше номер шукали б у старому збірнику, відкинули б, а новий
+        // збірник потім став би на першу пісню — у залі пісня з Плану, а у
+        // вкладці куплети чужої (власник: «проблема плавающая, закономерность
+        // не выявлена» — у «невдалому» запуску так було з кожним переходом).
+        if let state, !state.songBookID.isEmpty, state.songBookID != model.bookID {
+            bookOpenedForStateSongForCheck += 1
+            reloadBook()
+        }
         lastStateSong = wanted
         guard wanted != model.songIndex,
               model.editor?.book.songs.indices.contains(wanted) == true else { return false }

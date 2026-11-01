@@ -2215,6 +2215,8 @@ enum Diagnostics {
         ("фонограма", { backingTrackSection(state: $0) }),
         ("сторінки-тон", { pagesAndToneSection(state: $0) }),
         ("фонограма-коло", { backingLoopSection(state: $0) }),
+        ("план-пісні", { planSongsSection(state: $0) }),
+        ("пульт-показ", { remoteShowSection(state: $0) }),
         ("передпоказ", { previewTextSection(state: $0) }),
         ("пошук-пісні", { songSearchSection(state: $0) }),
         ("швидкість", { speedSection(state: $0) }),
