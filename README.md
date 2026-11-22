@@ -7,6 +7,10 @@
 До неї є пульт на телефоні, робоче місце оператора на планшеті й пульт у
 браузері будь-якого пристрою в мережі.
 
+Для комп'ютерів із Windows 10/11 є окреме **«Слово» для Windows** — той самий
+порядок роботи, ті самі формати даних і той самий пульт
+([докладно](#слово-для-windows-1011)).
+
 ![Головне вікно «Слова»: Біблія, передпоказ і живий екран](Документація/знімки/bible.jpg)
 
 Інтерфейс і порядок роботи натхненні програмою
@@ -14,7 +18,8 @@
 містить коду VisioBible і не пов'язане з її авторами.
 
 **Завантажити:** [останній випуск](../../releases/latest) — програма для
-macOS (Intel і Apple Silicon) і дві програми для Android.
+macOS (Intel і Apple Silicon), «Слово» для Windows 10/11, дві програми для
+Android і «Проповідник Слова» для Windows.
 
 | Коротко | |
 | --- | --- |
@@ -185,6 +190,41 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
 Сумісність зроблено за файлами даних і описом VisioBible; «Слово» не містить
 її коду й не пов'язане з її авторами.
 
+## «Слово» для Windows 10/11
+
+Окрема програма для Windows 10 і 11 (64-розрядних), що повторює «Слово» для
+Mac: той самий порядок роботи, ті самі гарячі клавіші VisioBible, ті самі
+формати даних і той самий пульт. Написана наново (C#, .NET, Avalonia,
+SkiaSharp), бо програма для Mac на Windows не працює.
+
+- **Біблія** — модулі «Цитати з Біблії» й MyBible, другий переклад на тому
+  самому слайді, швидкий вибір («Ів 3:16»), пошук за словами; **Пісні** —
+  пісенники `.vbm` і `.songbook`, частини пісні з кольоровими назвами,
+  редактор пісень і пісенників; **Текст** (оголошення) і **Зображення**.
+- **План** (той самий файл `slovo.plan`, що й на Mac) та **Історія**;
+  «Показати» (F5), «Сховати» (Esc — зал гасне плавно), «Чорний» (F12).
+- Шаблони `.sch` і фони VisioBible; вікно слайда на другому моніторі без
+  рамки, а коли монітор один — звичайним вікном; ручна настройка місця й
+  розміру.
+- **Той самий пульт**: «Пульт Слова», «Планшет Слова», «Проповідник Слова» і
+  пульт у браузері (`slovo.local`) працюють без змін; план проповіді з
+  планшета чи «Проповідника» стає головним.
+- Переклади, пісенники, фони й шаблони — з GitHub, з файла, з теки
+  встановленого VisioBible або зі «Слова» на іншому комп'ютері в мережі.
+- Інтерфейс — українською чи англійською (за мовою системи або вручну).
+
+Один файл `Slovo-<версія>-Windows.exe` у [Releases](../../releases), нічого
+встановлювати не треба; дані — у `%APPDATA%\Slovo`. На першому запуску
+Windows може сказати «Windows захистила ваш ПК» — «Докладніше» → «Усе одно
+запустити»; брандмауеру треба дозволити доступ до мережі, інакше пульт не
+під'єднається. Нову версію програма знаходить сама.
+
+Чого ще немає порівняно з Mac: медіаплеєра й фонограм, NDI, сторінок для OBS,
+презентацій PDF і PowerPoint, захоплення екрана, YouTube, конструктора
+слайда, редактора нумерації, імпорту MySword, eBible і SoftProjector,
+російської й німецької мов інтерфейсу. Докладно —
+[Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
+
 ## Перший запуск
 
 1. Завантажте `Slovo-<версія>-macOS.zip` з [Releases](../../releases),
@@ -208,6 +248,8 @@ macOS (Intel і Apple Silicon) і дві програми для Android.
   пакет).
 - Для пульта й планшета — Android 6 / Android 5 і та сама мережа Wi-Fi, що й
   комп'ютер.
+- «Слово» для Windows і «Проповідник Слова» — Windows 10 чи 11, 64-розрядна;
+  .NET ставити не треба (усе всередині файлу).
 - NDI® — зареєстрована торгова марка Vizrt NDI AB
   ([ndi.video](https://ndi.video)); бібліотека NDI безкоштовна й поширюється
   разом із програмою зі своїм файлом ліцензій. У сам репозиторій вона не
@@ -253,6 +295,20 @@ Scripts/deploy.sh        # пакет «Слово.app» у ~/Documents/Слов
 Ключ підпису створюється під час першої збірки в `Службові/ключ.jks`.
 Бережіть його: з іншим ключем нова версія не встановиться поверх старої.
 
+### Windows
+
+«Слово» для Windows і «Проповідник Слова» збираються на Mac в один
+самодостатній `win-x64` .exe; потрібен .NET 10 SDK у `Проповідник/toolchain`
+(як його отримати, друкує `build.sh`).
+
+```sh
+Windows/build.sh         # ~/Documents/Слово/Слово.exe
+Проповідник/build.sh     # ~/Documents/Слово/Проповідник Слова.exe
+```
+
+Самоперевірка без вікна: `Slovo.exe --selftest`; докладно —
+[Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md#для-розробника).
+
 ## Будова
 
 | Тека | Що там |
@@ -261,6 +317,8 @@ Scripts/deploy.sh        # пакет «Слово.app» у ~/Documents/Слов
 | `Sources/Slovo` | програма на AppKit: вікно, виводи, пульт, самоперевірка |
 | `Resources` | словники підписів (українська, англійська, німецька), умовчання |
 | `Пульт`, `Планшет` | програми для Android; планшет бере спільний код із пульта |
+| `Проповідник` | «Проповідник Слова» для Windows (C#, Avalonia) |
+| `Windows` | «Слово» для Windows 10/11 (C#, Avalonia, SkiaSharp) |
 | `Scripts` | збирання, підпис, yt-dlp |
 | `Документація` | інструкції для користувачів і знімки екрана |
 
@@ -271,7 +329,8 @@ Releases.
 
 ## Стан
 
-Версія 0.93. Що нового й що виправлено — у [CHANGELOG.md](CHANGELOG.md).
+«Слово» для macOS — версія 1.3.9, «Слово» для Windows — 1.0.0. Що нового й
+що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
 
@@ -286,6 +345,7 @@ Releases.
 | [NDI®](https://ndi.video) SDK (`libndi`) — трансляція | ліцензія NDI SDK від Vizrt NDI AB; повний текст — `Слово.app/Contents/Resources/NDI-Licenses.txt`. NDI® — зареєстрована торгова марка Vizrt NDI AB |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) — ролики YouTube за посиланням | The Unlicense (суспільне надбання); вбудований інтерпретатор Python і його бібліотеки — під своїми ліцензіями (PSF та інші) |
 | Середовище Swift (`libswift_Concurrency`) | Apache License 2.0 з винятком для бібліотек виконання |
+| «Слово» для Windows і «Проповідник Слова»: .NET, [Avalonia](https://avaloniaui.net), [SkiaSharp](https://github.com/mono/SkiaSharp) (Skia, HarfBuzz), Microsoft.Data.Sqlite, SQLitePCLRaw (SQLite), шрифт Inter | MIT; Skia — BSD 3-Clause; HarfBuzz — «Old MIT»; SQLitePCLRaw — Apache License 2.0; SQLite — суспільне надбання; Inter — SIL Open Font License 1.1 |
 | Програми для Android, пульт у браузері | без сторонніх бібліотек |
 
 **Переклади, пісенники, фони й шаблони** в програму не вшито — кожен ресурс
@@ -322,12 +382,17 @@ at home and uploaded to Slovo with one button (a single
 language: Ukrainian, Russian, otherwise English (German is built in too). The
 browser remote and the Android apps have a switchable English interface.
 
+A separate **Slovo for Windows 10/11** follows the macOS app — the same
+workflow, VisioBible shortcuts, data formats and remote channel
+([details](#slovo-for-windows-1011)).
+
 The interface and workflow are inspired by
 [VisioBible](https://visiobible.org.ua). Slovo is written from scratch: it
 contains no VisioBible code and is not affiliated with its authors.
 
 **Download:** [latest release](../../releases/latest) — the macOS app (Intel
-and Apple Silicon) and two Android apps.
+and Apple Silicon), Slovo for Windows 10/11, two Android apps and Slovo
+Preacher for Windows.
 
 | At a glance | |
 | --- | --- |
@@ -430,6 +495,42 @@ contains none of its code and is not affiliated with its authors.
 | Settings | a Slovo settings file (`.json`) |
 | Sermon plan on the tablet | `.zip` (Bible Quote), `.SQLite3` (MyBible), `.vbm` songbooks; PDF, PowerPoint, pictures, video |
 
+## Slovo for Windows 10/11
+
+A separate program for 64-bit Windows 10 and 11 that follows Slovo for macOS:
+the same workflow, the same VisioBible shortcuts, the same data formats and the
+same remote channel. It is written anew in C# (.NET, Avalonia, SkiaSharp),
+since the macOS app cannot run on Windows.
+
+- **Bible** (Bible Quote and MyBible modules, a second translation on the same
+  slide, quick reference entry, word search), **Songs** (`.vbm` and `.songbook`
+  songbooks, coloured song part names, a song and songbook editor), **Text**
+  (announcements) and **Pictures**; the **Plan** (the same `slovo.plan` file as
+  on the Mac) and the **History**; Show (F5), Hide (Esc, a smooth fade) and
+  Black (F12).
+- VisioBible `.sch` templates and backgrounds; the slide window full screen on
+  a second monitor, or as a normal window when there is only one; manual
+  position and size.
+- **The same remote**: Pult Slova, Planshet Slova, Slovo Preacher and the
+  browser remote (`slovo.local`) work unchanged; a sermon plan from the tablet
+  or the Preacher becomes the main plan.
+- Translations, songbooks, backgrounds and templates from GitHub, from a file,
+  from an installed VisioBible folder or from Slovo on another computer on the
+  network.
+- Ukrainian or English interface (following the system, or chosen by hand).
+
+A single `Slovo-<version>-Windows.exe` in [Releases](../../releases), nothing
+to install; data lives in `%APPDATA%\Slovo`. On the first launch Windows may
+say "Windows protected your PC" — "More info" → "Run anyway"; allow network
+access when the firewall asks, otherwise the remote cannot connect. The
+program finds new versions by itself.
+
+Not there yet compared with the Mac: the media player and backing tracks, NDI,
+pages for OBS, PDF and PowerPoint presentations, screen capture, YouTube, the
+slide designer, the numbering editor, MySword, eBible and SoftProjector
+import, the Russian and German interface. Details (in Ukrainian):
+[Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
+
 ## First launch
 
 1. Download `Slovo-<version>-macOS.zip` from [Releases](../../releases), unzip
@@ -449,6 +550,8 @@ contains none of its code and is not affiliated with its authors.
 - macOS 11 Big Sur or later, Intel and Apple Silicon (one universal app).
 - For the remote and the tablet — Android 6 / Android 5 on the same Wi-Fi
   network as the computer.
+- Slovo for Windows and Slovo Preacher — 64-bit Windows 10 or 11; no .NET
+  install needed (everything is inside the file).
 - NDI® is a registered trademark of Vizrt NDI AB ([ndi.video](https://ndi.video));
   the free NDI library ships with the program together with its license file.
 
@@ -456,7 +559,9 @@ contains none of its code and is not affiliated with its authors.
 
 See the Ukrainian section above: `swift build`, `Scripts/deploy.sh` for macOS
 (Command Line Tools with Swift 6), `Пульт/build.sh` and `Планшет/build.sh` for
-Android (Android SDK and JDK 17, no Gradle).
+Android (Android SDK and JDK 17, no Gradle), `Windows/build.sh` and
+`Проповідник/build.sh` for the Windows programs (built on a Mac with the .NET
+10 SDK into a single self-contained `win-x64` .exe).
 
 ## Licenses
 
@@ -469,7 +574,10 @@ under the NDI SDK license of Vizrt NDI AB (full text in
 of Vizrt NDI AB); [yt-dlp](https://github.com/yt-dlp/yt-dlp) under The Unlicense
 (its bundled Python and libraries under their own licenses); the Swift runtime
 (`libswift_Concurrency`) under Apache License 2.0 with the Runtime Library
-Exception. The Android apps and the browser remote use no third-party
+Exception. Slovo for Windows and Slovo Preacher ship .NET, Avalonia, SkiaSharp
+and Microsoft.Data.Sqlite (MIT), Skia (BSD 3-Clause), HarfBuzz (Old MIT),
+SQLitePCLRaw (Apache License 2.0), SQLite (public domain) and the Inter font
+(SIL Open Font License 1.1). The Android apps and the browser remote use no third-party
 libraries.
 
 **Translations, songbooks, backgrounds and templates** are not built into the
