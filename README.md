@@ -209,9 +209,18 @@ SkiaSharp), бо програма для Mac на Windows не працює.
 - **Той самий пульт**: «Пульт Слова», «Планшет Слова», «Проповідник Слова» і
   пульт у браузері (`slovo.local`) працюють без змін; план проповіді з
   планшета чи «Проповідника» стає головним.
+- **Медіаплеєр** (відео й звук, кадр у залі) зі списком файлів і роликів
+  YouTube у своєму порядку; **фонограми** з тоном і хвилею (панель унизу
+  вкладки «Пісні»); **вкладка «Екран»** — монітор чи вікно іншої програми в зал.
+- **Ролики YouTube** через yt-dlp — програма сама завантажує його й оновлює;
+  **веб-слайди для OBS** і їх редактор; **презентації PDF і PowerPoint**;
+  конструктор слайда; редактор нумерації віршів.
+- **NDI** (картинка й друге джерело «Слово Wi-Fi»; потрібен NDI Runtime),
+  **TCP/UDP Remote API**; імпорт MySword, eBible і SoftProjector.
 - Переклади, пісенники, фони й шаблони — з GitHub, з файла, з теки
   встановленого VisioBible або зі «Слова» на іншому комп'ютері в мережі.
-- Інтерфейс — українською чи англійською (за мовою системи або вручну).
+- Інтерфейс — українською, російською, англійською чи німецькою (за мовою
+  системи або вручну).
 
 Один файл `Slovo-<версія>-Windows.exe` у [Releases](../../releases), нічого
 встановлювати не треба; дані — у `%APPDATA%\Slovo`. На першому запуску
@@ -219,10 +228,8 @@ Windows може сказати «Windows захистила ваш ПК» — �
 запустити»; брандмауеру треба дозволити доступ до мережі, інакше пульт не
 під'єднається. Нову версію програма знаходить сама.
 
-Чого ще немає порівняно з Mac: медіаплеєра й фонограм, NDI, сторінок для OBS,
-презентацій PDF і PowerPoint, захоплення екрана, YouTube, конструктора
-слайда, редактора нумерації, імпорту MySword, eBible і SoftProjector,
-російської й німецької мов інтерфейсу. Докладно —
+Чого ще немає порівняно з Mac: вбудованого програвача YouTube (без yt-dlp),
+звуку в NDI, відео для Wi-Fi (HLS). Докладно —
 [Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
 
 ## Перший запуск
@@ -329,7 +336,7 @@ Releases.
 
 ## Стан
 
-«Слово» для macOS — версія 1.3.9, «Слово» для Windows — 1.0.0. Що нового й
+«Слово» для macOS і для Windows — версія 1.4.0. Що нового й
 що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
@@ -517,7 +524,17 @@ since the macOS app cannot run on Windows.
 - Translations, songbooks, backgrounds and templates from GitHub, from a file,
   from an installed VisioBible folder or from Slovo on another computer on the
   network.
-- Ukrainian or English interface (following the system, or chosen by hand).
+- **The media player** (video and audio, the frame in the hall) with a list of
+  files and YouTube videos in your own order; **backing tracks** with pitch and
+  waveform (a panel at the bottom of the Songs tab); **the Screen tab** — a
+  monitor or another program's window to the hall.
+- **YouTube** through yt-dlp, which the program downloads and updates by
+  itself; **OBS web slides** and their editor; **PDF and PowerPoint
+  presentations**; the slide designer; the verse numbering editor.
+- **NDI** (the picture and the second "Slovo Wi-Fi" source; NDI Runtime
+  required), **TCP/UDP Remote API**; MySword, eBible and SoftProjector import.
+- Ukrainian, Russian, English or German interface (following the system, or
+  chosen by hand).
 
 A single `Slovo-<version>-Windows.exe` in [Releases](../../releases), nothing
 to install; data lives in `%APPDATA%\Slovo`. On the first launch Windows may
@@ -525,10 +542,8 @@ say "Windows protected your PC" — "More info" → "Run anyway"; allow network
 access when the firewall asks, otherwise the remote cannot connect. The
 program finds new versions by itself.
 
-Not there yet compared with the Mac: the media player and backing tracks, NDI,
-pages for OBS, PDF and PowerPoint presentations, screen capture, YouTube, the
-slide designer, the numbering editor, MySword, eBible and SoftProjector
-import, the Russian and German interface. Details (in Ukrainian):
+Not there yet compared with the Mac: the built-in YouTube player (without
+yt-dlp), NDI audio and Wi-Fi video (HLS). Details (in Ukrainian):
 [Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
 
 ## First launch

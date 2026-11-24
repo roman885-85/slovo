@@ -116,8 +116,9 @@ extension RemoteControlServer {
                 "volume": media.volume, "muted": media.isMuted, "video": media.hasVideo,
                 "toScreen": media.videoToScreen, "repeats": media.repeats,
                 "index": media.playlistIndex ?? -1,
+                "next": media.playsNext,
                 "playlist": media.playlist.enumerated().map {
-                    ["index": $0.offset, "name": $0.element.lastPathComponent]
+                    ["index": $0.offset, "name": media.playlistCaption($0.element)]
                 }]
     }
 
@@ -217,6 +218,7 @@ extension RemoteControlServer {
         case "media-mute": media.isMuted.toggle()
         case "media-screen": media.videoToScreen.toggle()
         case "media-repeat": media.repeats.toggle()
+        case "media-next": media.playsNext.toggle()
 
         case "screen-reload":
             reloadScreenSources(state: state)

@@ -65,9 +65,27 @@ final class NativeWebSlideEditor: NSView, NativeListSource, NSTextViewDelegate {
 
     // MARK: - Сборка
 
+    /// Тло вікна — за поточною темою. CGColor, узятий раз при складанні, лишався
+    /// світлим і в темній темі (на знімках тура «темне» вікно редактора було світлим).
+    private func applyBackground() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyBackground()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyBackground()
+    }
+
     private func build() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        applyBackground()
 
         middleBar.orientation = .horizontal
         middleBar.spacing = 8
@@ -99,7 +117,9 @@ final class NativeWebSlideEditor: NSView, NativeListSource, NSTextViewDelegate {
         top.append(saveButton)
         browserButton = NativeForm.button(OurWords.t("Открыть в браузере")) { [weak self] in
             guard let self else { return }
-            self.model.openInBrowser(port: self.state.outputs.web.httpPort)
+            // Справжній порт сервера: він міг піти на запасний (8082), і порт із
+            // налаштувань тоді вів у нікуди.
+            self.model.openInBrowser(port: self.state.web.status.httpPort ?? self.state.outputs.web.httpPort)
         }
         top.append(browserButton)
         toolbar.setButtons(top)
@@ -269,7 +289,7 @@ final class NativeWebSlideEditor: NSView, NativeListSource, NSTextViewDelegate {
         let address: String
         if let page = model.current {
             let host = state.web.status.addresses.first ?? "127.0.0.1"
-            address = "  —  " + WebPageAddress.url(host: host, port: state.outputs.web.httpPort,
+            address = "  —  " + WebPageAddress.url(host: host, port: state.web.status.httpPort ?? state.outputs.web.httpPort,
                                                    fileName: page.url.lastPathComponent)
         } else {
             address = ""

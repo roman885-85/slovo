@@ -1,0 +1,167 @@
+// =============================================================================
+//  MenuStrip.cs — рядок меню у вікні (Файл | Дії | Налаштування | Інтерфейс |
+//  Мова | Довідка)
+// =============================================================================
+//  На Mac меню живе в системному рядку вгорі екрана, а цей рядок (NativeMenuBar)
+//  захований. На Windows системного рядка немає — тож меню стоїть у вікні,
+//  як у первісного VisioBible: значок і підпис, відкритий розділ — «пігулка»
+//  кольору акценту. Склад пунктів — один список на все (MenuCatalog), той самий,
+//  що в Mac-версії.
+// =============================================================================
+
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Media;
+
+namespace Slovo.App;
+
+public enum MenuGroup { File, Actions, Settings, Interface, Language, Help }
+
+/// Пункт меню: підпис, позначка, клавіша, межа групи, дія (немає — пункт сірий).
+/// Пункт меню. `Picture` — мініатюра поруч (шаблони, фони), `IsHeader` — сірий заголовок.
+public sealed record MenuEntry(string Title, Action? Run = null, bool IsOn = false, string? Key = null, bool StartsGroup = false,
+                               string? Picture = null, bool IsHeader = false);
+
+public static class MenuGroupInfo
+{
+    public static readonly MenuGroup[] All = Enum.GetValues<MenuGroup>();
+
+    public static string CaptionKey(this MenuGroup g) => g switch
+    {
+        MenuGroup.File => "N1", MenuGroup.Actions => "N18", MenuGroup.Settings => "N13",
+        MenuGroup.Interface => "N39", MenuGroup.Language => "N14", _ => "N4",
+    };
+
+    public static string Fallback(this MenuGroup g) => g switch
+    {
+        MenuGroup.File => Captions.T("Файл"), MenuGroup.Actions => Captions.T("Действия"),
+        MenuGroup.Settings => Captions.T("Настройка"), MenuGroup.Interface => Captions.T("Интерфейс"),
+        MenuGroup.Language => Captions.T("Language/Язык"), _ => Captions.T("Справка"),
+    };
+
+    public static string Symbol(this MenuGroup g) => g switch
+    {
+        MenuGroup.File => "folder", MenuGroup.Actions => "play.rectangle", MenuGroup.Settings => "gearshape",
+        MenuGroup.Interface => "square.grid.2x2", MenuGroup.Language => "globe", _ => "questionmark.circle",
+    };
+}
+
+public sealed class MenuStrip : LayoutPanel
+{
+    readonly Dictionary<MenuGroup, TitleButton> _buttons = new();
+    /// Пункти розділу будуються в мить відкриття — завжди свіжі позначки.
+    public Func<MenuGroup, IReadOnlyList<MenuEntry>> Entries = _ => Array.Empty<MenuEntry>();
+
+    public MenuStrip()
+    {
+        foreach (var group in MenuGroupInfo.All)
+        {
+            var button = new TitleButton(group.Symbol());
+            button.Pressed = () => Open(group);
+            _buttons[group] = button;
+            Children.Add(button);
+        }
+        ApplyTitles();
+        Signals.Shared.Subscribe(Signals.Kind.Language, ApplyTitles);
+        Palette.Changed += () => { foreach (var b in _buttons.Values) b.InvalidateVisual(); };
+    }
+
+    public void ApplyTitles()
+    {
+        foreach (var group in MenuGroupInfo.All) _buttons[group].Title = Captions.Caption(group.CaptionKey(), group.Fallback());
+        InvalidateArrange();
+    }
+
+    public string Caption(MenuGroup group) => _buttons[group].Title;
+
+    protected override Size Desired(Size available) => new(0, RootView.Metrics.MenuBar);
+
+    protected override void Arrangement(Size size)
+    {
+        double x = 0;
+        foreach (var group in MenuGroupInfo.All)
+        {
+            var button = _buttons[group];
+            Place(button, new Rect(x, 0, button.FittingWidth, size.Height));
+            x += button.FittingWidth + 2;
+        }
+    }
+
+    /// Відкрити розділ меню під його кнопкою.
+    public void Open(MenuGroup group)
+    {
+        var button = _buttons[group];
+        var menu = Build(Entries(group));
+        button.IsOpen = true;
+        menu.Closed += (_, _) => button.IsOpen = false;
+        menu.PlacementTarget = button;
+        menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
+        menu.Open(button);
+    }
+
+    public static ContextMenu Build(IReadOnlyList<MenuEntry> entries)
+    {
+        var menu = new ContextMenu();
+        var items = new List<Control>();
+        foreach (var entry in entries)
+        {
+            if (entry.StartsGroup && items.Count > 0) items.Add(new Separator());
+            Control? check = entry.IsOn ? new IconView("checkmark", 12) { Tint = () => Palette.Label } : null;
+            Control? icon = check;
+            if (entry.Picture != null && Thumbnails.Get(entry.Picture, 28) is { } picture)
+            {
+                // Як NSMenuItem.image поруч із позначкою стану: позначка, далі мініатюра 28 точок.
+                var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+                row.Children.Add(check ?? new Control { Width = 12 });
+                row.Children.Add(new Image { Source = picture, Height = 28, Width = Math.Round(28 * picture.Size.Width / Math.Max(1, picture.Size.Height)) });
+                icon = row;
+            }
+            var item = new MenuItem
+            {
+                Header = entry.Title,
+                InputGesture = entry.Key != null ? KeyGesture.Parse(entry.Key) : null,
+                IsEnabled = entry.Run != null && !entry.IsHeader,
+                Icon = icon,
+            };
+            var run = entry.Run;
+            if (run != null) item.Click += (_, _) => run();
+            items.Add(item);
+        }
+        menu.ItemsSource = items;
+        return menu;
+    }
+
+    /// Кнопка розділу меню.
+    sealed class TitleButton : Control
+    {
+        const double IconSize = 12, Gap = 4, Padding = 6;
+        readonly string _symbol;
+        string _title = "";
+        bool _open;
+        public Action? Pressed;
+
+        public TitleButton(string symbol) { _symbol = symbol; }
+        public string Title { get => _title; set { _title = value; InvalidateVisual(); } }
+        public bool IsOpen { get => _open; set { _open = value; InvalidateVisual(); } }
+        public double FittingWidth => Math.Ceiling(Padding * 2 + IconSize + Gap + UiFont.Width(_title, 12));
+
+        public override void Render(DrawingContext g)
+        {
+            var b = new Rect(Bounds.Size);
+            g.FillRectangle(Brushes.Transparent, b);
+            if (_open) g.DrawRectangle(Palette.Brush(Palette.Selection), null, b.Deflate(new Thickness(0, 3)), 5, 5);
+            var color = _open ? Colors.White : Palette.Label;
+            var x = Padding;
+            Icons.Draw(g, _symbol, new Rect(x, Math.Round((b.Height - IconSize) / 2), IconSize, IconSize), color);
+            x += IconSize + Gap;
+            var lh = UiFont.LineHeight(12);
+            TextDraw.Draw(g, _title, new Rect(x, Math.Round((b.Height - lh) / 2), b.Width - x, lh), 12, color, wrap: false, trim: true);
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { Pressed?.Invoke(); e.Handled = true; }
+        }
+    }
+}

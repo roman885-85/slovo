@@ -35,7 +35,7 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
     let grip = NativeWidthGrip()
     private static let listWidthKey = "mediaListWidth"
     /// Найвужчий лівий стовпець: у списку файлів мають поміститися кнопки.
-    static let minimumListWidth: CGFloat = 200
+    static let minimumListWidth: CGFloat = 250
 
     private init() {
         super.init(frame: .zero)
@@ -114,7 +114,12 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         listCaption.textColor = .secondaryLabelColor
         listCaption.lineBreakMode = .byTruncatingTail
         listCaption.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Посилання (ролики YouTube, потоки) — у той самий список, що й файли; ↑/↓ —
+        // свій порядок показу, як просив власник («как в минусовках»).
         for item in [button("plus", #selector(addFiles)),
+                     button("link.badge.plus", #selector(addLinks)),
+                     button("arrow.up", #selector(moveItemUp)),
+                     button("arrow.down", #selector(moveItemDown)),
                      button("minus", #selector(removeSelected)),
                      button("xmark", #selector(clearAll))] {
             toolbar.addArrangedSubview(item)
@@ -126,9 +131,13 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         listCaption.stringValue = OurWords.t("Медиафайлы: заставки, видео")
         grip.toolTip = OurWords.t("Потяните — ширина списка; двойной щелчок — как было")
         let items = toolbar.arrangedSubviews
-        items.first?.toolTip = state?.text("PSBOpenVideo", default: OurWords.t("Открыть медиа-файл"))
-        if items.count > 1 { items[1].toolTip = OurWords.t("Убрать из списка") }
-        if items.count > 2 { items[2].toolTip = OurWords.t("Очистить список") }
+        let tips = [state?.text("PSBOpenVideo", default: OurWords.t("Открыть медиа-файл")) ?? "",
+                    OurWords.t("Добавить ссылки: ролики YouTube или потоки — по одной в строке"),
+                    OurWords.t("Поднять выше в списке"),
+                    OurWords.t("Опустить ниже в списке"),
+                    OurWords.t("Убрать из списка"),
+                    OurWords.t("Очистить список")]
+        for (item, tip) in zip(items, tips) { item.toolTip = tip }
     }
 
     override func layout() {
@@ -179,6 +188,35 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
         reload()
     }
 
+    @objc private func addLinks() {
+        guard let state else { return }
+        let alert = NSAlert()
+        alert.messageText = OurWords.t("Добавить ссылки")
+        alert.informativeText = OurWords.t("Ролики YouTube или адреса потоков — по одной ссылке в строке. Они встанут в список, как файлы.")
+        let field = NativeLinksField.make(width: 420, height: 110)
+        alert.accessoryView = field.scroll
+        alert.addButton(withTitle: state.text("BBOk", default: "Ок"))
+        alert.addButton(withTitle: state.text("BBCancel", default: "Отмена"))
+        alert.window.initialFirstResponder = field.text
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        state.media.addLinks(text: field.text.string)
+        reload()
+    }
+
+    /// Пересунути вибраний (чи відкритий) пункт на одну позицію.
+    private func move(by offset: Int) {
+        guard let state, let position = selected ?? state.media.playlistIndex else { return }
+        let target = position + offset
+        guard state.media.playlist.indices.contains(target) else { return }
+        state.media.movePlaylistItem(at: position, by: offset)
+        selected = target
+        list.reload()
+        list.setSelection(IndexSet(integer: target), active: target)
+    }
+
+    @objc private func moveItemUp() { move(by: -1) }
+    @objc private func moveItemDown() { move(by: 1) }
+
     @objc private func removeSelected() {
         guard let state, let position = selected ?? state.media.playlistIndex else { return }
         state.media.removeFromPlaylist(at: position)
@@ -194,7 +232,9 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
 
     private func reload() {
         list.reload()
-        let active = state?.media.playlistIndex
+        // Вибране людиною (щойно пересунуте ↑/↓) не перескакує назад на відкрите.
+        let count = state?.media.playlist.count ?? 0
+        let active = selected.flatMap { $0 < count ? $0 : nil } ?? state?.media.playlistIndex
         list.setSelection(active.map { IndexSet(integer: $0) } ?? IndexSet(), active: active)
         needsLayout = true
     }
@@ -206,7 +246,10 @@ final class NativeMediaWorkspace: NSView, NativeListSource {
     func row(at index: Int) -> NativeRow {
         var row = NativeRow()
         row.lead = "\(index + 1)"
-        row.text = state?.media.playlist[index].lastPathComponent ?? ""
+        if let media = state?.media, media.playlist.indices.contains(index) {
+            row.text = media.playlistCaption(media.playlist[index])
+            row.singleLine = true
+        }
         return row
     }
 }

@@ -3,31 +3,52 @@
   <!-- ==========================================================================
        Slovo.csproj — «Слово» для Windows 10/11
        ==========================================================================
-       Окрема програма, що повторює «Слово» для Mac: Біблія, пісні, текст,
-       зображення, План та Історія, вікно слайда на проекторі й той самий
-       канал пульта (телефон, планшет, «Проповідник», браузер).
-       Збирається на Mac в один самодостатній win-x64 .exe (build.sh):
-       на цільовому комп'ютері не треба ні .NET, ні чогось іще.
+       Повна відповідність Mac-«Слову» 1.3.9 (див. ПАРИТЕТ.md), без жодного AppKit:
+         Sources/Core — ядро (на Mac Sources/SlovoCore): Біблія, пісні, шаблони,
+                        пошук, план, журнал, нумерація — ті самі файли даних;
+         Sources/App  — програма на Avalonia: стан, вікна, панелі, вивід.
+       Збирається на Mac в один самодостатній win-x64 .exe (build.sh).
+       Старе/ — версія 1.0.0, лише як підказка; у збірку не йде.
        ========================================================================== -->
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AssemblyName>Slovo</AssemblyName>
     <RootNamespace>Slovo</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <NoWarn>$(NoWarn);CA1416;CS1591</NoWarn>
+    <!-- Імена як у Swift/AppKit (frame, bounds, layout()) — свідомо, щоб переклад ішов рядок у рядок. -->
+    <NoWarn>$(NoWarn);CA1416;CS1591;CS8981;CS0108;CS0114;CS8618;CS8625;CS8600;CS8601;CS8602;CS8603;CS8604;CS8619;CS8620;CS8629;CS8765;CS8767;CS0649;CS0169;CS0414;CS4014;CS1998</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Значок — зі Slovo.icns (build.sh); без нього програма збирається з типовим. -->
     <ApplicationIcon Condition="Exists('Resources/AppIcon.ico')">Resources/AppIcon.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.4.0</Version>
     <Product>Слово</Product>
     <Company>ua.church.slovo</Company>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Старе/**" />
+    <!-- Написане проти ядра, якого ще немає в цій гілці: вмикається після злиття win-core. -->
+    <Compile Remove="Sources/App/Pending/**" />
+    <None Remove="Старе/**" />
+    <EmbeddedResource Remove="Старе/**" />
+    <AvaloniaResource Remove="Старе/**" />
+  </ItemGroup>
+
+  <!-- LibVLC — лише 64 біти й лише потрібні модулі (≈40 МБ замість 103): без кодувальників,
+       виводу потоків, субтитрів, візуалізацій, дисків і ігрової музики. Вивід кадрів — vmem. -->
+  <PropertyGroup>
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <VlcWindowsX64IncludeFiles Include="libvlc.dll;libvlccore.dll;plugins\access\%2A;plugins\audio_filter\%2A;plugins\audio_mixer\%2A;plugins\audio_output\%2A;plugins\codec\%2A;plugins\d3d11\%2A;plugins\d3d9\%2A;plugins\demux\%2A;plugins\logger\%2A;plugins\misc\%2A;plugins\packetizer\%2A;plugins\stream_filter\%2A;plugins\video_chroma\%2A;plugins\video_filter\%2A;plugins\video_output\libvmem_plugin.dll;plugins\stream_out\libstream_out_transcode_plugin.dll;plugins\stream_out\libstream_out_standard_plugin.dll;plugins\mux\libmux_wav_plugin.dll;plugins\access_output\libaccess_output_file_plugin.dll" />
+    <VlcWindowsX64ExcludeFiles Include="plugins\codec\libaom_plugin.dll;plugins\codec\libx26410b_plugin.dll;plugins\codec\libschroedinger_plugin.dll;plugins\codec\libzvbi_plugin.dll;plugins\codec\liblibass_plugin.dll;plugins\codec\libvpx_plugin.dll;plugins\codec\libfluidsynth_plugin.dll;plugins\codec\libkate_plugin.dll;plugins\codec\libtwolame_plugin.dll;plugins\codec\libsdl_image_plugin.dll;plugins\codec\libcrystalhd_plugin.dll;plugins\access\liblibbluray_plugin.dll;plugins\access\libdcp_plugin.dll;plugins\access\libaccess_srt_plugin.dll;plugins\access\libdtv_plugin.dll;plugins\access\libcdda_plugin.dll;plugins\access\libsftp_plugin.dll;plugins\access\libdvdnav_plugin.dll;plugins\access\libdvdread_plugin.dll;plugins\access\libvnc_plugin.dll;plugins\access\libdshow_plugin.dll;plugins\demux\libgme_plugin.dll;plugins\demux\libmod_plugin.dll" />
+  </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Resources/AppIcon-256.png" Condition="Exists('Resources/AppIcon-256.png')" />
@@ -35,6 +56,11 @@
     <EmbeddedResource Include="../Resources/Defaults/hotkeys.ini" LogicalName="hotkeys.ini" />
     <EmbeddedResource Include="../Resources/Defaults/Slovo.ini" LogicalName="Slovo.ini" />
     <EmbeddedResource Include="../Resources/OurWords/en.json" LogicalName="en.json" />
+    <EmbeddedResource Include="../Resources/OurWords/de.json" LogicalName="de.json" />
+    <EmbeddedResource Include="../Resources/Numbering/inconsistencies.sqlite3" LogicalName="inconsistencies.sqlite3" />
+    <EmbeddedResource Include="../Resources/Help/index.html" LogicalName="help-index.html" />
+    <EmbeddedResource Include="../Resources/Help/uk.html" LogicalName="help-uk.html" />
+    <EmbeddedResource Include="../Resources/Help/en.html" LogicalName="help-en.html" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,12 +68,29 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.20" />
-    <!-- Малювання слайда: той самий Skia, що всередині Avalonia. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.20" />
+    <PackageReference Include="NAudio.Core" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
-    <!-- Бібліотека перекладів і пісенників — SQLite, як у «Проповіднику». -->
+    <PackageReference Include="PDFtoImage" Version="4.1.1" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- Медіаплеєр: LibVLC (той самий ffmpeg, що в оригіналу) — усі формати автора й потоки. -->
+    <PackageReference Include="LibVLCSharp" Version="3.9.4" />
+    <PackageReference Include="SoundTouch.Net" Version="2.3.2" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <!-- Передпоказ сторінки в редакторі веб-слайдів (як WKWebView на Mac): Microsoft Edge WebView2,
+         що є в Windows 10/11. Із пакета беремо лише ядро обгортки й завантажувач x64 (вбудованим
+         ресурсом — так він живе в одному .exe): частини для WinForms/WPF програмі не потрібні. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.Web.WebView2.Core">
+      <HintPath>$(PkgMicrosoft_Web_WebView2)/lib_manual/netcoreapp3.0/Microsoft.Web.WebView2.Core.dll</HintPath>
+    </Reference>
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x64/native/WebView2Loader.dll" LogicalName="WebView2Loader-x64.dll" />
   </ItemGroup>
 
 </Project>

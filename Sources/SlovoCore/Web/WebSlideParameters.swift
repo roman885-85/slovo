@@ -540,11 +540,15 @@ public enum WebSlideParameters {
     }
 
     /// Ім'я змінної в рядку виду «  --sl-щось: значення;».
+    ///
+    /// Лише рядок-оголошення, що починається з `--sl-`: рядок на кшталт
+    /// `@keyframes vhod-svechenie { … var(--sl-accent, #ffd98a) … opacity: 1 }`
+    /// давав «ім'я» від `--sl-accent` аж до двокрапки в `opacity:`, і перенесення
+    /// налаштувань переписувало його на «ім'я: значення» — анімація ламалася.
     private static func variableName(in line: String) -> String? {
-        guard let start = line.range(of: "--sl-") else { return nil }
-        let tail = line[start.lowerBound...]
-        guard let colon = tail.firstIndex(of: ":") else { return nil }
-        return String(tail[tail.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
+        let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+        guard trimmed.hasPrefix("--sl-"), let colon = trimmed.firstIndex(of: ":") else { return nil }
+        return String(trimmed[trimmed.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
     }
 
     /// Межі блоку налаштувань — від маркера початку до маркера кінця.
@@ -2000,7 +2004,7 @@ public enum WebSlideParameters {
         }
         guard let open = html.range(of: "<style", options: [.caseInsensitive, .backwards],
                                     range: html.startIndex..<marker.lowerBound) else {
-            return .refused("Метка настроек лежит вне <style> — перепишите блок вручную.")
+            return .refused(OurWords.t("Метка настроек лежит вне <style> — перепишите блок вручную."))
         }
 
         let tail = marker.upperBound..<html.endIndex

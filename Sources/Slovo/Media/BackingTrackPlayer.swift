@@ -332,10 +332,13 @@ final class BackingTrackPlayer: ObservableObject {
             loadWaveform(for: target)
             // Відкрита фонограма завжди стоїть у своєму списку: відкрили
             // кнопкою чи перетягуванням — вона там, і її видно виділеною.
-            if let known = playlist.firstIndex(of: target) {
+            // У списку стоїть те, що людина додала: для перетвореної копії — вихідний
+            // файл. Раніше копія ставала другим рядком поруч з оригіналом.
+            let listed = source
+            if let known = playlist.firstIndex(of: listed) ?? playlist.firstIndex(of: target) {
                 playlistIndex = known
             } else {
-                playlist.append(target)
+                playlist.append(listed)
                 playlistIndex = playlist.count - 1
             }
         } catch {
@@ -559,10 +562,21 @@ final class BackingTrackPlayer: ObservableObject {
         open(playlist[index])
     }
 
+    /// Пересунути фонограму в списку (↑/↓): свій порядок, у якому їх пускають.
+    func movePlaylistItem(at index: Int, by offset: Int) {
+        let target = index + offset
+        guard playlist.indices.contains(index), playlist.indices.contains(target) else { return }
+        playlist.swapAt(index, target)
+        if playlistIndex == index { playlistIndex = target }
+        else if playlistIndex == target { playlistIndex = index }
+        notify()
+    }
+
     func removeFromPlaylist(at index: Int) {
         guard playlist.indices.contains(index) else { return }
         let removed = playlist.remove(at: index)
-        if removed == url {
+        // Грає перетворена копія цього рядка — теж закриваємо.
+        if removed == url || url.flatMap({ convertedFrom[$0] }) == removed {
             playlistIndex = nil
             close()
         } else if let current = playlistIndex, current > index {

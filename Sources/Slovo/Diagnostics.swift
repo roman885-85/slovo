@@ -2177,6 +2177,8 @@ enum Diagnostics {
         ("мова", { languageSection(state: $0) + russianLeftoversSection(state: $0)
                     + unlabeledButtonsSection(state: $0) }),
         ("параметри", { settingsTabsSection(state: $0) }),
+        ("медіа-посилання", { mediaLinksSection(state: $0) }),
+        ("yt-dlp-оновлення", { youTubeToolSection(state: $0) }),
         ("медіа", { mediaFlowSection(state: $0) + mediaComplaintsSection(state: $0) }),
         ("пісні", { nativeSongsSection(state: $0) }),
         ("список", { nativeSection(state: $0) }),

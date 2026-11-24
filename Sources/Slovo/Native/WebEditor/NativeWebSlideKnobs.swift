@@ -246,7 +246,7 @@ final class NativeWebSlideKnobs: NSView {
 
         private func build(value: String, enabled: Bool) -> NSView {
             switch knob.kind {
-            case let .number(low, high, step, _):
+            case let .number(low, high, step, unit):
                 let stack = NSStackView()
                 stack.orientation = .horizontal
                 stack.spacing = 6
@@ -263,8 +263,11 @@ final class NativeWebSlideKnobs: NSView {
                     let text = stepped == stepped.rounded()
                         ? String(Int(stepped)) : String(format: "%.2f", stepped)
                     caption?.stringValue = text
-                    self.shown = text
-                    self.model.change(self.knob, to: text)
+                    // З одиницею: «90» замість «90%» CSS не приймає для ручок спільного
+                    // каталогу (vw/vh/%/em/s) — сторінка мовчки ігнорувала правку.
+                    let written = text + unit
+                    self.shown = written
+                    self.model.change(self.knob, to: written)
                 }
                 apply = { [weak slider, weak caption] text in
                     caption?.stringValue = text
@@ -398,8 +401,11 @@ enum WebSlideKnobColour {
                Int((colour.green * 255).rounded()), Int((colour.blue * 255).rounded()))
     }
 
+    /// Трійка для `rgb(var(--…) / прозорість)` — через пробіл, як у заготовках. Через коми
+    /// («r, g, b») ламався `rgb(r, g, b / a)`: колір на сторінці зникав, а ручка ставала
+    /// «вписаною руками» (isColorTriple чекає пробілів).
     static func triple(_ colour: SlideStyle.RGBA) -> String {
-        "\(Int((colour.red * 255).rounded())), \(Int((colour.green * 255).rounded())), "
+        "\(Int((colour.red * 255).rounded())) \(Int((colour.green * 255).rounded())) "
             + "\(Int((colour.blue * 255).rounded()))"
     }
 }

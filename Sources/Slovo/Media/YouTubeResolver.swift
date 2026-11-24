@@ -164,6 +164,12 @@ enum YouTubeResolver {
             return Availability(tool: .executable(url), note: OurWords.t("yt-dlp: %s", url.path))
         }
 
+        // Своя копія, яку програма оновлює сама (YouTubeToolUpdater), — першою: у пакеті
+        // лежить yt-dlp дня збирання, а YouTube міняється щотижня.
+        let managed = YouTubeToolUpdater.managedURL
+        if files.isExecutableFile(atPath: managed.path) {
+            return Availability(tool: .executable(managed), note: OurWords.t("yt-dlp: %s", managed.path))
+        }
         for folder in searchFolders {
             for name in executableNames {
                 let candidate = folder.appendingPathComponent(name)

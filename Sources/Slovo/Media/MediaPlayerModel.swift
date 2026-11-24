@@ -363,6 +363,19 @@ final class MediaPlayerModel: ObservableObject {
     @Published var repeats = false
     /// «Воспроизвести после открытия (Вкл/Выкл)» (PngSBAutoPlay).
     @Published var autoPlay = true
+    /// «После окончания — следующий из списка», как у фонограмм. Власник: ролики
+    /// YouTube і відео «добавляя несколько в свой плейлист… и проигрывая их по
+    /// своему усмотрению в своей очередности (как в минусовках)». «Повтор» старше.
+    @Published var playsNext = false {
+        didSet {
+            guard remembersPlaylist, !SessionMemory.isSuspended else { return }
+            UserDefaults.standard.set(playsNext, forKey: Self.playsNextKey)
+        }
+    }
+    private static let playsNextKey = "mediaPlaysNext"
+    /// Наступний пункт, відкритий «після кінця», грає навіть без автозапуску:
+    /// людина просила йти далі сама, а не чекати натискання.
+    private var playOnReady = false
     /// «Отображать видео в окне предпросмотра» (CBShowVideoOnPreview).
     @Published var videoToPreview = true
     /// «Отображать видео на экране проектора (Вкл/Выкл)» (PngSBVideoToScreen).
@@ -1104,7 +1117,8 @@ final class MediaPlayerModel: ObservableObject {
 
             // «Воспроизвести после открытия» — как в оригинале: если кнопка
             // (16.4) выключена, ждём нажатия «Воспроизвести».
-            if self.autoPlay {
+            if self.autoPlay || self.playOnReady {
+                self.playOnReady = false
                 self.play()
             } else {
                 self.showFirstFrame()
@@ -1181,6 +1195,12 @@ final class MediaPlayerModel: ObservableObject {
 
     private func handleEnd() {
         guard repeats else {
+            // «Следующий» — як у фонограм: кінець пункту відкриває наступний у списку.
+            if playsNext, let current = playlistIndex, current + 1 < playlist.count {
+                playOnReady = true
+                openFromPlaylist(at: current + 1)
+                return
+            }
             isPlaying = false
             return
         }
@@ -1329,7 +1349,37 @@ final class MediaPlayerModel: ObservableObject {
 
     private func rememberPlaylist() {
         guard remembersPlaylist, !SessionMemory.isSuspended else { return }
-        UserDefaults.standard.set(playlist.map(\.path), forKey: Self.playlistKey)
+        // Файли — шляхом (як було), посилання — повною адресою.
+        UserDefaults.standard.set(playlist.map { $0.isFileURL ? $0.path : $0.absoluteString }, forKey: Self.playlistKey)
+    }
+
+    /// Назви посилань у списку (ролик YouTube — його назва), щоб рядок читався
+    /// людською мовою, а не номером ролика. Пам'ятаються разом зі списком.
+    @Published private(set) var linkTitles: [String: String] = [:] {
+        didSet {
+            guard remembersPlaylist, !SessionMemory.isSuspended else { return }
+            UserDefaults.standard.set(linkTitles, forKey: Self.linkTitlesKey)
+        }
+    }
+    private static let linkTitlesKey = "mediaPlaylistTitles"
+
+    /// Що написати в рядку списку: ім'я файла, «YouTube · назва» чи адреса потоку.
+    func playlistCaption(_ url: URL) -> String {
+        if url.isFileURL { return url.lastPathComponent }
+        if let title = linkTitles[url.absoluteString], !title.isEmpty {
+            return YouTubeLink.isYouTube(url) ? "YouTube · " + title : title
+        }
+        if let id = YouTubeLink.videoID(from: url) { return "YouTube · " + id }
+        return (url.host ?? "") + url.path
+    }
+
+    /// Збережене з рядка: адреса зі схемою (не file) — посилання, решта — шлях до файла.
+    static func savedEntry(_ text: String) -> URL? {
+        if let url = URL(string: text), let scheme = url.scheme?.lowercased(), scheme != "file", url.host != nil {
+            return url
+        }
+        let file = URL(fileURLWithPath: text)
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 
     /// Повернути список, зібраний минулого разу.
@@ -1340,9 +1390,10 @@ final class MediaPlayerModel: ObservableObject {
     /// Нічого не відкриваємо: список стоїть, а що вмикати — вирішує людина.
     func restorePlaylist() {
         guard remembersPlaylist, playlist.isEmpty else { return }
+        playsNext = UserDefaults.standard.bool(forKey: Self.playsNextKey)
+        linkTitles = UserDefaults.standard.dictionary(forKey: Self.linkTitlesKey) as? [String: String] ?? [:]
         let saved = UserDefaults.standard.stringArray(forKey: Self.playlistKey) ?? []
-        let alive = saved.map { URL(fileURLWithPath: $0) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        let alive = saved.compactMap(Self.savedEntry)
         guard !alive.isEmpty else { return }
         playlist = alive
     }
@@ -1355,7 +1406,7 @@ final class MediaPlayerModel: ObservableObject {
     /// 2026-09-10 так посеред прогону заграв ролик власника, і наступна
     /// перевірка впиралася в його кадр замість вірша.
     func putBackPlaylist(_ urls: [URL]) {
-        playlist = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        playlist = urls.filter { !$0.isFileURL || FileManager.default.fileExists(atPath: $0.path) }
         playlistIndex = nil
     }
 
@@ -1388,23 +1439,103 @@ final class MediaPlayerModel: ObservableObject {
         return known.contains(url.pathExtension.lowercased())
     }
 
+    /// Додати в список посилання: ролики YouTube і потоки (http/https), кілька за раз —
+    /// кожне з нового рядка чи через пробіл. Повертає, скільки додано; нічого не
+    /// відкрито — відкривається перше додане (як із файлами).
+    @discardableResult
+    func addLinks(text: String, opensFirst: Bool = true) -> Int {
+        let pieces = text.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;")))
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "<>\"'")) }
+            .filter { !$0.isEmpty }
+        var added: [URL] = []
+        var lastProblem: Failure?
+        for piece in pieces {
+            guard let url = URL(string: piece), let scheme = url.scheme?.lowercased(), url.host != nil else {
+                lastProblem = .badURL
+                continue
+            }
+            guard Self.playableSchemes.contains(scheme), scheme != "file" else {
+                lastProblem = .unsupportedScheme(scheme)
+                continue
+            }
+            if let host = url.host?.lowercased(), Self.pageOnlyHosts.contains(host) {
+                lastProblem = .pageLink(host)
+                continue
+            }
+            if YouTubeLink.isYouTube(url), YouTubeLink.videoID(from: url) == nil {
+                lastProblem = .pageLink(url.host?.lowercased() ?? "youtube.com")
+                continue
+            }
+            // Той самий ролик іншим записом (youtu.be і watch?v=) — уже в списку.
+            if let id = YouTubeLink.videoID(from: url),
+               playlist.contains(where: { YouTubeLink.videoID(from: $0) == id }) { continue }
+            if playlist.contains(url) { continue }
+            playlist.append(url)
+            added.append(url)
+            if let id = YouTubeLink.videoID(from: url) { fetchLinkTitle(id: id, url: url) }
+        }
+        if added.isEmpty {
+            if let lastProblem { failure = lastProblem }
+            return 0
+        }
+        failure = nil
+        if opensFirst, mediaURL == nil, let first = added.first, let index = playlist.firstIndex(of: first) {
+            openFromPlaylist(at: index)
+        }
+        return added.count
+    }
+
+    /// Назва ролика для рядка списку — відкритим oEmbed YouTube, без ключів і входу.
+    private func fetchLinkTitle(id: String, url: URL) {
+        guard linkTitles[url.absoluteString] == nil,
+              let watch = YouTubeLink.watchURL(id: id),
+              var parts = URLComponents(string: "https://www.youtube.com/oembed") else { return }
+        parts.queryItems = [URLQueryItem(name: "url", value: watch.absoluteString),
+                            URLQueryItem(name: "format", value: "json")]
+        guard let address = parts.url else { return }
+        var request = URLRequest(url: address)
+        request.timeoutInterval = 8
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let name = json["title"] as? String, !name.isEmpty else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.linkTitles[url.absoluteString] = name }
+            }
+        }.resume()
+    }
+
+    /// Пересунути пункт списку (↑/↓): порядок показу — свій, як у фонограм.
+    func movePlaylistItem(at position: Int, by offset: Int) {
+        let target = position + offset
+        guard playlist.indices.contains(position), playlist.indices.contains(target) else { return }
+        playlist.swapAt(position, target)
+        if playlistIndex == position { playlistIndex = target }
+        else if playlistIndex == target { playlistIndex = position }
+    }
+
     /// Открыть файл из списка.
     func openFromPlaylist(at position: Int) {
         guard playlist.indices.contains(position) else { return }
         playlistIndex = position
         open(playlist[position])
+        // Відкрите посиланням іде як потік: індекс списку зберігаємо — load() потоку його не ставить.
+        playlistIndex = position
     }
 
     func removeFromPlaylist(at position: Int) {
         guard playlist.indices.contains(position) else { return }
         let removed = playlist.remove(at: position)
-        if removed == mediaURL { close(); playlistIndex = nil }
+        // Посилання YouTube грає з іншої (розібраної) адреси — тому й за номером, не лише за адресою.
+        if removed == mediaURL || position == playlistIndex { close(); playlistIndex = nil }
         else if let current = playlistIndex, current > position { playlistIndex = current - 1 }
+        if !removed.isFileURL { linkTitles[removed.absoluteString] = nil }
     }
 
     func clearPlaylist() {
         playlist.removeAll()
         playlistIndex = nil
+        linkTitles = [:]
         close()
     }
 
@@ -1586,6 +1717,7 @@ final class MediaPlayerModel: ObservableObject {
                     self.load(found.url, stream: true)
                     self.youTubeJob = keep
                     self.title = "YouTube · " + (found.title.isEmpty ? id : found.title)
+                    if !found.title.isEmpty, self.playlist.contains(url) { self.linkTitles[url.absoluteString] = found.title }
                     // Длительность плеер у растущего плейлиста узнаёт лишь в
                     // конце, а ползунку она нужна сразу.
                     if found.isRemuxed, found.duration > 0 { self.duration = found.duration }
@@ -1612,7 +1744,7 @@ final class MediaPlayerModel: ObservableObject {
         isStream = true
         title = "YouTube · \(id)"
 
-        let engine = YouTubeEmbedPlayer(videoID: id, autoplay: autoPlay)
+        let engine = YouTubeEmbedPlayer(videoID: id, autoplay: autoPlay || playOnReady)
         youTube = engine
         engine.onReady = { [weak self] in
             guard let self, self.youTube === engine else { return }
@@ -1625,7 +1757,7 @@ final class MediaPlayerModel: ObservableObject {
             // «Воспроизвести после открытия» — как для файла. Сам YouTube с
             // `autoplay` тоже стартует, но у нас пуск снимает уступку тексту
             // и просит зал — этого его страница сделать не может.
-            if self.autoPlay { self.play() } else { engine.snapshot() }
+            if self.autoPlay || self.playOnReady { self.playOnReady = false; self.play() } else { engine.snapshot() }
         }
         engine.onState = { [weak self] state in
             guard let self, self.youTube === engine else { return }
@@ -1674,6 +1806,7 @@ final class MediaPlayerModel: ObservableObject {
                 MainActor.assumeIsolated {
                     guard let self, self.youTube?.videoID == id else { return }
                     self.title = "YouTube · " + name
+                    if let link = self.mediaURL, self.playlist.contains(link) { self.linkTitles[link.absoluteString] = name }
                 }
             }
         }.resume()

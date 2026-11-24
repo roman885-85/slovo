@@ -47,6 +47,7 @@ echo "▶ Збірка win-x64 (один самодостатній файл)"
 dotnet publish -c Release -r win-x64 --self-contained true \
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:IncludeAllContentForSelfExtract=true \
   -p:EnableCompressionInSingleFile=true \
   -p:DebugType=none \
   -o "$PWD/Службові/publish" -v q --nologo

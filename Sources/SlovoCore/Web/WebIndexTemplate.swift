@@ -25,7 +25,7 @@ public struct WebIndexModel: Sendable, Hashable {
 
     public init(title: String = OurWords.t("Слово — веб-слайды"),
                 languageCode: String = "ru",
-                pageColumn: String = "Страница",
+                pageColumn: String = OurWords.t("Страница"),
                 descriptionColumn: String = OurWords.t("Описание"),
                 qrColumn: String = "QR-код",
                 entries: [Entry] = []) {

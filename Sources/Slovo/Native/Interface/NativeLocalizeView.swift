@@ -276,7 +276,16 @@ final class NativeLocalizeView: NSView, NSTableViewDataSource, NSTableViewDelega
     private func fillForms() {
         forms.removeAllItems()
         forms.addItems(withTitles: model.formNames)
-        if let index = model.formNames.firstIndex(of: model.formName) { forms.selectItem(at: index) }
+        if let index = model.formNames.firstIndex(of: model.formName) {
+            forms.selectItem(at: index)
+        } else if let first = model.formNames.first {
+            // Форми моделі («MainForm») у списку немає (немає файлів перекладу автора): список
+            // показував перший пункт, а таблиця лишалася порожньою. Тепер модель — на видимому.
+            model.formName = first
+            forms.selectItem(at: 0)
+            // Перечитати таблицю вже після складання вікна (fillForms кличеться з build).
+            DispatchQueue.main.async { [weak self] in self?.reload() }
+        }
     }
 
     // MARK: - Действия панели

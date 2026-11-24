@@ -468,6 +468,8 @@ final class AppState: ObservableObject {
         media.restorePlaylist()
         backing.remembers = true
         backing.restore()
+        // Свій yt-dlp — свіжий: раз на добу, у фоні (вимикається в «Параметри → Медіа»).
+        YouTubeToolUpdater.checkInBackground()
 
         // Окно «Редактор несоответствий нумерации» (N40) записало базу по «Ок».
         // Без этого правленые правила доходили бы до слайда только со

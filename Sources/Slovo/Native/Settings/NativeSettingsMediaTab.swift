@@ -17,6 +17,9 @@ final class NativeSettingsMediaTab {
     private let channel = NativeForm.label("")
     private let sent = NativeForm.label("")
     private let toolStatus = NativeForm.label("")
+    /// Стан свого yt-dlp: версія й коли перевірено, оновлено чи чому ні.
+    private let updateStatus = NativeForm.label("")
+    private var updateObserver: NSObjectProtocol?
     private var timer: Timer?
 
     init(state: AppState, store: SettingsStore) {
@@ -28,6 +31,15 @@ final class NativeSettingsMediaTab {
         let view = NativeForm.Page([player, ndi, ndiWiFi, wifi, youTube])
         refresh()
         refreshTool()
+        updateStatus.stringValue = YouTubeToolUpdater.status
+        // Перевірка йде у фоні — рядок стану оновлюється, щойно вона скінчиться.
+        updateObserver = NotificationCenter.default.addObserver(forName: YouTubeToolUpdater.statusChanged, object: nil,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateStatus.stringValue = YouTubeToolUpdater.status
+                self?.refreshTool()
+            }
+        }
         // Счётчик кадров идёт часто: обновляем его раз в секунду и только
         // пока окно открыто — в главном окне на него никто не подписан.
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self, weak view] _ in
@@ -89,6 +101,21 @@ final class NativeSettingsMediaTab {
                 },
             ]),
             NativeForm.Row("", [toolStatus]),
+            // Свій yt-dlp оновлюється сам (власник: «чтобы он автоматически обновлялся») — з вимикачем.
+            NativeForm.Row("", [
+                NativeForm.check(OurWords.t("Обновлять yt-dlp автоматически"),
+                                 NativeForm.Tie(get: { YouTubeToolUpdater.autoUpdate }, set: { YouTubeToolUpdater.autoUpdate = $0 }),
+                                 hint: OurWords.t("Раз в сутки программа сверяет свою копию yt-dlp с последним выпуском на GitHub и при новой версии скачивает её (сумма SHA-256 проверяется)")),
+                NativeForm.button(OurWords.t("Проверить сейчас"),
+                                  hint: OurWords.t("Сверить yt-dlp с последним выпуском и обновить, если вышла новая версия")) { [weak self] in
+                    self?.updateStatus.stringValue = OurWords.t("Проверяю…")
+                    YouTubeToolUpdater.check { [weak self] text in
+                        self?.updateStatus.stringValue = text
+                        self?.refreshTool()
+                    }
+                },
+            ]),
+            NativeForm.Row("", [updateStatus]),
         ])
     }
 

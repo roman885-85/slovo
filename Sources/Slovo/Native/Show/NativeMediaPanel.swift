@@ -40,6 +40,8 @@ final class NativeMediaPanel: NSView {
     private var tracksButton: NSPopUpButton!
     private var playButton: NSButton!
     private var repeatButton: NSButton!
+    /// «После окончания — следующий из списка» (как у фонограмм).
+    private var nextButton: NSButton!
     private var muteButton: NSButton!
     private var transportButtons: [NSButton] = []
     private var observers: [Any] = []
@@ -151,10 +153,15 @@ final class NativeMediaPanel: NSView {
         let toEnd = command("forward.end.fill", #selector(toEnd))
         transportButtons = [toBegin, back, playButton, stop, forward, toEnd]
         repeatButton = command("repeat", #selector(toggleRepeat))
+        nextButton = command("text.line.first.and.arrowtriangle.forward", #selector(toggleNext))
+        if nextButton.image == nil {
+            nextButton.image = NSImage(systemSymbolName: "forward.end.alt.fill", accessibilityDescription: nil)
+        }
         muteButton = command("speaker.wave.2.fill", #selector(toggleMute))
 
         for item in transportButtons { transport.addArrangedSubview(item) }
         transport.addArrangedSubview(repeatButton)
+        transport.addArrangedSubview(nextButton)
         transport.addArrangedSubview(muteButton)
         transport.addArrangedSubview(volumeLabel)
         transport.addArrangedSubview(volume)
@@ -242,6 +249,7 @@ final class NativeMediaPanel: NSView {
         mark(autoPlayButton, on: model.autoPlay)
         mark(toScreenButton, on: model.videoToScreen)
         mark(repeatButton, on: model.repeats)
+        mark(nextButton, on: model.playsNext)
         muteButton.image = NSImage(systemSymbolName: model.isMuted ? "speaker.slash.fill"
                                         : "speaker.wave.2.fill", accessibilityDescription: nil)
         mark(muteButton, on: model.isMuted)
@@ -313,6 +321,7 @@ final class NativeMediaPanel: NSView {
             button.toolTip = hint(key, hints[key] ?? "")
         }
         repeatButton.toolTip = hint("PSBVideoRepeate", "Повтор")
+        nextButton.toolTip = OurWords.t("После окончания играть следующий файл или ролик из списка")
         muteButton.toolTip = hint("PngSBAudioMute", "Без звука")
         position.toolTip = OurWords.t("Место воспроизведения: потяните, чтобы перемотать")
         volume.toolTip = OurWords.t("Громкость")
@@ -349,17 +358,24 @@ final class NativeMediaPanel: NSView {
         let alert = NSAlert()
         alert.messageText = message("TextMessages52", "Открытие медиапотока")
         alert.informativeText = message("TextMessages53", "Введите URL медиапотока")
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 22))
-        alert.accessoryView = field
+        // Кілька посилань за раз — кожне з нового рядка: усі лягають у список плеєра,
+        // як файли (власник: ролики YouTube «добавляя несколько в свой плейлист»).
+        let field = NativeLinksField.make(width: 420, height: 84)
+        alert.accessoryView = field.scroll
         alert.addButton(withTitle: settings("BBOk", "Ок"))
         alert.addButton(withTitle: settings("BBCancel", "Отмена"))
+        alert.window.initialFirstResponder = field.text
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        model.openStream(text: field.stringValue)
+        let before = model.playlist.count
+        model.addLinks(text: field.text.string)
+        // Відкриваємо перше ДОДАНЕ — як «Відкрити файл»: посилання грає одразу, а решта чекає в списку.
+        if model.playlist.count > before { model.openFromPlaylist(at: before) }
     }
 
     @objc private func toggleAutoPlay() { model.autoPlay.toggle(); refresh() }
     @objc private func toggleToScreen() { model.videoToScreen.toggle(); refresh() }
     @objc private func toggleRepeat() { model.repeats.toggle(); refresh() }
+    @objc private func toggleNext() { model.playsNext.toggle(); refresh() }
     @objc private func toggleMute() { model.isMuted.toggle(); refresh() }
     @objc private func playPause() { model.playPause() }
     @objc private func stopPlayback() { model.stop() }
@@ -476,5 +492,24 @@ private final class VideoBox: NSView {
                         as? [URL]) ?? []
         guard !urls.isEmpty else { return false }
         return onDrop?(urls) ?? false
+    }
+}
+
+/// Поле для кількох посилань (по одному в рядку) — у вікні «Открытие медиапотока»
+/// і кнопці «Добавить ссылки» списку плеєра.
+@MainActor
+enum NativeLinksField {
+    static func make(width: CGFloat, height: CGFloat) -> (scroll: NSScrollView, text: NSTextView) {
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        let text = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        text.isRichText = false
+        text.font = .systemFont(ofSize: 12)
+        text.isAutomaticQuoteSubstitutionEnabled = false
+        text.isAutomaticLinkDetectionEnabled = false
+        text.autoresizingMask = [.width]
+        scroll.documentView = text
+        return (scroll, text)
     }
 }

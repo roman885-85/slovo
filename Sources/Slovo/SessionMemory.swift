@@ -18,7 +18,8 @@ import Foundation
 enum SessionMemory {
 
     /// Ключі, під якими лежать списки людини.
-    static let keys = ["showPictureFiles", "showPresentationFiles", "mediaPlaylist", "backingTrackFile", "backingPlaylist"]
+    static let keys = ["showPictureFiles", "showPresentationFiles", "mediaPlaylist", "mediaPlaylistTitles", "mediaPlaysNext",
+                       "backingTrackFile", "backingPlaylist"]
 
     /// Поки `true`, пам'ять списків не пише. Ставить самоперевірка.
     nonisolated(unsafe) static var isSuspended = false

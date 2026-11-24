@@ -58,6 +58,9 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
     private let addButton = NSButton()
     private let removeButton = NSButton()
     private let clearButton = NSButton()
+    /// ↑/↓ — свій порядок фонограм (і такий самий у списку плеєра).
+    private let upButton = NSButton()
+    private let downButton = NSButton()
     let list = NativeList(mode: .list,
                           metrics: NativeListMetrics(leadWidth: 26, detailWidth: 0),
                           heights: .uniform(22), fontSize: 12)
@@ -139,6 +142,8 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         tool(addButton, "plus", #selector(addFiles))
         tool(removeButton, "minus", #selector(removeSelected))
         tool(clearButton, "trash", #selector(clearAll))
+        tool(upButton, "arrow.up", #selector(moveItemUp))
+        tool(downButton, "arrow.down", #selector(moveItemDown))
 
         func transport(_ button: NSButton, _ symbol: String, _ action: Selector, toggle: Bool = false) {
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
@@ -207,7 +212,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         for speaker in [quiet, loud] { speaker.contentTintColor = .tertiaryLabelColor }
 
         for view in [name, time, waveformView, meter] as [NSView] { deck.addSubview(view) }
-        for view in [icon, caption, count, addButton, removeButton, clearButton, list, deck,
+        for view in [icon, caption, count, addButton, removeButton, clearButton, upButton, downButton, list, deck,
                      playButton, pauseButton, stopButton, loopButton, nextButton,
                      toneDown, toneLabel, toneUp, quiet, volume, loud, widthGrip] as [NSView] {
             addSubview(view)
@@ -232,6 +237,8 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         addButton.toolTip = OurWords.t("Добавить фонограммы в список…")
         removeButton.toolTip = OurWords.t("Убрать фонограмму из списка")
         clearButton.toolTip = OurWords.t("Очистить список фонограмм")
+        upButton.toolTip = OurWords.t("Поднять выше в списке")
+        downButton.toolTip = OurWords.t("Опустить ниже в списке")
         list.toolTip = OurWords.t("Свой список фонограмм: перетащите сюда музыку. Двойной щелчок — играть")
         waveformView.toolTip = OurWords.t("Весь трек: щелчок или перетаскивание — играть с этого места")
         meter.toolTip = OurWords.t("Уровень фонограммы: левый и правый каналы, красное — перегрузка")
@@ -267,7 +274,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         // Поріг із запасом: на межу «повної» висоти припадають ще й відступи
         // та смужка нижньої ручки, і без запасу панель зривалася в смужку.
         let compact = bounds.height < Self.fullHeight - 16
-        for view in [icon, caption, count, addButton, removeButton, clearButton, list] {
+        for view in [icon, caption, count, addButton, removeButton, clearButton, upButton, downButton, list] {
             view.isHidden = compact
         }
         // Картку треку не ховаємо: усередині неї живуть назва, час і смуга
@@ -343,7 +350,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
 
         icon.frame = NSRect(x: pad, y: 6, width: 16, height: 16)
         var right = listWidth
-        for button in [clearButton, removeButton, addButton] {
+        for button in [clearButton, removeButton, downButton, upButton, addButton] {
             right -= 22
             button.frame = NSRect(x: right, y: 4, width: 22, height: 20)
         }
@@ -404,7 +411,7 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         // Заголовок: значок, «Фонограми», скільки їх, і кнопки списку праворуч.
         icon.frame = NSRect(x: pad, y: 6, width: 16, height: 16)
         var right = width - pad
-        for button in [clearButton, removeButton, addButton] {
+        for button in [clearButton, removeButton, downButton, upButton, addButton] {
             right -= 22
             button.frame = NSRect(x: right, y: 4, width: 22, height: 20)
         }
@@ -464,6 +471,8 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         }
         removeButton.isEnabled = !player.playlist.isEmpty
         clearButton.isEnabled = !player.playlist.isEmpty
+        upButton.isEnabled = player.playlist.count > 1
+        downButton.isEnabled = player.playlist.count > 1
         count.stringValue = player.playlist.isEmpty ? "" : "· \(player.playlist.count)"
 
         if waveformView.waveform?.url != player.waveform?.url { waveformView.waveform = player.waveform }
@@ -610,6 +619,23 @@ final class NativeBackingTrackBar: NSView, NativeListSource {
         player.removeFromPlaylist(at: index)
         selected = nil
     }
+
+    /// Пересунути виділену (чи відкриту) фонограму — виділення їде разом із нею.
+    private func move(by offset: Int) {
+        guard let index = selected ?? player.playlistIndex else { return }
+        let target = index + offset
+        guard player.playlist.indices.contains(target) else { return }
+        player.movePlaylistItem(at: index, by: offset)
+        shownList = player.playlist
+        shownIndex = player.playlistIndex
+        list.reload()
+        list.setSelection(IndexSet(integer: target), active: target)
+        selected = target
+        refresh()
+    }
+
+    @objc private func moveItemUp() { move(by: -1) }
+    @objc private func moveItemDown() { move(by: 1) }
 
     @objc private func clearAll() {
         player.clearPlaylist()
