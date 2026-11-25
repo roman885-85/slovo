@@ -25,6 +25,18 @@ public sealed unsafe class NdiOutput
     public static bool ForceEnabled { get; set; }
     public string SourceName => SourceNameOverride ?? "Слово";
 
+    /// Повне ім'я в мережі, як його бачать приймачі: «МАШИНА (Слово)» (null — джерела немає).
+    public unsafe string? NetworkName
+    {
+        get
+        {
+            var sender = _sender;
+            if (sender == IntPtr.Zero || NdiRuntime.SendSourceName == null) return null;
+            try { var source = NdiRuntime.SendSourceName(sender); return source == null ? null : System.Runtime.InteropServices.Marshal.PtrToStringUTF8(source->Name); }
+            catch { return null; }
+        }
+    }
+
     /// Що сказати в «Параметрах»: «В ефірі: Слово (2 приймачі)», «Зупинена», чому немає.
     public string Status { get; private set; } = "";
     public int Connections { get; private set; }
@@ -469,6 +481,34 @@ public sealed unsafe class NdiOutput
     }
 
     /// Знайти своє джерело й прийняти кадр (як самоперевірка Mac). Опис того, що дійшло.
+    /// Перевірці: які джерела NDI видно звідси за `seconds` секунд (повні імена «МАШИНА (джерело)»).
+    public static string ListSources(int seconds)
+    {
+        if (!NdiRuntime.IsAvailable) return NdiRuntime.Problem ?? "NDI";
+        var find = new NdiRuntime.FindCreate { ShowLocalSources = true };
+        var finder = NdiRuntime.FindCreateFn(&find);
+        if (finder == IntPtr.Zero) return "find_create";
+        try
+        {
+            var until = DateTime.Now.AddSeconds(seconds);
+            var names = new SortedSet<string>();
+            while (DateTime.Now < until)
+            {
+                NdiRuntime.FindWait(finder, 1000);
+                uint count = 0;
+                var sources = NdiRuntime.FindSources(finder, &count);
+                for (var i = 0; i < count; i++)
+                {
+                    var full = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(sources[i].Name) ?? "";
+                    var url = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(sources[i].Address) ?? "";
+                    names.Add(full + (url.Length > 0 ? " @ " + url : ""));
+                }
+            }
+            return names.Count == 0 ? "жодного" : string.Join(" | ", names);
+        }
+        finally { NdiRuntime.FindDestroy(finder); }
+    }
+
     public static string ReceiveCheck(string name, int seconds = 8, string? savePath = null)
     {
         if (!NdiRuntime.IsAvailable) return NdiRuntime.Problem ?? "NDI";

@@ -204,8 +204,24 @@ public sealed class SongBookTabs : Control
         return null;
     }
 
+    bool _holdHooked;
+
+    /// Затримати палець на вкладці збірника — її меню (як права кнопка).
+    void HookHold()
+    {
+        if (_holdHooked) return;
+        _holdHooked = true;
+        Holding += (_, e) =>
+        {
+            if (e.HoldingState != HoldingState.Started || e.PointerType != PointerType.Touch || IndexAt(e.Position) is not { } held) return;
+            if (OnMenu?.Invoke(_tabs[held].Id) is { } menu) { menu.PlacementTarget = this; menu.Open(this); }
+            e.Handled = true;
+        };
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        HookHold();
         base.OnPointerPressed(e);
         var point = e.GetCurrentPoint(this);
         if (IndexAt(point.Position) is not { } index) return;

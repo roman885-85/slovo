@@ -13,6 +13,9 @@ namespace Slovo.App;
 public sealed class MacTabView : LayoutPanel
 {
     readonly List<(string Title, Control Page)> _items = new();
+    /// Сторінки, що будуються при першому показі: «Параметри» з дев'ятьма вкладками будувались
+    /// усі разом — секунди в головному потоці, і Windows писала «не відповідає» (власник, 1.4.2).
+    readonly Dictionary<int, Func<Control>> _later = new();
     readonly Header _header;
     readonly Border _box = new() { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1) };
     int _selected;
@@ -43,6 +46,30 @@ public sealed class MacTabView : LayoutPanel
         InvalidateArrange();
     }
 
+    /// Вкладка, чия сторінка будується лише тоді, коли її вперше відкриють.
+    public void AddLater(string title, Func<Control> make)
+    {
+        var index = _items.Count;
+        if (index == _selected) { Add(title, make()); return; }
+        _later[index] = make;
+        Add(title, new Panel());
+    }
+
+    /// Побудувати відкладену сторінку зараз (на місці заглушки).
+    Control Build(int index)
+    {
+        if (!_later.Remove(index, out var make)) return _items[index].Page;
+        var placeholder = _items[index].Page;
+        var page = make();
+        page.IsVisible = index == _selected;
+        var at = Children.IndexOf(placeholder);
+        Children.RemoveAt(at);
+        Children.Insert(at, page);
+        _items[index] = (_items[index].Title, page);
+        InvalidateArrange();
+        return page;
+    }
+
     public int SelectedIndex
     {
         get => _selected;
@@ -50,6 +77,7 @@ public sealed class MacTabView : LayoutPanel
         {
             if (value < 0 || value >= _items.Count || value == _selected) return;
             _selected = value;
+            if (_later.ContainsKey(value)) Build(value);
             for (var i = 0; i < _items.Count; i++) _items[i].Page.IsVisible = i == value;
             _header.InvalidateVisual();
             SelectionChanged?.Invoke(value);
@@ -58,7 +86,7 @@ public sealed class MacTabView : LayoutPanel
 
     public int Count => _items.Count;
     public string TitleAt(int i) => _items[i].Title;
-    public Control PageAt(int i) => _items[i].Page;
+    public Control PageAt(int i) => _later.ContainsKey(i) ? Build(i) : _items[i].Page;
 
     double[] Widths() => _items.Select(i => Math.Ceiling(UiFont.Width(i.Title, FontSize)) + 26).ToArray();
 

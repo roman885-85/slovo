@@ -282,14 +282,21 @@ public sealed partial class RemoteControlServer
     /// Запит прийшов у фоні — розбираємо в головному потоці, де живе стан.
     Task Handle(HttpRequest request, HttpConnection connection)
     {
+        var posted = Environment.TickCount64;
         Dispatcher.UIThread.Post(() =>
         {
+            // Скільки запит чекав на головний потік — у журнал, якщо довше секунди (діагностика повільності).
+            var waited = Environment.TickCount64 - posted;
+            if (waited > 1000) Journal.Say($"пульт: {request.Method} {request.Path} чекав на головний потік {waited} мс");
+            var started = Environment.TickCount64;
             try { HandleOnUi(request, connection); }
             catch (Exception error)
             {
                 Journal.Say($"пульт: {request.Method} {request.Path} — {error.Message}");
                 Fail(connection, 400, error.Message);
             }
+            var spent = Environment.TickCount64 - started;
+            if (spent > 1000) Journal.Say($"пульт: {request.Method} {request.Path} виконувався {spent} мс");
         });
         return Task.CompletedTask;
     }
@@ -928,6 +935,15 @@ public sealed partial class RemoteControlServer
             case "numbering": NumberingEditorWindow.Open(AppState.Shared); return true;
             case "links": MediaWorkspace.Shared.AddLinks(); return true;
             case "mirror": MirrorWindow.Open(); return true;
+            // Перевірці шляху «Параметри → Гаразд»: позначити трансляцію NDI (як галочкою) і натиснути «Гаразд».
+            case "settings-ndi":
+                if (SettingsWindow.Shared is not { IsVisible: true }) return false;
+                SettingsStore.Shared.Settings.Options.NdiEnabled = !SettingsStore.Shared.Settings.Options.NdiEnabled;
+                return true;
+            case "settings-ok":
+                if (SettingsWindow.Shared is not { IsVisible: true } accepting || accepting.OnAccept == null) return false;
+                accepting.OnAccept();
+                return true;
             case "help": HelpWindow.Open(what.Contains(':') ? what.Split(':')[1] : null); return true;
             case "menu":
                 if (MainWindow.Shared is not { } main || !what.Contains(':') || !Enum.TryParse<MenuGroup>(what.Split(':')[1], true, out var group)) return false;
@@ -935,10 +951,9 @@ public sealed partial class RemoteControlServer
                 return true;
             case "settings":
             {
-                var window = new SettingsWindow();
-                window.BuildTabs(SettingsStore.Shared);
-                if (what.Contains(':') && int.TryParse(what.Split(':')[1], out var tab)) window.Tabs.SelectedIndex = tab;
-                if (MainWindow.Shared is { } owner) window.Show(owner); else window.Show();
+                // Тим самим шляхом, що меню «Налаштування…» (час відкриття — у журналі).
+                MenuCatalog.OpenSettings();
+                if (SettingsWindow.Shared is { } window && what.Contains(':') && int.TryParse(what.Split(':')[1], out var tab)) window.Tabs.SelectedIndex = tab;
                 return true;
             }
             case "close":

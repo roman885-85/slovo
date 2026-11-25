@@ -82,6 +82,21 @@ public static class Snapshot
                 settings.Tabs.SelectedIndex = tab - 1;
                 Pump(4);
             }
+            if (window is SettingsWindow scrolled && args.Contains("--scroll-check"))
+            {
+                // Чи є що гортати: висота сторінки проти видимої частини, і чи зсувається вона.
+                if (scrolled.Tabs.PageAt(scrolled.Tabs.SelectedIndex) is ScrollViewer page)
+                {
+                    Pump(4);
+                    Console.WriteLine($"  сторінка «{scrolled.Tabs.TitleAt(scrolled.Tabs.SelectedIndex)}»: вміст {page.Extent.Height:0}, видно {page.Viewport.Height:0}, межі {page.Bounds.Height:0}");
+                    page.Offset = new Vector(0, 300);
+                    Pump(4);
+                    Console.WriteLine($"  після зсуву на 300: {page.Offset.Y:0}");
+                    // Донизу — щоб на знімку було видно кінець сторінки.
+                    page.Offset = new Vector(0, page.Extent.Height);
+                    Pump(6);
+                }
+            }
             if (Array.IndexOf(args, "--mode") is var mi and >= 0 && mi + 1 < args.Length && Enum.TryParse<WorkMode>(args[mi + 1], true, out var mode))
             {
                 // Інша вкладка: «songs», «text», «pictures»… — як клацання по вкладці.
@@ -295,6 +310,25 @@ public static class Snapshot
                     }
                     catch (Exception error) { Console.WriteLine($"  не вийшло: {error.Message}"); }
                 }
+            }
+            if (Array.IndexOf(args, "--ndi-list") is var nl and >= 0)
+            {
+                // Які джерела NDI видно з цього процесу (інша програма на цій машині чи в мережі).
+                var seconds = nl + 1 < args.Length && int.TryParse(args[nl + 1], out var s) ? s : 8;
+                string found = "";
+                var finder = new Thread(() => found = NdiOutput.ListSources(seconds));
+                finder.Start();
+                while (finder.IsAlive) { Pump(2); Thread.Sleep(50); }
+                Console.WriteLine($"  NDI джерела ({seconds} с, бібліотека {NdiRuntime.LoadedFrom ?? "—"}): {found}");
+            }
+            if (Array.IndexOf(args, "--ndi-receive") is var nr and >= 0 && nr + 1 < args.Length)
+            {
+                // Прийняти кадр і звук чужого джерела NDI з мережі (як OBS): «Слово» на іншому комп'ютері.
+                string picture = "", sound = "";
+                var receiver = new Thread(() => { picture = NdiOutput.ReceiveCheck(args[nr + 1], 10); sound = NdiOutput.ReceiveAudioCheck(args[nr + 1], 4); });
+                receiver.Start();
+                while (receiver.IsAlive) { Pump(2); Thread.Sleep(50); }
+                Console.WriteLine($"  NDI прийом «{args[nr + 1]}»: кадр — {picture}; звук — {sound}");
             }
             if (args.Contains("--ndi-check"))
             {

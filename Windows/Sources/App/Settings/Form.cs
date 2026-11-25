@@ -136,6 +136,11 @@ public static class Form
         readonly LayoutPanel _body = new();
         readonly List<Group> _groups;
 
+        // Наслідник ScrollViewer без цього рядка в Avalonia 11 не отримує його шаблону: вміст
+        // малювався, а прокрутки не було взагалі (вміст 0, видно 0) — власник (Windows 1.4.2): «в
+        // меню настроек нельзя пролистать список настроек».
+        protected override Type StyleKeyOverride => typeof(ScrollViewer);
+
         public Page(IEnumerable<Group> groups)
         {
             _groups = groups.ToList();

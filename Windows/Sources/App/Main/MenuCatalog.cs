@@ -162,10 +162,26 @@ public static class MenuCatalog
         var window = new SettingsWindow();
         window.BuildTabs(store);
         var accepted = false;
-        window.OnAccept = () => { accepted = true; store.Save(session); window.Close(); };
+        static string Roster(SettingsStore s) => string.Join("|", s.Settings.Modules.Select(m => $"{m.Path}:{m.IsEnabled}"));
+        var rosterBefore = Roster(store);
+        window.OnAccept = () =>
+        {
+            accepted = true;
+            store.Save(session);
+            // Як accept() на Mac: збережене — одразу в програму. Раніше лише записувалось у файл, і
+            // ввімкнена в «Параметрах» трансляція NDI (пульт, «Відео по Wi-Fi», переходи) починала
+            // діяти тільки після перезапуску — власник (Windows 1.4.2): «ndi не работает вообще».
+            AppState.Shared.ApplyProgramOptions(store.Settings.Options);
+            // Змінився список перекладів і збірників — бібліотеку перечитати (applyModuleRoster Mac).
+            if (Roster(store) != rosterBefore) AppState.Shared.ReloadLibrary();
+            Journal.Say("параметри: збережено й застосовано");
+            window.Close();
+        };
         window.OnDiscard = () => window.Close();
         window.OnExport = () => { };
         window.Closed += (_, _) => { if (!accepted) store.CancelIfEditing(session); };
+        var opening = System.Diagnostics.Stopwatch.StartNew();
+        window.Opened += (_, _) => Journal.Say($"параметри: вікно відкрилося за {opening.ElapsedMilliseconds} мс після побудови");
         if (MainWindow.Shared is { } main) window.Show(main); else window.Show();
     }
 

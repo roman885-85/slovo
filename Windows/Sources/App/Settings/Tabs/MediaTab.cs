@@ -10,6 +10,8 @@
 // =============================================================================
 
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Slovo.Core;
 
@@ -87,7 +89,90 @@ public sealed class MediaTab
             Form.Popup(OutputConfiguration.NdiFrameRateTitles, new Tie<int>(() => O.NdiFrameRateIndex, v => O.NdiFrameRateIndex = v), 140),
         }, 200),
         new Form.Row(T("Состояние:"), new Control[] { NdiStatus() }, 200),
+        new Form.Row(T("Библиотека NDI:"), new Control[] { NdiLibrary() }, 200),
+        new Form.Row("", new Control[] { NdiCheck() }),
+        new Form.Row("", new Control[] { FirewallRow() }),
     });
+
+    /// Яка бібліотека NDI взялась (шлях і версія) — або чому її немає й кнопка поставити.
+    static Control NdiLibrary()
+    {
+        var label = Form.Label("", false);
+        label.TextWrapping = TextWrapping.Wrap;
+        label.MaxWidth = 560;
+        // Бібліотеку NDI (якщо трансляцію ще не вмикали) піднімати не в головному потоці: секунди.
+        void Update() => label.Text = NdiRuntime.IsAvailable
+            ? $"{NdiRuntime.LoadedFrom} · {NdiRuntime.LoadedVersion ?? "?"}"
+            : NdiRuntime.Problem ?? T("NDI не установлен");
+        if (!NdiRuntime.WasTried)
+        {
+            label.Text = T("ищу библиотеку NDI…");
+            System.Threading.Tasks.Task.Run(() => NdiRuntime.IsAvailable).ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(Update));
+            return label;
+        }
+        Update();
+        if (NdiRuntime.IsAvailable) return label;
+        var install = Form.Button(T("Скачать NDI Runtime…"), T("Официальная страница NDI: установщик NDI Runtime для Windows"), () =>
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://ndi.link/NDIRedistV6") { UseShellExecute = true }); }
+            catch (Exception error) { Journal.Say("NDI: сторінка не відкрилась — " + error.Message); }
+        });
+        var again = Form.Button(T("Найти снова"), T("После установки NDI Runtime — подхватить без перезапуска"), () =>
+        {
+            NdiRuntime.Retry();
+            NdiOutput.Shared.Apply(SettingsStore.Shared.Settings.Options);
+            Update();
+        });
+        return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { label, install, again } };
+    }
+
+    /// «Перевірити NDI»: які джерела видно з цього комп'ютера за 5 с (своє — серед них, якщо в ефірі).
+    static Control NdiCheck()
+    {
+        var result = Form.Label("", true);
+        result.TextWrapping = TextWrapping.Wrap;
+        result.MaxWidth = 560;
+        var button = Form.Button(T("Проверить NDI"), T("Найти источники NDI в сети отсюда — как их видит OBS или vMix"), () => { });
+        button.Pressed = () =>
+        {
+            result.Text = T("Ищу источники NDI…");
+            System.Threading.Tasks.Task.Run(() => NdiOutput.ListSources(5)).ContinueWith(t =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var mine = NdiOutput.Shared.NetworkName;
+                    var text = t.IsCompletedSuccessfully ? t.Result : t.Exception?.GetBaseException().Message ?? "";
+                    result.Text = T("Видно отсюда: %s", text)
+                        + (mine != null ? "\n" + (text.Contains(mine) ? T("«%s» в сети виден.", mine) : T("«%s» среди них нет.", mine)) : "");
+                    Journal.Say("NDI: перевірка — " + result.Text.Replace("\n", " "));
+                }));
+        };
+        return new StackPanel { Spacing = 4, Children = { button, result } };
+    }
+
+    /// Брандмауер Windows для «Слова» — словами й кнопкою (той самий рядок, що в Remote API).
+    internal static Control FirewallRow()
+    {
+        var line = Form.Label("", false);
+        line.TextWrapping = TextWrapping.Wrap;
+        line.MaxWidth = 560;
+        var allow = Form.Button(T("Разрешить в брандмауэре…"), T("Одно правило для «Слова» во всех сетях; Windows попросит подтверждение"), () => { });
+        void Show(Firewall.State state)
+        {
+            line.Text = state.Text;
+            line.Foreground = Palette.Brush(state.Blocked ? Palette.SystemOrange : Palette.SecondaryLabel);
+            allow.IsVisible = state.Blocked;
+        }
+        void Refresh() => System.Threading.Tasks.Task.Run(Firewall.Check).ContinueWith(t => Avalonia.Threading.Dispatcher.UIThread.Post(() => Show(t.Result)));
+        allow.Pressed = async () =>
+        {
+            line.Text = T("Жду подтверждения Windows…");
+            await Firewall.AllowAsync();
+            Refresh();
+        };
+        allow.IsVisible = false;
+        if (OperatingSystem.IsWindows()) Refresh(); else line.IsVisible = false;
+        return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { line, allow } };
+    }
 
     /// Стан трансляції NDI наживо: «В ефірі: Слово · приймачів: 2», «Зупинена», чому NDI немає.
     static Control NdiStatus()
@@ -97,12 +182,21 @@ public sealed class MediaTab
         {
             var ndi = NdiOutput.Shared;
             var main = ndi.Status.Length > 0 ? ndi.Status : T("Остановлена");
-            return ndi.IsRunning && ndi.AudioState.Length > 0 ? main + " · " + ndi.AudioState : main;
+            if (!ndi.IsRunning) return main;
+            // Повне ім'я — як його бачать OBS і vMix; і скільки приймачів зараз під'єднано.
+            if (ndi.NetworkName is { } full) main += " · " + T("в сети: %s", full);
+            main += " · " + T("приёмников: %s", ndi.Connections.ToString());
+            return ndi.AudioState.Length > 0 ? main + " · " + ndi.AudioState : main;
         }
         var label = Form.Label(Text());
+        label.TextWrapping = TextWrapping.Wrap;
+        label.MaxWidth = 560;
         void Update() => Avalonia.Threading.Dispatcher.UIThread.Post(() => label.Text = Text());
         NdiOutput.Shared.StatusChanged += Update;
-        label.DetachedFromVisualTree += (_, _) => NdiOutput.Shared.StatusChanged -= Update;
+        // Приймачі під'єднуються без жодної події — перечитувати раз на 2 с, поки вкладка відкрита.
+        var timer = new Avalonia.Threading.DispatcherTimer(TimeSpan.FromSeconds(2), Avalonia.Threading.DispatcherPriority.Background, (_, _) => label.Text = Text());
+        label.AttachedToVisualTree += (_, _) => timer.Start();
+        label.DetachedFromVisualTree += (_, _) => { NdiOutput.Shared.StatusChanged -= Update; timer.Stop(); };
         return label;
     }
 
@@ -177,7 +271,7 @@ public sealed class MediaTab
             var found = YouTubeResolver.Locate();
             var line = found.Note;
             if (AppState.Shared.Media.YouTubeToolProblem is { } problem) line += "\n" + T("Последний ответ: %s", problem);
-            if (found.Tool == null) line += "\n" + T("Без yt-dlp ролики YouTube Windows-версия не играет: встроенного проигрывателя YouTube в ней ещё нет.");
+            if (found.Tool == null) line += "\n" + T("Без yt-dlp ролик YouTube всё равно идёт — встроенным проигрывателем YouTube (Microsoft Edge WebView2), но без перемотки по кадрам и выбора качества.");
             status.Text = line;
             // Як на Mac: знайдено — звичайним кольором, ні — блідим.
             status.Foreground = Palette.Brush(found.Tool == null ? Palette.SecondaryLabel : Palette.Label);

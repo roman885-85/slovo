@@ -20,6 +20,10 @@ namespace Slovo.App;
 
 public sealed class ConstructorPanels : ScrollViewer
 {
+    // Як Form.Page: без цього наслідник ScrollViewer у Avalonia 11 лишається без шаблону — панелі
+    // конструктора не гортались (на низькому екрані нижні групи властивостей були недосяжні).
+    protected override Type StyleKeyOverride => typeof(ScrollViewer);
+
     readonly SlideConstructorModel _model;
     readonly Func<string, string, string> _text;
     readonly Func<string, string, string> _hint;

@@ -56,6 +56,15 @@ public static unsafe class NdiRuntime
     public static delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, void> SendVideo;
     public static delegate* unmanaged[Cdecl]<IntPtr, void> SendDestroy;
     public static delegate* unmanaged[Cdecl]<IntPtr, uint, int> SendConnections;
+    /// NDIlib_send_get_source_name (є з NDI 4.5) — повне ім'я джерела в мережі «МАШИНА (джерело)».
+    public static delegate* unmanaged[Cdecl]<IntPtr, Source*> SendSourceName;
+    /// Версія файла бібліотеки (діагностика в «Параметрах»).
+    public static string? LoadedVersion { get; private set; }
+
+    /// Спробувати знову (людина щойно поставила NDI Runtime) — без перезапуску програми.
+    public static void Retry() { if (_library == IntPtr.Zero) _tried = false; }
+    /// Чи вже шукали бібліотеку (щоб «Параметри» не піднімали її в головному потоці).
+    public static bool WasTried => _tried;
     public static delegate* unmanaged[Cdecl]<FindCreate*, IntPtr> FindCreateFn;
     public static delegate* unmanaged[Cdecl]<IntPtr, uint, byte> FindWait;
     public static delegate* unmanaged[Cdecl]<IntPtr, uint*, Source*> FindSources;
@@ -91,10 +100,43 @@ public static unsafe class NdiRuntime
         yield return "/Library/NDI SDK for Apple/lib/macOS/libndi.dylib";
     }
 
+    /// «Транспорт: лише TCP» (prepareConfig Mac): свій ndi-config.v1.json через NDI_CONFIG_DIR — лише
+    /// для «Слова». Для «як у NDI» теку не підміняємо (на Mac — порожня тека): у Windows так «Слово»
+    /// слухається налаштувань NDI Access Manager (групи, сервер виявлення), як і решта програм NDI.
+    /// Звати до завантаження бібліотеки: після запуску NDI конфіг не перечитує.
+    static void PrepareConfig()
+    {
+        try
+        {
+            var transport = SettingsStore.Shared.Settings.Options.NdiTransport ?? "auto";
+            if (transport != "tcp") return;
+            var folder = Path.Combine(Slovo.Core.DataHome.Folder, "ndi");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "ndi-config.v1.json"),
+                "{ \"ndi\": { \"tcp\": { \"send\": { \"enable\": true }, \"recv\": { \"enable\": true } },\n" +
+                "           \"rudp\": { \"send\": { \"enable\": false }, \"recv\": { \"enable\": false } },\n" +
+                "           \"unicast\": { \"send\": { \"enable\": false }, \"recv\": { \"enable\": false } },\n" +
+                "           \"multicast\": { \"send\": { \"enable\": false }, \"recv\": { \"enable\": false } } } }\n");
+            Environment.SetEnvironmentVariable("NDI_CONFIG_DIR", folder);
+            Journal.Say("NDI: транспорт лише TCP — " + folder);
+        }
+        catch (Exception error) { Journal.Say("NDI: конфіг транспорту не записався — " + error.Message); }
+    }
+
+    static readonly object Gate = new();
+
+    // Шукати бібліотеку можуть і головний потік (трансляція), і фон («Параметри») — раз і під замком.
     static bool Load()
     {
         if (_tried) return _library != IntPtr.Zero;
+        lock (Gate) return LoadLocked();
+    }
+
+    static bool LoadLocked()
+    {
+        if (_tried) return _library != IntPtr.Zero;
         _tried = true;
+        PrepareConfig();
         var searched = new List<string>();
         foreach (var path in Candidates())
         {
@@ -108,6 +150,7 @@ public static unsafe class NdiRuntime
                 SendVideo = (delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, void>)Get("NDIlib_send_send_video_v2");
                 SendDestroy = (delegate* unmanaged[Cdecl]<IntPtr, void>)Get("NDIlib_send_destroy");
                 SendConnections = (delegate* unmanaged[Cdecl]<IntPtr, uint, int>)Get("NDIlib_send_get_no_connections");
+                SendSourceName = NativeLibrary.TryGetExport(handle, "NDIlib_send_get_source_name", out var named) ? (delegate* unmanaged[Cdecl]<IntPtr, Source*>)named : null;
                 FindCreateFn = (delegate* unmanaged[Cdecl]<FindCreate*, IntPtr>)Get("NDIlib_find_create_v2");
                 FindWait = (delegate* unmanaged[Cdecl]<IntPtr, uint, byte>)Get("NDIlib_find_wait_for_sources");
                 FindSources = (delegate* unmanaged[Cdecl]<IntPtr, uint*, Source*>)Get("NDIlib_find_get_current_sources");
@@ -122,6 +165,7 @@ public static unsafe class NdiRuntime
                 if (Initialize() == 0) { _problem = Captions.T("NDI не поддерживает этот процессор"); NativeLibrary.Free(handle); return false; }
                 _library = handle;
                 LoadedFrom = path;
+                try { LoadedVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileVersion; } catch { }
                 Journal.Say($"NDI: бібліотека {path}");
                 return true;
             }

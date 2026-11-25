@@ -21,6 +21,8 @@ public sealed class RemoteTab : IRowSource
     readonly SettingsStore _store;
     readonly RowList _slides;
     readonly TextBlock _addressLine = Form.Label("", false), _remoteLine = Form.Label("", false), _browserLine = Form.Label("", false);
+    /// IP цього комп'ютера в мережі й посилання цифрами — щоб підключитися швидко, без пошуку й імені.
+    readonly TextBlock _ipLine = Form.Label("", false), _numericLine = Form.Label("", false);
     readonly TextBlock _reachLine = Form.Label(""), _webStatus = Form.Label("");
     readonly List<string> _interfaces;
     int? _selected;
@@ -57,6 +59,13 @@ public sealed class RemoteTab : IRowSource
         check.Width = 260;
         return new Form.Group(Captions.T("Пульт на телефоне"), new Control[]
         {
+            // Адреса комп'ютера в мережі — зверху, щоб її було видно одразу (власник, Windows 1.4.2).
+            new Form.Row(Captions.T("IP-адрес в сети:"), new Control[]
+            {
+                _ipLine,
+                Form.Button(Captions.T("Скопировать"), Captions.T("Положить адрес в буфер обмена"), () => Copy(Host)),
+            }, 180),
+            new Form.Row("", new Control[] { MediaTab.FirewallRow() }),
             new Form.Row("", new Control[]
             {
                 check, Form.Label(Captions.T("Порт:"), false),
@@ -133,6 +142,12 @@ public sealed class RemoteTab : IRowSource
                            Captions.T("Тогда в браузере достаточно набрать slovo.local. Если порт 80 занят другой программой, пульт остаётся на своём порту.")),
             }),
             // Посилання — тут, поруч з адресою пульта: сховане за меню людина не знайде.
+            new Form.Row(Captions.T("Цифрами:"), new Control[]
+            {
+                _numericLine,
+                Form.Button(Captions.T("Скопировать"), Captions.T("Положить ссылку в буфер обмена"), () => Copy(NumericAddress)),
+                Form.Button(Captions.T("Открыть"), Captions.T("Открыть страницу в браузере этого компьютера"), () => OpenUrl(NumericAddress)),
+            }, 180),
             new Form.Row(Captions.T("Страница для браузера:"), new Control[]
             {
                 _browserLine,
@@ -305,6 +320,8 @@ public sealed class RemoteTab : IRowSource
     }
 
     string BrowserAddress => Link(RemoteControlServer.Shared.MdnsName ?? Host, Options.RemoteWebPort ?? 8105);
+    /// Те саме цифрами: відкривається на будь-якому пристрої, навіть де імена .local не працюють.
+    string NumericAddress => Link(Host, Options.RemoteWebPort ?? 8105);
 
     void RefreshAddress()
     {
@@ -312,6 +329,12 @@ public sealed class RemoteTab : IRowSource
         var server = RemoteControlServer.Shared;
         _remoteLine.Text = $"{Host}:{Options.RemotePort ?? 8103}" + (server.IsRunning ? "" : "  · " + Captions.T("сейчас выключен"));
         _browserLine.Text = BrowserAddress;
+        _numericLine.Text = NumericAddress;
+        var adapter = Names.Interfaces().FirstOrDefault(i => i.Address.ToString() == Host);
+        _ipLine.Text = _interfaces.Count == 0 && Options.WebNetInterface is not { Length: > 0 }
+            ? Captions.T("нет сети — подключите Wi-Fi или кабель")
+            : Host + (adapter != null ? $"  ({adapter.Name})" : "")
+              + (_interfaces.Count > 1 ? "  · " + Captions.T("ещё: %s", string.Join(", ", _interfaces.Where(a => a != Host))) : "");
         if (!(Options.RemoteWebEnabled ?? true)) _webStatus.Text = Captions.T("Пульт в браузере выключен");
         else if (server.WebRunning)
             _webStatus.Text = Captions.T("работает на порту %s", server.WebPort.ToString())

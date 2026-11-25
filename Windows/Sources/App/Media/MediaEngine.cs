@@ -24,10 +24,25 @@ public sealed class MediaEngine : IDisposable
 
     /// Підняти LibVLC один раз на програму. Немає модулів (розробка на Mac) —
     /// програвач недоступний, решта програми працює.
+    static readonly object Gate = new();
+
     public static bool EnsureLoaded()
     {
         if (_tried) return _libVLC != null;
-        _tried = true;
+        // Фон (прогрів після запуску) і головний потік можуть прийти разом — підняти один раз.
+        lock (Gate)
+        {
+            if (_tried) return _libVLC != null;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var loaded = Load();
+            Journal.Say($"плеєр: LibVLC {(loaded ? "піднявся" : "не піднявся")} за {clock.ElapsedMilliseconds} мс ({(Avalonia.Threading.Dispatcher.UIThread.CheckAccess() ? "головний потік" : "у фоні")})");
+            _tried = true;
+            return loaded;
+        }
+    }
+
+    static bool Load()
+    {
         try
         {
             var folder = Path.Combine(AppContext.BaseDirectory, "libvlc", OperatingSystem.IsWindows() ? "win-x64" : "osx-x64");

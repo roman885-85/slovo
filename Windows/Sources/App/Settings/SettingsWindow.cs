@@ -30,7 +30,7 @@ public sealed partial class SettingsWindow : Window
     {
         Shared = this;
         Title = Captions.T("Параметры");
-        Width = 1180; Height = 720; MinWidth = 1000; MinHeight = 620;
+        Width = 1180; Height = 720; MinWidth = 760; MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Content = _root;
         ApplyBackground();
@@ -56,15 +56,31 @@ public sealed partial class SettingsWindow : Window
     {
         static string Vb(string key, string fallback) => Captions.FormCaption(key, "SettingsForm", fallback);
         Title = Captions.FormCaption("SettingsForm", "SettingsForm", "Параметры");
-        Tabs.Add(Vb("TSSlide", "Слайд"), new SlideTab(store).Page());
-        Tabs.Add(Vb("TSMedia", "Медиа"), new MediaTab(store).Page());
-        Tabs.Add(Vb("TSPath", "Пути"), new PathsTab(store).Page());
-        Tabs.Add(Vb("TSUpdate", "Обновление"), new UpdateTab(store).Page());
-        Tabs.Add(Vb("TSRemoteApi", "Remote API"), new RemoteTab(store).Page());
-        Tabs.Add(Vb("TSBasic", "Основные"), new BasicTab(store).Page());
-        Tabs.Add(Vb("TabSheet1", "Дополнительные"), new AdvancedTab(store).Page());
-        Tabs.Add(Vb("TSModules", "Модули"), new ModulesTab(store).Page());
-        Tabs.Add(Vb("TSHotKey", "Горячие клавиши"), new HotkeysTab(store).Page());
+        // Скільки коштує кожна вкладка — у журнал (власник: «Параметри» відкривались довго, а Windows
+        // писала «не відповідає»; знайдено LibVLC у вкладці «Медіа»).
+        var times = new List<string>();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // Будується лише відкрита вкладка; решта — при першому переході (MacTabView.AddLater).
+        void Add(string key, string fallback, Func<Control> page)
+        {
+            Tabs.AddLater(Vb(key, fallback), () =>
+            {
+                var started = clock.Elapsed.TotalMilliseconds;
+                var built = page();
+                times.Add($"{fallback} {clock.Elapsed.TotalMilliseconds - started:0}");
+                return built;
+            });
+        }
+        Add("TSSlide", "Слайд", () => new SlideTab(store).Page());
+        Add("TSMedia", "Медиа", () => new MediaTab(store).Page());
+        Add("TSPath", "Пути", () => new PathsTab(store).Page());
+        Add("TSUpdate", "Обновление", () => new UpdateTab(store).Page());
+        Add("TSRemoteApi", "Remote API", () => new RemoteTab(store).Page());
+        Add("TSBasic", "Основные", () => new BasicTab(store).Page());
+        Add("TabSheet1", "Дополнительные", () => new AdvancedTab(store).Page());
+        Add("TSModules", "Модули", () => new ModulesTab(store).Page());
+        Add("TSHotKey", "Горячие клавиши", () => new HotkeysTab(store).Page());
+        Journal.Say($"параметри: вкладки за {clock.ElapsedMilliseconds} мс ({string.Join(", ", times)})");
     }
 
     void ApplyBackground() =>

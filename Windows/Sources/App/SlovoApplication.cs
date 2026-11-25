@@ -56,6 +56,14 @@ public sealed class SlovoApplication : Application
             if (!Slovo.Program.QuietStart) Slovo.App.YouTubeToolUpdater.CheckInBackground();
             // Сторож головного потоку (як на Mac): затримки від 1 с — у журнал.
             Slovo.App.MainThreadWatchdog.Shared.Start();
+            // Кожне вікно — не більше за екран (ноутбуки 1366×768 зі збільшенням).
+            Slovo.App.ScreenFit.Install();
+            // LibVLC піднімається у фоні: перший його запуск у Windows — секунди (≈150 модулів), і
+            // в головному потоці це було «Програма не відповідає» (власник, «Параметри», 1.4.2).
+            // Не одразу й з найнижчим пріоритетом: запуск сам по собі важкий (бібліотека, вікна, пошук).
+            if (!Slovo.Program.Snapshotting)
+                new System.Threading.Thread(() => { System.Threading.Thread.Sleep(15000); Slovo.App.MediaEngine.EnsureLoaded(); })
+                    { IsBackground = true, Priority = System.Threading.ThreadPriority.Lowest, Name = "slovo-libvlc-warmup" }.Start();
             // Захопленню звуку програми: чи грає щось у самому процесі (не рушій WebView2).
             Slovo.App.AppAudioCapture.InProcessPlaying = () =>
                 (Slovo.App.AppState.Shared.Media.IsPlaying && !Slovo.App.AppState.Shared.Media.IsYouTubeEmbed) || Slovo.App.AppState.Shared.Backing.IsPlaying;

@@ -59,6 +59,8 @@ public sealed class MenuStrip : LayoutPanel
         {
             var button = new TitleButton(group.Symbol());
             button.Pressed = () => Open(group);
+            // Як у звичайному рядку меню: поки розділ відкритий, наведення на інший — відкриває його.
+            button.Entered = () => { if (_menu != null && _menuGroup != group) Open(group); };
             _buttons[group] = button;
             Children.Add(button);
         }
@@ -88,17 +90,42 @@ public sealed class MenuStrip : LayoutPanel
         }
     }
 
-    /// Відкрити розділ меню під його кнопкою.
+    // Відкритий розділ. Власник (Windows 1.4.2): «при нажатиях на пункты меню в шапке предыдущее
+    // меню не закрывается и происходит наложение» — кожне натискання відкривало нове меню поверх.
+    ContextMenu? _menu;
+    MenuGroup? _menuGroup, _closedGroup;
+    long _closedAt;
+
+    public bool IsMenuOpen => _menu != null;
+
+    /// Відкрити розділ меню під його кнопкою. Інший розділ — попередній закривається; той самий
+    /// ще раз — закривається (його могло вже закрити саме це натискання як клацання поза меню).
     public void Open(MenuGroup group)
     {
+        if (_menu != null && _menuGroup == group) { _menu.Close(); return; }
+        if (_menu == null && _closedGroup == group && Environment.TickCount64 - _closedAt < 300) { _closedGroup = null; return; }
+        _menu?.Close();
         var button = _buttons[group];
         var menu = Build(Entries(group));
+        _menu = menu;
+        _menuGroup = group;
         button.IsOpen = true;
-        menu.Closed += (_, _) => button.IsOpen = false;
+        menu.Closed += (_, _) =>
+        {
+            button.IsOpen = false;
+            if (_menu != menu) return;
+            _menu = null;
+            _menuGroup = null;
+            _closedGroup = group;
+            _closedAt = Environment.TickCount64;
+        };
         menu.PlacementTarget = button;
         menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
         menu.Open(button);
     }
+
+    /// Закрити відкритий розділ (Esc, перевірки).
+    public void CloseMenu() => _menu?.Close();
 
     /// Підпис сполучення в меню. Назви клавіш «Слова» (як у hotkeys.ini VisioBible: «Esc», «Ins»,
     /// «Del», «PgUp», цифри) Avalonia не знає — без перекладу KeyGesture.Parse кидав виняток, і меню
@@ -164,6 +191,7 @@ public sealed class MenuStrip : LayoutPanel
         string _title = "";
         bool _open;
         public Action? Pressed;
+        public Action? Entered;
 
         public TitleButton(string symbol) { _symbol = symbol; }
         public string Title { get => _title; set { _title = value; InvalidateVisual(); } }
@@ -186,6 +214,13 @@ public sealed class MenuStrip : LayoutPanel
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { Pressed?.Invoke(); e.Handled = true; }
+        }
+
+        protected override void OnPointerEntered(PointerEventArgs e)
+        {
+            base.OnPointerEntered(e);
+            // Пальцем «наведення» немає — лише миша й перо.
+            if (e.Pointer.Type != PointerType.Touch) Entered?.Invoke();
         }
     }
 }

@@ -429,8 +429,74 @@ public sealed class RowList : Grid
         }
     }
 
+    // --- Палець (сенсорний екран) -----------------------------------------------------
+    // Власник (Windows 1.4.2): «добавить поддержку для устройств с сенсорным экраном». Палець — не
+    // миша: провести — прокрутити (це робить сам ScrollViewer, з інерцією), тож рядок вибирається не
+    // на дотик, а коли палець піднято на тому самому місці; двічі — як подвійне клацання; затримати —
+    // меню рядка (як права кнопка). Прокрутка забирає палець собі — тоді це не дотик.
+    int? _touchItem;
+    Point _touchAt;
+    bool _touchCancelled;
+    long _touchDownAt, _lastTapAt;
+    int? _lastTapItem;
+
+    /// Час подвійного дотику — системний (як подвійне клацання у Windows), а не вгаданий.
+    double DoubleTapMilliseconds =>
+        TopLevel.GetTopLevel(this)?.PlatformSettings?.GetDoubleTapTime(PointerType.Touch).TotalMilliseconds is > 0 and var ms ? ms : 500;
+
+    void TouchPressed(PointerPressedEventArgs e)
+    {
+        Focus();
+        _touchAt = e.GetPosition(_canvas);
+        _touchItem = ItemAtCanvas(_touchAt);
+        _touchCancelled = false;
+        _touchDownAt = Environment.TickCount64;
+        // Не Handled: жест прокрутки ScrollViewer мусить побачити цей дотик.
+    }
+
+    void TouchMoved(PointerEventArgs e)
+    {
+        var p = e.GetPosition(_canvas);
+        if (!_touchCancelled && Math.Abs(p.X - _touchAt.X) + Math.Abs(p.Y - _touchAt.Y) > 10) _touchCancelled = true;
+    }
+
+    void TouchReleased(PointerReleasedEventArgs e)
+    {
+        var item = _touchItem;
+        _touchItem = null;
+        if (_touchCancelled || item is not { } index || ItemAtCanvas(e.GetPosition(_canvas)) != index) return;
+        // Від дотику до дотику (як подвійне клацання Windows), у межах системного часу.
+        var count = _lastTapItem == index && _touchDownAt - _lastTapAt <= DoubleTapMilliseconds ? 2 : 1;
+        _lastTapItem = count == 1 ? index : null;
+        _lastTapAt = _touchDownAt;
+        if (count == 1 && OnLeadClick != null && _columns == 1 && _metrics.LeadWidth > 0
+            && _touchAt.X <= _inset.Left + _metrics.LeadWidth + _metrics.Padding.Left + 6)
+        {
+            OnLeadClick(index);
+            return;
+        }
+        Click(index, KeyModifiers.None, count);
+        if (count == 1) OnClick?.Invoke(index);
+        e.Handled = true;
+    }
+
+    /// Затримати палець — меню рядка (як права кнопка миші).
+    internal void TouchHeld(HoldingRoutedEventArgs e)
+    {
+        if (e.HoldingState != HoldingState.Started || _touchCancelled || _touchItem is not { } r) return;
+        _touchCancelled = true;
+        if (!_selection.Contains(r)) SetSelection(new[] { r }, active: r, notify: true, cause: SelectCause.Click);
+        var menu = _source?.MenuAt(r) ?? OnContextMenu?.Invoke(r);
+        if (menu != null) { menu.PlacementTarget = this; menu.Open(this); }
+        e.Handled = true;
+    }
+
+    /// Жест прокрутки забрав палець — це вже не дотик до рядка.
+    internal void TouchLost() => _touchCancelled = true;
+
     internal void Pressed(PointerPressedEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) { TouchPressed(e); return; }
         Focus();
         _dragOrigin = null; _dragLast = null; _pressedItem = null; _pressedMoved = false;
         _reorderFrom = null; _reorderTo = null;
@@ -463,6 +529,7 @@ public sealed class RowList : Grid
 
     internal void Moved(PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) { TouchMoved(e); return; }
         var p = e.GetPosition(_canvas);
         UpdateTip(p);
         if (!e.GetCurrentPoint(_canvas).Properties.IsLeftButtonPressed) return;
@@ -519,6 +586,7 @@ public sealed class RowList : Grid
 
     internal void Released(PointerReleasedEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) { TouchReleased(e); return; }
         if (_reorderFrom != null) { var moved = _pressedMoved; DropReorder(); if (moved) { _pressedItem = null; _dragOrigin = null; _dragLast = null; return; } }
         _dragOrigin = null; _dragLast = null;
         var pressed = _pressedItem;
@@ -772,7 +840,13 @@ public sealed class RowList : Grid
     sealed class Canvas : Control
     {
         readonly RowList _list;
-        public Canvas(RowList list) { _list = list; ClipToBounds = true; }
+        public Canvas(RowList list)
+        {
+            _list = list;
+            ClipToBounds = true;
+            // Затримати палець на рядку — його меню (Holding Avalonia: лише дотик і перо).
+            Holding += (_, e) => { if (e.PointerType == PointerType.Touch) _list.TouchHeld(e); };
+        }
 
         protected override Size MeasureOverride(Size available)
         {
@@ -793,6 +867,11 @@ public sealed class RowList : Grid
         protected override void OnPointerPressed(PointerPressedEventArgs e) => _list.Pressed(e);
         protected override void OnPointerMoved(PointerEventArgs e) => _list.Moved(e);
         protected override void OnPointerReleased(PointerReleasedEventArgs e) => _list.Released(e);
+        protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+        {
+            base.OnPointerCaptureLost(e);
+            if (e.Pointer.Type == PointerType.Touch) _list.TouchLost();
+        }
     }
 
     /// Заголовки колонок (вигляд «Таблиця»).

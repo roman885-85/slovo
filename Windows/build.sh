@@ -44,7 +44,11 @@ if [ -f ../Scripts/Slovo.icns ] && command -v swiftc >/dev/null; then
 fi
 
 echo "▶ Збірка win-x64 (один самодостатній файл)"
+# ReadyToRun: код уже скомпільований заздалегідь. Без нього перше відкриття меню, «Параметрів»,
+# вкладок компілювалося на ходу (JIT) — у Windows 11 у ВМ меню 1,7–1,9 с, запуск 12,8 с, а у
+# власника «Параметри» — «програма не відповідає» (1.4.2).
 dotnet publish -c Release -r win-x64 --self-contained true \
+  -p:PublishReadyToRun=true \
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
   -p:IncludeAllContentForSelfExtract=true \

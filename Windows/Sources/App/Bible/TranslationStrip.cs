@@ -68,8 +68,24 @@ public sealed class TabStrip : Control
         return null;
     }
 
+    bool _holdHooked;
+
+    /// Затримати палець на вкладці — її меню (як права кнопка).
+    void HookHold()
+    {
+        if (_holdHooked) return;
+        _holdHooked = true;
+        Holding += (_, e) =>
+        {
+            if (e.HoldingState != HoldingState.Started || e.PointerType != PointerType.Touch || At(e.Position) is not { } held) return;
+            if (OnMenu?.Invoke(held.Tab.Id) is { } menu) { menu.PlacementTarget = this; menu.Open(this); }
+            e.Handled = true;
+        };
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        HookHold();
         var point = e.GetCurrentPoint(this);
         if (At(point.Position) is not { } hit) return;
         if (point.Properties.IsRightButtonPressed)

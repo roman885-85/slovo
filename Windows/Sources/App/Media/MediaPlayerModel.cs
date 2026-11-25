@@ -316,14 +316,31 @@ public sealed class MediaPlayerModel
     /// Звукові виходи для «Параметрів» (програвач піднімається, якщо його ще не було).
     public List<MediaEngine.Device> ListAudioDevices()
     {
-        Engine();
+        // У Windows список виходів — від самої системи (WASAPI, мілісекунди): ради нього не піднімати
+        // LibVLC у головному потоці (секунди — «Програма не відповідає» при відкритті «Параметрів»).
+        if (!OperatingSystem.IsWindows()) Engine();
         ReloadAudioDevices();
         return AudioDevices;
     }
 
+    /// Виходи звуку Windows: ідентифікатори кінцевих точок — ті самі, що в модуля mmdevice LibVLC.
+    static List<MediaEngine.Device> SystemAudioDevices()
+    {
+        var list = new List<MediaEngine.Device>();
+        if (!OperatingSystem.IsWindows()) return list;
+        try
+        {
+            using var devices = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+            foreach (var device in devices.EnumerateAudioEndPoints(NAudio.CoreAudioApi.DataFlow.Render, NAudio.CoreAudioApi.DeviceState.Active))
+                using (device) list.Add(new MediaEngine.Device(device.ID, device.FriendlyName));
+        }
+        catch (Exception error) { Journal.Say("плеєр: виходи звуку не перелічились — " + error.Message); }
+        return list;
+    }
+
     public void ReloadAudioDevices()
     {
-        AudioDevices = _engine?.AudioDevices() ?? new List<MediaEngine.Device>();
+        AudioDevices = _engine?.AudioDevices() ?? (OperatingSystem.IsWindows() ? SystemAudioDevices() : new List<MediaEngine.Device>());
         // Перший у списку LibVLC — «Default»: системний вихід у нас окремо (0).
         AudioDevices = AudioDevices.Where(d => d.Id.Length > 0).ToList();
         if (_audioDeviceId != null && AudioDevices.All(d => d.Id != _audioDeviceId)) _audioDeviceId = null;

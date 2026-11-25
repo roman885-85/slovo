@@ -77,8 +77,21 @@ public sealed class BottomThumbnail : Control
         return text;
     }
 
+    bool _holdHooked;
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        if (!_holdHooked)
+        {
+            // Затримати палець — меню (як права кнопка).
+            _holdHooked = true;
+            Holding += (_, h) =>
+            {
+                if (h.HoldingState != HoldingState.Started || h.PointerType != PointerType.Touch) return;
+                if (OnMenu?.Invoke() is { } held) { held.PlacementTarget = this; held.Open(this); }
+                h.Handled = true;
+            };
+        }
         var p = e.GetCurrentPoint(this).Properties;
         if (p.IsRightButtonPressed)
         {
