@@ -26,7 +26,7 @@
     <NoWarn>$(NoWarn);CA1416;CS1591;CS8981;CS0108;CS0114;CS8618;CS8625;CS8600;CS8601;CS8602;CS8603;CS8604;CS8619;CS8620;CS8629;CS8765;CS8767;CS0649;CS0169;CS0414;CS4014;CS1998</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon Condition="Exists('Resources/AppIcon.ico')">Resources/AppIcon.ico</ApplicationIcon>
-    <Version>1.4.1</Version>
+    <Version>1.4.2</Version>
     <Product>Слово</Product>
     <Company>ua.church.slovo</Company>
   </PropertyGroup>

@@ -854,6 +854,9 @@ public sealed partial class RemoteControlServer
             answer["embed"] = new JsonObject { ["browserPid"] = embed.BrowserProcessId, ["muted"] = embed.PlayerMuted, ["volume"] = embed.PlayerVolume };
         answer["wifiAudio"] = new JsonObject { ["samples"] = WebVideoOutput.Shared.AudioSamplesIn, ["peak"] = Math.Round(WebVideoOutput.Shared.AudioPeak, 4) };
         if (_probe != null) answer["probe"] = _probe;
+        // Скільки кадрів передпоказ і зал справді замовили (відбиток: той самий вміст — без малювання).
+        if (MainWindow.Shared?.Output is { } output)
+            answer["renders"] = new JsonObject { ["preview"] = output.PreviewRenders, ["hall"] = output.HallRenders };
         answer["ndi"] = new JsonObject
         {
             ["status"] = NdiOutput.Shared.Status, ["audio"] = NdiOutput.Shared.AudioState, ["library"] = NdiRuntime.LoadedFrom ?? "",

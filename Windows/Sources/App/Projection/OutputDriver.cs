@@ -6,6 +6,7 @@
 //  Обробка натискання не чекає на малювання — у цьому й весь секрет швидкості.
 // =============================================================================
 
+using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using Slovo.Core;
 
@@ -16,6 +17,10 @@ public sealed class OutputDriver
     readonly AppState _state;
     readonly BottomRow _bottom;
     int _previewGeneration, _hallGeneration, _mirrorGeneration, _mirrorWindowGeneration;
+    /// Відбитки намальованого (NativeSlidePreview.show і SlideCanvasView.redraw на Mac): привід
+    /// «перемалюйся» приходить на кожен рух оператора, а кадр міняється далеко не завжди — той
+    /// самий вміст того самого розміру вдруге не малюється: ні черги, ні переходу. null — малювати.
+    int? _previewKey, _hallKey, _mirrorKey, _mirrorWindowKey;
     readonly List<MirrorWindow> _mirrorWindows = new();
     bool _previewScheduled, _hallScheduled;
     bool _hallAnimated;
@@ -127,6 +132,39 @@ public sealed class OutputDriver
         return order;
     }
 
+    /// Відбиток вмісту кадру: слайд, стиль, свій шаблон (за його JSON — шаблон правиться на місці,
+    /// посилання на той самий об'єкт нічого б не сказало), тексти об'єктів, фон, картинка показу з
+    /// наближенням. Розмір і поверхня додаються окремо для кожного виводу.
+    static int ContentKey(SlideDrawing.Order order, string? still, Avalonia.Rect? focus)
+    {
+        var hash = new HashCode();
+        if (still != null)
+        {
+            hash.Add(1);
+            hash.Add(still);
+            hash.Add(focus);
+            return hash.ToHashCode();
+        }
+        hash.Add(2);
+        hash.Add(order.Slide);
+        hash.Add(order.Style);
+        if (order.Preset is { } preset)
+        {
+            try { hash.AddBytes(preset.Encode()); }
+            catch { hash.Add(Guid.NewGuid()); }   // не вийшло — малювати, а не вгадувати
+        }
+        hash.Add(order.Texts);
+        hash.Add(order.BackgroundOverride);
+        hash.Add(order.DrawsBackground);
+        hash.Add(order.WithSecondTranslation);
+        return hash.ToHashCode();
+    }
+
+    /// Скільки разів передпоказ і зал справді віддали кадр у чергу — замірам і перевірці
+    /// («той самий слайд ще раз» не має додавати жодного).
+    public int PreviewRenders { get; private set; }
+    public int HallRenders { get; private set; }
+
     /// Що зараз у передпоказі — для перевірки «Показ за вкладками» (preview.showing Mac):
     /// "none", "still" або "slide:<текст>". Ставиться, коли кадр справді ліг у передпоказ.
     public string PreviewShowing { get; private set; } = "none";
@@ -144,11 +182,18 @@ public sealed class OutputDriver
             ++_previewGeneration;
             _bottom.Preview.Surface.Show(null, false, "none", 0, "linear");
             PreviewShowing = "none";
+            // Наступний слайд — заново, хоч би й той самий (showStill на Mac скидає відбитки: без цього
+            // передпоказ після картинки «відставав на один»).
+            _previewKey = null;
             return;
         }
         // Передпоказ відповідає на питання «що піде в зал»: шаблон відкритої
         // вкладки, тексти підготовленого слайда, фон, що ляже під текст.
         var order = Order(slide, _state.Style, _state.Preset(OutputKind.Preview), _state.Texts(slide), _state.PreviewBackgroundOverride);
+        var previewKey = HashCode.Combine(ContentKey(order, previewStill, null), w, h);
+        if (previewKey == _previewKey) return;
+        _previewKey = previewKey;
+        PreviewRenders++;
         if (Program.Snapshotting) Console.WriteLine($"  [перегляд] шаблон={order.Preset?.Name ?? "—"} фон={order.BackgroundOverride ?? "—"} → {order.ImagePath(order.BackgroundOverride) ?? "не знайдено"}");
         var generation = ++_previewGeneration;
         SlideRenderQueue.Shared.Render("перегляд", generation, w, h, true,
@@ -270,9 +315,15 @@ public sealed class OutputDriver
             if (still != null && SlideImageStore.Shared.Image(still) is { } picture) DrawStill(c, width, height, picture, focus);
             else SlideDrawing.Draw(order, c, width, height);
         }
-        // Зал.
-        if (ProjectionController.Shared.Surface != null)
+        var content = ContentKey(order, still, still != null ? focus : null);
+        // Зал. Нове вікно залу (інша поверхня) чи сховане хрестиком — кадр однаково йде: перше —
+        // порожнє, друге повертається саме з наступним кадром (Present).
+        if (ProjectionController.Shared.Surface is not { } hallSurface) _hallKey = null;
+        else if (HashCode.Combine(content, ProjectionController.Shared.FrameSize(), RuntimeHelpers.GetHashCode(hallSurface),
+                                  ProjectionController.Shared.IsSlideWindowVisible) is var hallKey && hallKey != _hallKey)
         {
+            _hallKey = hallKey;
+            HallRenders++;
             var (w, h) = ProjectionController.Shared.FrameSize();
             var generation = ++_hallGeneration;
             SlideRenderQueue.Shared.Render("зал", generation, w, h, true, Draw,
@@ -283,28 +334,40 @@ public sealed class OutputDriver
                 });
         }
         // Живий екран у нижньому ряду — той самий зал меншим кадром.
-        if (_bottom.ShowsMirror)
+        if (!_bottom.ShowsMirror) _mirrorKey = null;
+        else
         {
             // Кадр сторін залу, зменшений до дзеркала: вид впише його з полями.
             var (fw, fh) = ProjectionController.Shared.FrameSize();
             var (vw, vh) = _bottom.Mirror.PixelSize();
             var fit = Math.Min((double)vw / Math.Max(1, fw), (double)vh / Math.Max(1, fh));
             var (mw, mh) = ((int)Math.Max(2, Math.Round(fw * fit)), (int)Math.Max(2, Math.Round(fh * fit)));
-            var mg = ++_mirrorGeneration;
-            SlideRenderQueue.Shared.Render("дзеркало", mg, mw, mh, true, Draw,
-                (image, done) => { if (done == _mirrorGeneration) _bottom.Mirror.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
+            var mirrorKey = HashCode.Combine(content, mw, mh);
+            if (mirrorKey != _mirrorKey)
+            {
+                _mirrorKey = mirrorKey;
+                var mg = ++_mirrorGeneration;
+                SlideRenderQueue.Shared.Render("дзеркало", mg, mw, mh, true, Draw,
+                    (image, done) => { if (done == _mirrorGeneration) _bottom.Mirror.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
+            }
         }
         // Дзеркало окремим вікном — той самий кадр залу своїм розміром.
-        if (MirrorWindow.Shown is { } window && window.View.Bounds.Width > 0)
+        if (MirrorWindow.Shown is not { } window || window.View.Bounds.Width <= 0) _mirrorWindowKey = null;
+        else
         {
             var far = window.View;
             var (fw, fh) = ProjectionController.Shared.FrameSize();
             var (vw, vh) = far.PixelSize();
             var fit = Math.Min((double)vw / Math.Max(1, fw), (double)vh / Math.Max(1, fh));
             var (mw, mh) = ((int)Math.Max(2, Math.Round(fw * fit)), (int)Math.Max(2, Math.Round(fh * fit)));
-            var wg = ++_mirrorWindowGeneration;
-            SlideRenderQueue.Shared.Render("дзеркало-вікно", wg, mw, mh, true, Draw,
-                (image, done) => { if (done == _mirrorWindowGeneration && MirrorWindow.Shown == window) far.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
+            var windowKey = HashCode.Combine(content, mw, mh, RuntimeHelpers.GetHashCode(window));
+            if (windowKey != _mirrorWindowKey)
+            {
+                _mirrorWindowKey = windowKey;
+                var wg = ++_mirrorWindowGeneration;
+                SlideRenderQueue.Shared.Render("дзеркало-вікно", wg, mw, mh, true, Draw,
+                    (image, done) => { if (done == _mirrorWindowGeneration && MirrorWindow.Shown == window) far.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
+            }
         }
     }
 }
