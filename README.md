@@ -228,9 +228,9 @@ Windows може сказати «Windows захистила ваш ПК» — �
 запустити»; брандмауеру треба дозволити доступ до мережі, інакше пульт не
 під'єднається. Нову версію програма знаходить сама.
 
-Чого ще немає порівняно з Mac: вбудованого програвача YouTube (без yt-dlp),
-звуку в NDI, відео для Wi-Fi (HLS). Докладно —
-[Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
+Усе, що вміє «Слово» для Mac, є й тут: вбудований програвач YouTube (без
+yt-dlp), звук у NDI, «Відео по Wi-Fi» (HLS), дзеркало проектора окремим
+вікном. Докладно — [Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
 
 ## Перший запуск
 
@@ -336,7 +336,7 @@ Releases.
 
 ## Стан
 
-«Слово» для macOS і для Windows — версія 1.4.0. Що нового й
+«Слово» для macOS і для Windows — версія 1.4.1. Що нового й
 що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
@@ -542,9 +542,9 @@ say "Windows protected your PC" — "More info" → "Run anyway"; allow network
 access when the firewall asks, otherwise the remote cannot connect. The
 program finds new versions by itself.
 
-Not there yet compared with the Mac: the built-in YouTube player (without
-yt-dlp), NDI audio and Wi-Fi video (HLS). Details (in Ukrainian):
-[Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
+Everything the Mac version does is here too: the built-in YouTube player
+(without yt-dlp), NDI audio, Wi-Fi video (HLS) and the projector mirror in its
+own window. Details (in Ukrainian): [Windows/ЧИТАТЬ.md](Windows/ЧИТАТЬ.md).
 
 ## First launch
 

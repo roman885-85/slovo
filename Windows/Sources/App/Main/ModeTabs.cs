@@ -72,7 +72,7 @@ public sealed class ModeTabs : LayoutPanel
         InvalidateArrange();
     }
 
-    /// Показати пропозицію оновлення («Оновлення 1.4.0») або сховати.
+    /// Показати пропозицію оновлення («Оновлення 1.4.1») або сховати.
     public void ShowUpdate(string? version)
     {
         UpdateButton.IsVisible = version != null;

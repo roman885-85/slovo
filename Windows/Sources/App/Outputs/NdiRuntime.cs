@@ -29,6 +29,14 @@ public static unsafe class NdiRuntime
         public long Timecode; public IntPtr Data; public int LineStride; public IntPtr Metadata; public long Timestamp;
     }
 
+    /// NDIlib_audio_frame_v2_t: float, площинний (канал за каналом), крок каналу — у байтах.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AudioFrame
+    {
+        public int SampleRate, Channels, Samples; public long Timecode; public IntPtr Data; public int ChannelStride;
+        public IntPtr Metadata; public long Timestamp;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct FindCreate { [MarshalAs(UnmanagedType.U1)] public bool ShowLocalSources; public IntPtr Groups, ExtraIps; }
 
@@ -56,6 +64,9 @@ public static unsafe class NdiRuntime
     public static delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, IntPtr, IntPtr, uint, int> RecvCapture;
     public static delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, void> RecvFreeVideo;
     public static delegate* unmanaged[Cdecl]<IntPtr, void> RecvDestroy;
+    public static delegate* unmanaged[Cdecl]<IntPtr, AudioFrame*, void> SendAudio;
+    public static delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, AudioFrame*, IntPtr, uint, int> RecvCaptureAudio;
+    public static delegate* unmanaged[Cdecl]<IntPtr, AudioFrame*, void> RecvFreeAudio;
 
     /// Чому NDI немає (null — бібліотека завантажена).
     public static string? Problem { get { Load(); return _problem; } }
@@ -105,6 +116,9 @@ public static unsafe class NdiRuntime
                 RecvCapture = (delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, IntPtr, IntPtr, uint, int>)Get("NDIlib_recv_capture_v2");
                 RecvFreeVideo = (delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, void>)Get("NDIlib_recv_free_video_v2");
                 RecvDestroy = (delegate* unmanaged[Cdecl]<IntPtr, void>)Get("NDIlib_recv_destroy");
+                SendAudio = (delegate* unmanaged[Cdecl]<IntPtr, AudioFrame*, void>)Get("NDIlib_send_send_audio_v2");
+                RecvCaptureAudio = (delegate* unmanaged[Cdecl]<IntPtr, VideoFrame*, AudioFrame*, IntPtr, uint, int>)Get("NDIlib_recv_capture_v2");
+                RecvFreeAudio = (delegate* unmanaged[Cdecl]<IntPtr, AudioFrame*, void>)Get("NDIlib_recv_free_audio_v2");
                 if (Initialize() == 0) { _problem = Captions.T("NDI не поддерживает этот процессор"); NativeLibrary.Free(handle); return false; }
                 _library = handle;
                 LoadedFrom = path;

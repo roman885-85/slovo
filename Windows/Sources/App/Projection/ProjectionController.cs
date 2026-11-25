@@ -151,12 +151,15 @@ public sealed class ProjectionController
         }
         _window = window;
         _surface = surface;
+        // Розмір вікна залу змінився (і коли воно щойно стало справжнього розміру) — вид програвача YouTube за ним.
+        window.SizeChanged += (_, _) => { if (_hostedEmbed != null || _embedShown) Avalonia.Threading.Dispatcher.UIThread.Post(ResyncEmbed); };
         window.Show();
         if (window.SystemDecorations == SystemDecorations.None && Placement is not SlidePlacementChoice.Manual)
             window.WindowState = WindowState.FullScreen;
         Journal.Say(window.SystemDecorations == SystemDecorations.Full
             ? "проектор: вікно слайда — звичайним вікном" : "проектор: вікно слайда — без рамки на весь монітор");
         Redraw?.Invoke(false);
+        Avalonia.Threading.Dispatcher.UIThread.Post(ResyncEmbed);
     }
 
     void Windowed(Window window, Screen screen, Size? requested)
@@ -177,6 +180,7 @@ public sealed class ProjectionController
             if (_allowClose) return;
             e.Cancel = true;
             _hiddenByHand = true;
+            if (_hostedEmbed != null) { _hostedEmbed.HideFromHall(); _hostedEmbed = null; }
             window.Hide();
             Journal.Say("проектор: вікно слайда сховано хрестиком — вернеться з наступним слайдом");
             Changed?.Invoke();
@@ -185,9 +189,53 @@ public sealed class ProjectionController
 
     bool _allowClose;
 
+    // ── Вбудований YouTube у залі (hostWeb Mac) ─────────────────────────────
+
+    YouTubeEmbedPlayer? _hostedEmbed, _wantedEmbed;
+    bool _embedShown;
+
+    /// Кадр ролика YouTube не дістати буфером, як у фільму (його малює чужий iframe), тож
+    /// у зал, поки ролик на екрані, стає сам вид програвача — поверх кадру, на весь зал,
+    /// плавно, як на Mac. Не на екрані — вертається в притулок за краєм екрана й малює далі
+    /// (знімки для панелі, NDI й «Відео по Wi-Fi»).
+    public void SyncEmbed(YouTubeEmbedPlayer? embed, bool shown)
+    {
+        _wantedEmbed = embed;
+        _embedShown = shown;
+        if (_hostedEmbed != null && (_hostedEmbed != embed || !shown || _window is not { IsVisible: true }))
+        {
+            _hostedEmbed.HideFromHall();
+            _hostedEmbed = null;
+        }
+        if (embed == null || !shown) { Note(embed == null ? "немає програвача" : "ролик не на екрані"); return; }
+        if (_window is not { IsVisible: true } window) { Note(_window == null ? "вікна залу немає" : "вікно залу сховане"); return; }
+        if (window.TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero) { Note("у вікна залу немає HWND"); return; }
+        var scale = window.RenderScaling;
+        var (w, h) = ((int)Math.Round(window.ClientSize.Width * scale), (int)Math.Round(window.ClientSize.Height * scale));
+        if (embed.ShowIn(handle, w, h))
+        {
+            if (_hostedEmbed != embed) Journal.Say("проектор: ролик YouTube — сам програвач у вікні залу");
+            _hostedEmbed = embed;
+            Note("у залі " + embed.HallSize);
+        }
+        else Note(embed.IsReady ? "програвач не перейшов у вікно залу" : "програвач ще не готовий");
+    }
+
+    /// Чому програвач YouTube (не) у залі — перевірці (пульт, /api/media).
+    public string EmbedNote { get; private set; } = "";
+    void Note(string text)
+    {
+        if (EmbedNote == text) return;
+        EmbedNote = text;
+        if (_wantedEmbed != null) Journal.Say("проектор: програвач YouTube — " + text);
+    }
+
+    void ResyncEmbed() => SyncEmbed(_wantedEmbed, _embedShown);
+
     void CloseWindow()
     {
         _hiddenByHand = false;
+        if (_hostedEmbed != null) { _hostedEmbed.HideFromHall(); _hostedEmbed = null; }
         if (_window == null) return;
         Journal.Say("проектор: вікно слайда прибрано");
         _allowClose = true;
@@ -220,6 +268,7 @@ public sealed class ProjectionController
         {
             _hiddenByHand = false;
             _window.Show();
+            Avalonia.Threading.Dispatcher.UIThread.Post(ResyncEmbed);
             Journal.Say("проектор: у зал пішов слайд — вікно слайда повернуто");
             Changed?.Invoke();
         }

@@ -92,8 +92,15 @@ public sealed class MediaTab
     /// Стан трансляції NDI наживо: «В ефірі: Слово · приймачів: 2», «Зупинена», чому NDI немає.
     static Control NdiStatus()
     {
-        var label = Form.Label(NdiOutput.Shared.Status.Length > 0 ? NdiOutput.Shared.Status : T("Остановлена"));
-        void Update() => Avalonia.Threading.Dispatcher.UIThread.Post(() => label.Text = NdiOutput.Shared.Status.Length > 0 ? NdiOutput.Shared.Status : T("Остановлена"));
+        // Поруч зі станом трансляції — стан звуку («звук: іде», «вимкнено налаштуванням»…).
+        static string Text()
+        {
+            var ndi = NdiOutput.Shared;
+            var main = ndi.Status.Length > 0 ? ndi.Status : T("Остановлена");
+            return ndi.IsRunning && ndi.AudioState.Length > 0 ? main + " · " + ndi.AudioState : main;
+        }
+        var label = Form.Label(Text());
+        void Update() => Avalonia.Threading.Dispatcher.UIThread.Post(() => label.Text = Text());
         NdiOutput.Shared.StatusChanged += Update;
         label.DetachedFromVisualTree += (_, _) => NdiOutput.Shared.StatusChanged -= Update;
         return label;
@@ -129,7 +136,8 @@ public sealed class MediaTab
     Form.Group WiFi()
     {
         var host = Names.Addresses().Select(a => a.Address.ToString()).FirstOrDefault() ?? "<IP>";
-        var address = Form.Label($"http://{host}:{O.RemoteWebPort ?? 8105}/wifi/", false);
+        // Сторінку /wifi/ віддає сервер веб-слайдів (порт «Web» вкладки Remote API), як на Mac.
+        var address = Form.Label($"http://{host}:{O.WebPort}/wifi/", false);
         return new Form.Group(T("Видео по Wi-Fi (HLS)"), new Control[]
         {
             new Form.Row("", new Control[] { Form.Check(T("Раздавать кадр зала потоком H.264"), new Tie<bool>(() => O.WebVideoEnabled ?? false, v => O.WebVideoEnabled = v),
@@ -145,8 +153,19 @@ public sealed class MediaTab
                            new Tie<int>(() => (O.WebVideoKbps ?? 3000) switch { 1500 => 0, 5000 => 2, _ => 1 }, v => O.WebVideoKbps = new[] { 1500, 3000, 5000 }[Math.Clamp(v, 0, 2)]), 160),
             }, 200),
             new Form.Row(T("Адрес"), new Control[] { address }, 200),
-            new Form.Row(T("Состояние"), new Control[] { Form.Label(Missing) }, 200),
+            new Form.Row(T("Состояние"), new Control[] { WebVideoStatus() }, 200),
         });
+    }
+
+    /// Стан каналу «Відео по Wi-Fi» наживо: «іде: шматків 6, 1280×720, 2,9 Мбіт/с», «потік запускається…».
+    static Control WebVideoStatus()
+    {
+        static string Text() => WebVideoOutput.Shared.Status.Length > 0 ? WebVideoOutput.Shared.Status : T("Остановлена");
+        var label = Form.Label(Text());
+        void Update() => Avalonia.Threading.Dispatcher.UIThread.Post(() => label.Text = Text());
+        WebVideoOutput.Shared.StatusChanged += Update;
+        label.DetachedFromVisualTree += (_, _) => WebVideoOutput.Shared.StatusChanged -= Update;
+        return label;
     }
 
     Form.Group YouTube()

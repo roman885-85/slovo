@@ -95,7 +95,8 @@ public sealed class MediaWorkspace : LayoutPanel, IRowSource
         _list.SetSelection(active is { } a ? new[] { a } : Array.Empty<int>(), active);
     }
 
-    void AddLinks()
+    /// Кнопка «Додати посилання» (і службова команда пульта `window-open links` для перевірок).
+    public void AddLinks()
     {
         Prompt.AskLines(T("Добавить ссылки"), T("Ролики YouTube или адреса потоков — по одной ссылке в строке. Они встанут в список, как файлы."),
                         text => { _media.AddLinks(text); Reload(); });

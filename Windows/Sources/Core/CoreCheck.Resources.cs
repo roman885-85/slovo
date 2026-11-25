@@ -76,9 +76,12 @@ public static partial class CoreCheck
 
     private static string Relative(string path, string root)
     {
+        // У Windows роздільник «\\» — шлях друкується так само, як на Mac (через «/»), щоб вивід звірявся рядок у рядок.
         foreach (var prefix in new[] { root, "/private" + root })
-            if (path.StartsWith(prefix + "/", StringComparison.Ordinal)) return path[(prefix.Length + 1)..];
-        return path == root ? "." : path;
+            foreach (var separator in new[] { '/', Path.DirectorySeparatorChar })
+                if (path.StartsWith(prefix + separator, StringComparison.Ordinal)) return path[(prefix.Length + 1)..].Replace(Path.DirectorySeparatorChar, '/');
+        // На macOS /var — посилання на /private/var: той самий корінь буває записаний обома способами.
+        return path == root || path == "/private" + root ? "." : path;
     }
 
     private static List<string> Tree(string root) =>

@@ -91,6 +91,9 @@ public sealed partial class RemoteControlServer
             ["next"] = media.PlaysNext,
             // Скільки звукових доріжок бачить програвач — перевірці (ролик YouTube мусить мати звук).
             ["audioTracks"] = media.AudioTracks.Count,
+            // Вбудований YouTube: сам програвач стоїть у вікні залу (а не знімки) — перевірці.
+            ["embedInHall"] = media.Embed?.InHall ?? false,
+            ["embedNote"] = ProjectionController.Shared.EmbedNote,
         };
     }
 
@@ -190,7 +193,9 @@ public sealed partial class RemoteControlServer
                 var before = state.Media.Playlist.Count;
                 if (state.Media.AddLinks(text) == 0)
                     return (false, 400, state.Media.CurrentFailure is { } failure ? failure.Kind + ": " + failure.Detail : "");
-                state.Media.OpenFromPlaylist(before);
+                // Нічого не грало — AddLinks уже відкрив перше додане; вдруге не відкривати (вбудований
+                // YouTube тоді створювався двічі, і перший рушій WebView2 обривався на півдорозі).
+                if (state.Media.PlaylistIndex != before) state.Media.OpenFromPlaylist(before);
                 return (true, 0, null);
             }
             case "media-next": state.Media.PlaysNext = !state.Media.PlaysNext; return (true, 0, null);

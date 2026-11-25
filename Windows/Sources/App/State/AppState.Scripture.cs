@@ -516,6 +516,9 @@ public sealed partial class AppState
         ApplyWebOutput(options);
         // Трансляція NDI — за «Параметри → Медіа» (у знімках — лише для перевірки).
         if (!Program.Snapshotting || NdiOutput.ForceEnabled) NdiOutput.Shared.Apply(options);
+        // «Відео по Wi-Fi» (HLS) — теж за «Параметри → Медіа», і теж лише справжня програма.
+        if (!Program.Snapshotting || WebVideoOutput.ForceEnabled)
+            WebVideoOutput.Shared.Apply((options.WebVideoEnabled ?? false) || WebVideoOutput.ForceEnabled, options.WebVideoHeight ?? 720, options.WebVideoKbps ?? 3000);
     }
 
     // --- Знімок слайда (F11) ------------------------------------------------------------

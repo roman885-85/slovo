@@ -12,6 +12,8 @@
 // =============================================================================
 
 using System.Diagnostics;
+using Avalonia;
+using Avalonia.Controls;
 using System.Reflection;
 using System.Text;
 using Slovo.Core;
@@ -112,7 +114,8 @@ public static class HelpWindow
             Directory.CreateDirectory(folder);
             var file = Path.Combine(folder, $"slovo-{language}{(string.IsNullOrEmpty(topic) ? "" : "-" + topic)}.html");
             File.WriteAllText(file, html, new UTF8Encoding(false));
-            Open(file, false);
+            // Як на Mac — своє вікно з переглядачем (WebView2); без рушія — звичайний браузер.
+            if (!HelpViewer.Show(file, language == "uk" ? "Довідка «Слова»" : "Slovo Help")) Open(file, false);
         }
         catch (Exception error) { Journal.Say($"довідка не відкрилась: {error.Message}"); }
     }
@@ -121,5 +124,52 @@ public static class HelpWindow
     {
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); }
         catch (Exception error) { Journal.Say($"{(online ? "посилання" : "довідка")} не відкрилось: {error.Message}"); }
+    }
+}
+
+/// Вікно «Довідка» (NativeHelpWindow Mac): 980×700, найменше 640×420, місце пам'ятається;
+/// сторінка — та сама, що в пакеті Mac; посилання назовні (http, https, mailto) — у звичайному
+/// браузері, а не в самому вікні: з нього не було б дороги назад.
+public sealed class HelpViewer : Window
+{
+    static HelpViewer? _shown;
+    readonly WebPreviewHost _view = new();
+    const string FrameKey = "helpWindowFrame";
+
+    public static bool Show(string file, string title)
+    {
+        if (!OperatingSystem.IsWindows() || WebPreviewHost.RuntimeVersion() == null) return false;
+        var window = _shown ??= new HelpViewer();
+        window.Title = title;
+        window._view.Navigate(new Uri(file).AbsoluteUri);
+        if (!window.IsVisible) window.Show();
+        window.Activate();
+        return true;
+    }
+
+    HelpViewer()
+    {
+        Width = 980; Height = 700; MinWidth = 640; MinHeight = 420;
+        Background = Palette.Brush(Palette.WindowBackground);
+        Content = _view;
+        _view.OpenOutside = uri =>
+        {
+            if (!Uri.TryCreate(uri, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https" or "mailto")) return false;
+            try { Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true }); }
+            catch (Exception error) { Journal.Say($"посилання з довідки не відкрилось: {error.Message}"); }
+            return true;
+        };
+        _view.Failed += reason => Journal.Say("довідка: " + reason);
+        if (Defaults.String(FrameKey) is { } saved && saved.Split(',') is { Length: 4 } parts
+            && parts.Select(p => int.TryParse(p, out var v) ? v : int.MinValue).ToArray() is var n && n.All(v => v != int.MinValue))
+        {
+            Position = new PixelPoint(n[0], n[1]);
+            Width = Math.Max(MinWidth, n[2]);
+            Height = Math.Max(MinHeight, n[3]);
+            WindowStartupLocation = WindowStartupLocation.Manual;
+        }
+        else WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Closing += (_, _) => { if (WindowState == WindowState.Normal) Defaults.Set(FrameKey, $"{Position.X},{Position.Y},{(int)Width},{(int)Height}"); };
+        Closed += (_, _) => _shown = null;
     }
 }

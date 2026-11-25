@@ -15,7 +15,8 @@ public sealed class OutputDriver
 {
     readonly AppState _state;
     readonly BottomRow _bottom;
-    int _previewGeneration, _hallGeneration, _mirrorGeneration;
+    int _previewGeneration, _hallGeneration, _mirrorGeneration, _mirrorWindowGeneration;
+    readonly List<MirrorWindow> _mirrorWindows = new();
     bool _previewScheduled, _hallScheduled;
     bool _hallAnimated;
 
@@ -48,6 +49,19 @@ public sealed class OutputDriver
         bottom.Control.ActiveBox.Toggled += on => state.ArrowsShowLive = on;
         // Дзеркало проектора — кадр залу в його сторонах, по краях чорне (як на Mac).
         bottom.Mirror.Surface.FitsAspect = true;
+        // «⤢» — те саме дзеркало окремим вікном, якому можна міняти розмір.
+        bottom.OpenMirrorWindow = () => MirrorWindow.Open();
+        MirrorWindow.Changed += () =>
+        {
+            if (MirrorWindow.Shown is { } window && !_mirrorWindows.Contains(window))
+            {
+                _mirrorWindows.Add(window);
+                window.View.SizeChanged += (_, _) => ScheduleHall(false);
+                window.Closed += (_, _) => _mirrorWindows.Remove(window);
+            }
+            ApplyVideo();
+            ScheduleHall(false);
+        };
         // Наближення їде плавно: кожен крок — новий кадр показаної сторінки (без переходу).
         SlideFocus.Shared.ShownChanged += () => { if (_state.StillShown) ScheduleHall(false); };
         // Кадр плеєра — шаром поверх слайда в залі, «живому екрані» й передпоказі.
@@ -66,7 +80,9 @@ public sealed class OutputDriver
         var media = _state.Media;
         var fade = AppState.MediaFadeSeconds;
         ProjectionController.Shared.Surface?.SetVideo(media.Frames, media.IsVideoOnScreen, fade);
+        ProjectionController.Shared.SyncEmbed(media.Embed, media.Embed != null && media.IsVideoOnScreen);
         _bottom.Mirror.Surface.SetVideo(media.Frames, _state.IsLive && media.IsVideoOnScreen, fade);
+        MirrorWindow.Shown?.View.Surface.SetVideo(media.Frames, _state.IsLive && media.IsVideoOnScreen, fade);
         _bottom.Preview.Surface.SetVideo(media.Frames, media.ShowsVideoInPreview, 0);
     }
 
@@ -111,6 +127,10 @@ public sealed class OutputDriver
         return order;
     }
 
+    /// Що зараз у передпоказі — для перевірки «Показ за вкладками» (preview.showing Mac):
+    /// "none", "still" або "slide:<текст>". Ставиться, коли кадр справді ліг у передпоказ.
+    public string PreviewShowing { get; private set; } = "none";
+
     void RenderPreview()
     {
         var (w, h) = _bottom.Preview.PixelSize();
@@ -123,6 +143,7 @@ public sealed class OutputDriver
         {
             ++_previewGeneration;
             _bottom.Preview.Surface.Show(null, false, "none", 0, "linear");
+            PreviewShowing = "none";
             return;
         }
         // Передпоказ відповідає на питання «що піде в зал»: шаблон відкритої
@@ -136,7 +157,12 @@ public sealed class OutputDriver
                 if (previewStill != null && SlideImageStore.Shared.Image(previewStill) is { } picture) DrawStill(c, width, height, picture);
                 else SlideDrawing.Draw(order, c, width, height);
             },
-            (image, done) => { if (done == _previewGeneration) _bottom.Preview.Surface.Show(image, false, "none", 0, "linear"); else image?.Dispose(); });
+            (image, done) =>
+            {
+                if (done != _previewGeneration) { image?.Dispose(); return; }
+                _bottom.Preview.Surface.Show(image, false, "none", 0, "linear");
+                PreviewShowing = previewStill != null ? "still" : "slide:" + slide.MainText;
+            });
     }
 
     /// Кадр для NDI: той самий зал, але за правилами виводу NDI (свій шаблон, «прозорий фон» —
@@ -160,6 +186,28 @@ public sealed class OutputDriver
             return surface.Snapshot();
         }
         catch (Exception error) { Journal.Say($"кадр NDI не намалювався: {error.Message}"); return null; }
+    }
+
+    /// Кадр NDI чи «Відео по Wi-Fi» — замовлення збирається тут (головний потік, дешево), а
+    /// малюється у фоні чергою, як передпоказ і зал (на Mac — SlideFrameRenderer у фоні).
+    /// Раніше NdiFrame малював 1920×1080 прямо в головному потоці на кожну зміну залу — з
+    /// увімкненим NDI вікно після «у зал» стояло ~0,2 с (замір у справжньому вікні, 25.11).
+    public void RenderOutputFrame(string key, int generation, int width, int height, bool transparent, Action<SkiaSharp.SKImage?, int> done)
+    {
+        var slide = _state.HallSlide;
+        var still = _state.IsLive && !_state.IsBlackout ? _state.LiveStill : null;
+        var style = _state.Style;
+        var preset = _state.Preset(OutputKind.Ndi);
+        if (_state.IsBlackout) { style = new SlideStyle { BackgroundColor = SlideStyle.RGBA.Black }; preset = null; }
+        var order = Order(slide, style, preset, _state.Texts(_state.LiveSlide, live: true), _state.IsBlackout ? null : _state.BackgroundOverride);
+        order.DrawsBackground = _state.IsBlackout || !transparent;
+        var opaque = !transparent || _state.IsBlackout;
+        var focus = SlideFocus.Shared.ShownRect;
+        SlideRenderQueue.Shared.Render(key, generation, Math.Max(2, width), Math.Max(2, height), opaque, (c, w, h) =>
+        {
+            if (still != null && SlideImageStore.Shared.Image(still) is { } picture) DrawStill(c, w, h, picture, focus);
+            else if (!slide.IsBlank || !transparent) SlideDrawing.Draw(order, c, w, h);
+        }, done);
     }
 
     /// Кадр залу заданого розміру — одразу, у головному потоці (пульт, знімок на вимогу).
@@ -187,6 +235,7 @@ public sealed class OutputDriver
     {
         // Трансляція NDI малює свій кадр із того самого залу.
         NdiOutput.Shared.ContentChanged();
+        WebVideoOutput.Shared.ContentChanged();
         // Вікно залу могло з'явитися щойно — кадр плеєра й до нього.
         ApplyVideo();
         var slide = _state.HallSlide;
@@ -244,6 +293,18 @@ public sealed class OutputDriver
             var mg = ++_mirrorGeneration;
             SlideRenderQueue.Shared.Render("дзеркало", mg, mw, mh, true, Draw,
                 (image, done) => { if (done == _mirrorGeneration) _bottom.Mirror.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
+        }
+        // Дзеркало окремим вікном — той самий кадр залу своїм розміром.
+        if (MirrorWindow.Shown is { } window && window.View.Bounds.Width > 0)
+        {
+            var far = window.View;
+            var (fw, fh) = ProjectionController.Shared.FrameSize();
+            var (vw, vh) = far.PixelSize();
+            var fit = Math.Min((double)vw / Math.Max(1, fw), (double)vh / Math.Max(1, fh));
+            var (mw, mh) = ((int)Math.Max(2, Math.Round(fw * fit)), (int)Math.Max(2, Math.Round(fh * fit)));
+            var wg = ++_mirrorWindowGeneration;
+            SlideRenderQueue.Shared.Render("дзеркало-вікно", wg, mw, mh, true, Draw,
+                (image, done) => { if (done == _mirrorWindowGeneration && MirrorWindow.Shown == window) far.Surface.Show(image, animated, kind, seconds, easing); else image?.Dispose(); });
         }
     }
 }

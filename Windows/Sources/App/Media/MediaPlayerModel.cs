@@ -113,10 +113,10 @@ public sealed class MediaPlayerModel
     }
 
     /// «Без звуку» (PngSBAudioMute).
-    public bool IsMuted { get => _isMuted; set { _isMuted = value; _engine?.SetMute(value); Notify(); } }
+    public bool IsMuted { get => _isMuted; set { _isMuted = value; _engine?.SetMute(value); _embed?.SetMuted(value); Notify(); } }
 
     /// «Гучність:» (LMEdiaVolume), 0…1 — положення повзунка.
-    public double Volume { get => _volume; set { _volume = Math.Clamp(value, 0, 1); _engine?.SetVolume(Gain(_volume)); Notify(); } }
+    public double Volume { get => _volume; set { _volume = Math.Clamp(value, 0, 1); _engine?.SetVolume(Gain(_volume)); _embed?.SetVolume(Gain(_volume)); Notify(); } }
 
     /// Положення повзунка → підсилення: квадрат (половина повзунка — −12 дБ, а не −6),
     /// щоб повзунок був корисним на всій довжині.
@@ -382,6 +382,70 @@ public sealed class MediaPlayerModel
         return true;
     }
 
+    // ── Вбудований програвач YouTube (openYouTube на Mac) ───────────────────
+
+    YouTubeEmbedPlayer? _embed;
+    /// Ролик іде вбудованим програвачем (без yt-dlp).
+    public bool IsYouTubeEmbed => _embed != null;
+    /// Вбудований програвач (перевірці звуку).
+    public YouTubeEmbedPlayer? Embed => _embed;
+
+    void OpenEmbed(string id, string link)
+    {
+        YieldCapture();
+        Close(quiet: true);
+        _suppression &= ~ScreenSuppression.Stopped;
+        SetActivity(new Activity(ActivityKind.OpeningStream, true));
+        CurrentFailure = null;
+        MediaUrl = link;
+        IsStream = true;
+        Title = "YouTube · " + (LinkTitles.TryGetValue(link, out var known) ? known : id);
+        var autoplay = AutoPlay || _playOnReady;
+        var engine = _embed = new YouTubeEmbedPlayer(id, autoplay);
+        engine.OnReady = () =>
+        {
+            if (_embed != engine) return;
+            engine.SetVolume(Gain(_volume));
+            engine.SetMuted(_isMuted);
+            // У ролика YouTube картинка є завжди — це не звуковий потік.
+            _fileHasVideo = true;
+            HasVideo = true;
+            SetActivity(new Activity(ActivityKind.Idle));
+            SyncScreen();
+            if (AutoPlay || _playOnReady) { _playOnReady = false; Play(); }
+            else _ = engine.Snapshot();
+        };
+        engine.OnState = state =>
+        {
+            if (_embed != engine) return;
+            switch (state)
+            {
+                case YouTubeEmbedPlayer.State.Playing: IsPlaying = true; engine.StartSnapshots(); Notify(); break;
+                case YouTubeEmbedPlayer.State.Paused or YouTubeEmbedPlayer.State.Cued or YouTubeEmbedPlayer.State.Unstarted:
+                    IsPlaying = false; engine.StopSnapshots(); _ = engine.Snapshot(); Notify(); break;
+                case YouTubeEmbedPlayer.State.Ended: HandleEnd(); break;
+            }
+        };
+        engine.OnError = code =>
+        {
+            if (_embed != engine) return;
+            Journal.Say($"плеєр: вбудований YouTube {id} — помилка {code}");
+            CurrentFailure = new Failure(FailureKind.YouTube, Captions.T("YouTube не отдал ролик (код %s)", code.ToString()));
+            SetActivity(new Activity(ActivityKind.Idle));
+            Notify();
+        };
+        engine.OnTime = (current, total) =>
+        {
+            if (_embed != engine || _isScrubbing) return;
+            Position = current;
+            if (total > 0) Duration = total;
+            Notify();
+        };
+        FetchTitle(id, link);
+        SyncScreen();
+        Notify();
+    }
+
     // ── YouTube (через yt-dlp, як resolveYouTube на Mac) ─────────────────────
 
     /// Що відповів yt-dlp останнього разу, коли не вийшло, — «Параметрам».
@@ -395,10 +459,10 @@ public sealed class MediaPlayerModel
         var found = YouTubeResolver.Locate();
         if (found.Tool is not { } tool)
         {
-            // Вбудованого програвача YouTube (як на Mac без yt-dlp) у Windows-версії ще немає.
-            CurrentFailure = new Failure(FailureKind.YouTube, found.Note);
-            Notify();
-            return false;
+            // Без yt-dlp ролик однаково йде — вбудованим програвачем (як на Mac).
+            YouTubeToolProblem = found.Note;
+            OpenEmbed(id, url.AbsoluteUri);
+            return true;
         }
         YieldCapture();
         Close(quiet: true);
@@ -418,13 +482,9 @@ public sealed class MediaPlayerModel
             if (task.Exception?.GetBaseException() is { } error)
             {
                 YouTubeToolProblem = error.Message;
-                Journal.Say($"плеєр: YouTube {id} — {error.Message}");
-                MediaUrl = null;
-                IsStream = false;
-                Title = "";
-                CurrentFailure = new Failure(FailureKind.YouTube, error.Message);
-                SetActivity(new Activity(ActivityKind.Idle));
-                Notify();
+                Journal.Say($"плеєр: YouTube {id} — {error.Message}; граю вбудованим програвачем");
+                // Не вийшло — ролик однаково йде, вбудованим програвачем (як на Mac).
+                OpenEmbed(id, link);
                 return;
             }
             var found = task.Result;
@@ -497,6 +557,12 @@ public sealed class MediaPlayerModel
         var wasOpen = MediaUrl != null;
         var wasStream = IsStream;
         _engine?.Close();
+        if (_embed is { } embed)
+        {
+            _embed = null;
+            embed.Dispose();
+            VideoFrames.Shared.Clear();
+        }
         MediaUrl = null;
         Title = "";
         IsStream = false;
@@ -538,6 +604,16 @@ public sealed class MediaPlayerModel
 
     public void Play()
     {
+        if (_embed is { } embed && MediaUrl != null)
+        {
+            if (Duration > 0 && Position >= Duration - 0.25) embed.Seek(0);
+            embed.Play();
+            IsPlaying = true;
+            _suppression &= ~(ScreenSuppression.SlideTookOver | ScreenSuppression.Stopped);
+            OnWantsHall?.Invoke();
+            SyncScreen();
+            return;
+        }
         if (MediaUrl == null || _engine == null) return;
         // Дійшли до кінця й тиснуть «грати» — з початку.
         if (Duration > 0 && Position >= Duration - 0.25) { _engine.Restart(); }
@@ -552,6 +628,7 @@ public sealed class MediaPlayerModel
     public void Pause()
     {
         _engine?.Pause();
+        _embed?.Pause();
         IsPlaying = false;
         Notify();
     }
@@ -575,10 +652,10 @@ public sealed class MediaPlayerModel
 
     public void Seek(double seconds)
     {
-        if (MediaUrl == null || _engine == null) return;
+        if (MediaUrl == null || (_engine == null && _embed == null)) return;
         var clamped = Duration > 0 ? Math.Clamp(seconds, 0, Duration) : Math.Max(0, seconds);
         Position = clamped;
-        _engine.Seek(clamped);
+        if (_embed is { } embed) embed.Seek(clamped); else _engine!.Seek(clamped);
         Notify();
     }
 
@@ -603,7 +680,8 @@ public sealed class MediaPlayerModel
             return;
         }
         // «Повтор»: без зупинки, щоб заставка крутилася все зібрання.
-        _engine?.Restart();
+        if (_embed is { } embed) { embed.Seek(0); embed.Play(); }
+        else _engine?.Restart();
     }
 
     // ── Звукові доріжки ─────────────────────────────────────────────────────

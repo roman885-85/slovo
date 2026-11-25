@@ -8,6 +8,7 @@
 // =============================================================================
 
 using Avalonia;
+using Slovo.Core;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Styling;
@@ -33,6 +34,8 @@ public static class Snapshot
     public static int Run(string folder, string[] args)
     {
         Directory.CreateDirectory(folder);
+        // Вивід у файл — UTF-8 (інакше Windows пише кодовою сторінкою консолі, і «✓», «і» зникають).
+        if (OperatingSystem.IsWindows() && Console.IsOutputRedirected) Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         AppBuilder.Configure<SlovoApplication>()
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
@@ -48,6 +51,9 @@ public static class Snapshot
         ModuleImportWiring.Install();
         ResourcesWindow.Install();
         SnapshotScenes.Register();
+        // Заміри відгуку вікна (NativeBench на Mac) — замість знімків.
+        if (Array.IndexOf(args, "--bench") is var benchAt and >= 0 && benchAt + 1 < args.Length)
+            return Bench.Run(args[benchAt + 1], folder) > 0 ? 0 : 1;
         var count = 0;
         foreach (var (name, make, size) in Scenes)
         {
@@ -55,6 +61,13 @@ public static class Snapshot
             var window = make();
             window.Width = size.Width;
             window.Height = size.Height;
+            // Інший розмір вікна (звірка з найменшими знімками Mac): --size 1120x748 або --size min.
+            if (Array.IndexOf(args, "--size") is var zi and >= 0 && zi + 1 < args.Length)
+            {
+                var wanted = args[zi + 1];
+                if (wanted == "min") { window.Width = Math.Max(1, window.MinWidth); window.Height = Math.Max(1, window.MinHeight); }
+                else if (wanted.Split('x') is { Length: 2 } wh && double.TryParse(wh[0], out var ww) && double.TryParse(wh[1], out var hh)) { window.Width = ww; window.Height = hh; }
+            }
             window.Show();
             WaitForLibrary();
             if (window is ISnapshotWork work)
@@ -107,6 +120,165 @@ public static class Snapshot
                 var job = Task.Run(async () => result = await YouTubeToolUpdater.CheckAsync());
                 while (!job.IsCompleted) { Pump(2); Thread.Sleep(100); }
                 Console.WriteLine($"  yt-dlp: {result} — {YouTubeToolUpdater.ManagedPath} ({(File.Exists(YouTubeToolUpdater.ManagedPath) ? new FileInfo(YouTubeToolUpdater.ManagedPath).Length / 1024 / 1024 + " МБ" : "немає")})");
+            }
+            if (Array.IndexOf(args, "--texts-scan") is var ts and >= 0 && ts + 1 < args.Length)
+            {
+                // Пошук сумісних текстів («Модулі» → 🔍): що знайдено в теці й скільки тек переглянуто.
+                var progress = new SettingsStore.TextScan();
+                var found = SettingsStore.ScanForTexts(args[ts + 1], progress, CancellationToken.None);
+                Console.WriteLine($"  пошук текстів: тек {progress.Folders}, знайдено {found.Count}");
+                foreach (var entry in found) Console.WriteLine($"    {entry.Name} ← {Path.GetRelativePath(args[ts + 1], entry.Path)}");
+            }
+            if (Array.IndexOf(args, "--hls-ts-check") is var hi and >= 0 && hi + 3 < args.Length)
+            {
+                // Мультиплексор «Відео по Wi-Fi»: сирий H.264 (з AUD) і AAC (ADTS) → шматки MPEG-TS і список.
+                var video = File.ReadAllBytes(args[hi + 1]);
+                var audio = File.ReadAllBytes(args[hi + 2]);
+                var output = args[hi + 3];
+                Directory.CreateDirectory(output);
+                var segmenter = new HlsTsSegmenter(hasAudio: true, targetSeconds: 1, keep: 100);
+                // Одиниці доступу — між AUD (00 00 00 01 09).
+                var units = new List<(int Start, int End)>();
+                var last = -1;
+                for (var i = 0; i + 4 < video.Length; i++)
+                    if (video[i] == 0 && video[i + 1] == 0 && video[i + 2] == 0 && video[i + 3] == 1 && (video[i + 4] & 0x1F) == 9)
+                    {
+                        if (last >= 0) units.Add((last, i));
+                        last = i;
+                    }
+                if (last >= 0) units.Add((last, video.Length));
+                // Кадри AAC — за довжиною з заголовка ADTS.
+                var frames = new List<(int Start, int Length)>();
+                for (var i = 0; i + 7 <= audio.Length;)
+                {
+                    if (audio[i] != 0xFF || (audio[i + 1] & 0xF0) != 0xF0) { i++; continue; }
+                    var length = ((audio[i + 3] & 0x03) << 11) | (audio[i + 4] << 3) | (audio[i + 5] >> 5);
+                    if (length < 7 || i + length > audio.Length) break;
+                    frames.Add((i, length));
+                    i += length;
+                }
+                var a = 0;
+                for (var f = 0; f < units.Count; f++)
+                {
+                    long pts = f * 3600L;   // 25 кадрів/с
+                    while (a < frames.Count && a * 1920L <= pts) { segmenter.AddAudio(audio.AsSpan(frames[a].Start, frames[a].Length), a * 1920L); a++; }
+                    segmenter.AddVideo(video.AsSpan(units[f].Start, units[f].End - units[f].Start), pts);
+                }
+                // Останній шматок закриває ще один ключовий кадр — для перевірки досить тих, що є.
+                var list = segmenter.Playlist() ?? "";
+                File.WriteAllText(Path.Combine(output, "stream.m3u8"), list);
+                foreach (var line in list.Split('\n').Where(l => l.EndsWith(".ts")))
+                    File.WriteAllBytes(Path.Combine(output, line), segmenter.Segment(line)!);
+                Console.WriteLine($"  HLS TS: кадрів {units.Count}, порцій AAC {frames.Count}, шматків {segmenter.SegmentCount}, байтів {segmenter.BytesWritten}");
+            }
+            if (Array.IndexOf(args, "--webvideo-check") is var wv and >= 0 && wv + 1 < args.Length)
+            {
+                // «Відео по Wi-Fi»: канал іде 8 с (слайд у залі), потім список і шматки — у теку для ffprobe.
+                var output = args[wv + 1];
+                Directory.CreateDirectory(output);
+                WebVideoOutput.ForceEnabled = true;
+                AppState.Shared.ShowCurrentSlide();
+                WebVideoOutput.Shared.Apply(true, 720, 3000);
+                var until = DateTime.Now.AddSeconds(8);
+                do { Pump(2); Thread.Sleep(50); } while (DateTime.Now < until);
+                var provider = HLSStreamRegistry.Provider;
+                var list = provider?.Playlist();
+                if (list != null)
+                {
+                    File.WriteAllText(Path.Combine(output, "stream.m3u8"), list);
+                    foreach (var line in list.Split('\n').Where(l => l.EndsWith(".ts")))
+                        if (provider!.Segment(line) is { } piece) File.WriteAllBytes(Path.Combine(output, line), piece);
+                }
+                WebVideoOutput.Shared.RefreshStatus();
+                Console.WriteLine($"  Відео по Wi-Fi: {WebVideoOutput.Shared.Status}; шматків {WebVideoOutput.Shared.Segments}; список {(list == null ? "немає" : list.Split('\n').Count(l => l.EndsWith(".ts")) + " шматків")}");
+                WebVideoOutput.Shared.Apply(false, 720, 3000);
+            }
+            if (args.Contains("--show-check"))
+            {
+                // «Показ за вкладками» (showTabsSection Mac): кроки власника Біблія ↔ Презентація —
+                // на кожному що в передпоказі (вірш / картинка) і що в залі (текст / картинка).
+                Console.WriteLine("  " + ShowCheck.Run(folder));
+            }
+            if (args.Contains("--ndi-audio-check"))
+            {
+                // Звук у NDI: джерело «Слово-звук» отримує тон 440 Гц (−12 дБFS) порціями по 10 мс,
+                // приймач NDI у цьому ж процесі рахує порції й рівень (sin із амплітудою 0,25 → −15 дБFS).
+                NdiOutput.ForceEnabled = true;
+                NdiOutput.SourceNameOverride = "Слово-звук";
+                NdiOutput.Shared.Apply(SettingsStore.Shared.Settings.Options);
+                Console.WriteLine($"  NDI: {NdiOutput.Shared.Status}");
+                var feeding = true;
+                var feeder = new Thread(() =>
+                {
+                    const int rate = 48000, chunk = 480;
+                    var planar = new float[chunk * 2];
+                    long t = 0;
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    while (feeding)
+                    {
+                        for (var i = 0; i < chunk; i++, t++)
+                        {
+                            var v = (float)(0.25 * Math.Sin(2 * Math.PI * 440 * t / rate));
+                            planar[i] = v; planar[chunk + i] = v;
+                        }
+                        NdiOutput.Shared.SubmitAudio(planar, 2, chunk, rate);
+                        var ahead = t * 1000.0 / rate - clock.Elapsed.TotalMilliseconds;
+                        if (ahead > 1) Thread.Sleep((int)ahead);
+                    }
+                }) { IsBackground = true };
+                feeder.Start();
+                string received = "";
+                var check = new Thread(() => received = NdiOutput.ReceiveAudioCheck("Слово-звук", 8));
+                check.Start();
+                while (check.IsAlive) { Pump(2); Thread.Sleep(50); }
+                feeding = false;
+                feeder.Join();
+                Console.WriteLine($"  NDI звук прийнято: {received}; віддано порцій {NdiOutput.Shared.AudioSent} з {NdiOutput.Shared.AudioIn}, без джерела {NdiOutput.Shared.AudioNoSender}");
+                NdiOutput.Shared.Stop();
+            }
+            if (args.Contains("--loopback-check"))
+            {
+                // Захват звуку свого процесу (Windows): програма грає тон 1 кГц через WASAPI, захват має
+                // його почути — порції й рівень. На Mac захвату немає (там свій шлях).
+                long packets = 0, samples = 0; double sum = 0;
+                using var capture = new AppAudioCapture();
+                string state = "";
+                capture.OnState = text => state = text;
+                capture.OnSamples = (planar, channels, count, rate) =>
+                {
+                    Interlocked.Increment(ref packets);
+                    double s = 0; for (var i = 0; i < count; i++) s += planar[i] * planar[i];
+                    lock (capture) { sum += s; samples += count; }
+                };
+                capture.Start();
+                Thread.Sleep(500);
+                if (OperatingSystem.IsWindows())
+                {
+                    using var output = new NAudio.Wave.WasapiOut(NAudio.CoreAudioApi.AudioClientShareMode.Shared, 100);
+                    var tone = new NAudio.Wave.SampleProviders.SignalGenerator(48000, 2) { Frequency = 1000, Gain = 0.25 };
+                    output.Init(new NAudio.Wave.SampleProviders.SampleToWaveProvider(tone));
+                    output.Play();
+                    Thread.Sleep(2500);
+                    output.Stop();
+                }
+                Thread.Sleep(300);
+                capture.Stop();
+                var rms = Math.Sqrt(sum / Math.Max(1, samples));
+                Console.WriteLine($"  захват звуку програми: {state}; порцій {packets}, відліків {samples}, рівень {(rms > 0 ? (20 * Math.Log10(rms)).ToString("0.0") + " дБFS" : "тиша")}");
+            }
+            if (args.Contains("--watchdog-check"))
+            {
+                // Сторож головного потоку: дві секунди спокою (відповіді швидкі — запису нема),
+                // потім головний потік зайнятий 1,6 с — має з'явитися рівно один запис.
+                MainThreadWatchdog.Shared.Start();
+                var calm = DateTime.Now.AddSeconds(2.6);
+                do { Pump(2); Thread.Sleep(20); } while (DateTime.Now < calm);
+                var before = MainThreadWatchdog.Shared.Reported;
+                Thread.Sleep(1600);
+                var after = DateTime.Now.AddSeconds(1);
+                do { Pump(2); Thread.Sleep(20); } while (DateTime.Now < after);
+                var tail = File.Exists(Journal.FilePath) ? File.ReadLines(Journal.FilePath).LastOrDefault(l => l.Contains("головний потік")) : null;
+                Console.WriteLine($"  сторож: у спокої записів {before}, після зайнятості {MainThreadWatchdog.Shared.Reported}; журнал: {tail ?? "—"}");
             }
             if (Array.IndexOf(args, "--youtube") is var yi and >= 0 && yi + 1 < args.Length)
             {
@@ -278,6 +450,24 @@ public static class Snapshot
                 server.Stop();
                 // Веб-слайди (якщо їх підняли ключем --web-slides-port) — теж геть з портів.
                 AppState.Shared.Web.Stop();
+            }
+            if (args.Contains("--mirror-window"))
+            {
+                // Дзеркало проектора окремим вікном («⤢», NativeProjectorMirrorWindow Mac): вірш у залі —
+                // той самий кадр залу у вікні 800×450, у сторонах залу, з полями.
+                AppState.Shared.ShowCurrentSlide();
+                var mirror = MirrorWindow.Open();
+                mirror.Width = 800; mirror.Height = 450;
+                var until = DateTime.Now.AddSeconds(5);
+                do { Pump(2); Thread.Sleep(30); } while (DateTime.Now < until && (mirror.View.Surface.CurrentImage == null || !SlideRenderQueue.Shared.IsIdle));
+                Pump(6);
+                var shot = mirror.CaptureRenderedFrame();
+                shot?.Save(Path.Combine(folder, "дзеркало-вікно.png"));
+                var image = mirror.View.Surface.CurrentImage;
+                Console.WriteLine($"  дзеркало вікном: знімок {(shot != null ? $"{shot.PixelSize.Width}×{shot.PixelSize.Height}" : "немає")}, кадр залу {(image != null ? $"{image.Width}×{image.Height}" : "немає")}, рамка кадру {mirror.View.Surface.FrameRect}, над іншими {mirror.Topmost}");
+                mirror.Close();
+                Pump(4);
+                Console.WriteLine($"  після закриття: вікна {(MirrorWindow.Shown == null ? "немає" : "лишилось")}");
             }
             if (args.Contains("--show"))
             {

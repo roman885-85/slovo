@@ -50,6 +50,7 @@ public sealed class ModulesTab : IRowSource
         buttons.Children.Add(Form.Button("↑", Hint("SBUpBiblePath", "Переместить выше"), () => Move(-1)));
         buttons.Children.Add(Form.Button("↓", Hint("SBDownBiblePath", "Переместить ниже"), () => Move(1)));
         buttons.Children.Add(Form.Button("⤓", Hint("SBImportModules", "Импорт модулей..."), Add));
+        buttons.Children.Add(Form.Button("🔍", Hint("SBSearchTexts", "Найти совместимые тексты"), () => _ = SearchTexts()));
         return new Form.Group(Vb("Label1", Captions.T("Текстовые модули:")), new Control[]
         {
             new Form.Row("", new Control[] { _kinds }),
@@ -76,6 +77,39 @@ public sealed class ModulesTab : IRowSource
                        Captions.T("Читать модуль только тогда, когда его открыли: быстрее запуск")),
         }),
     });
+
+    CancellationTokenSource? _search;
+
+    /// (29) Автоматичний пошук сумісних модулів на комп'ютері (search() у NativeSettingsModulesTab):
+    /// тека → обхід у фоні з лічильниками → «Замінити список?» (Так — замінити, Ні — додати).
+    async Task SearchTexts()
+    {
+        if (TopLevel.GetTopLevel(_list)?.StorageProvider is not { } storage) return;
+        var folders = await storage.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+        {
+            Title = Vb("TextMessages10", "Произвести поиск текстов формата \"Цитата из Библии\"?"),
+        });
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } root) return;
+        _search?.Cancel();
+        var cancel = _search = new CancellationTokenSource();
+        var progress = new SettingsStore.TextScan();
+        _status.Text = Vb("Label13", "Папка:") + " " + root;
+        var scan = Task.Run(() => SettingsStore.ScanForTexts(root, progress, cancel.Token));
+        while (!scan.IsCompleted)
+        {
+            _status.Text = $"{Vb("Label14", "Просмотрено папок:")} {progress.Folders}  {Vb("Label15", "Найдено текстов:")} {progress.Found}";
+            await Task.Delay(200);
+        }
+        var found = await scan;
+        if (cancel.IsCancellationRequested) return;
+        _status.Text = $"{Vb("Label15", "Найдено текстов:")} {found.Count}";
+        if (found.Count == 0) return;
+        var question = $"{Vb("TextMessages12", "Найдено")} {found.Count}\n" + Vb("TextMessages13", "текстов формата \"Цитата из Библии\".\nЗаменить список?");
+        var answer = await SongPrompt.ThreeWay(Vb("TextMessages11", "Поиск"), question.Replace("\\n", "\n"), "Да", "Нет");
+        if (answer == SongPrompt.Answer.Cancel) return;
+        _store.ApplyFoundTexts(found, replacing: answer == SongPrompt.Answer.Yes);
+        Changed();
+    }
 
     void Refresh()
     {

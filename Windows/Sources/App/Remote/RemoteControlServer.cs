@@ -458,6 +458,42 @@ public sealed partial class RemoteControlServer
             case "window-snapshot":
                 WindowSnapshot(state, answer);
                 break;
+            case "audio-sessions":
+                AudioSessionsForCheck(answer);
+                break;
+            case "ndi-probe":
+            {
+                // Службова: прийняти своє ж джерело NDI (кадр і звук) у фоні, як приймач у мережі;
+                // результат — у наступній відповіді audio-sessions.
+                var source = NdiOutput.Shared.SourceName;
+                _ndiProbe = "іде…";
+                Task.Run(() =>
+                {
+                    var picture = NdiOutput.ReceiveCheck(source, 5);
+                    var sound = NdiOutput.ReceiveAudioCheck(source, 5);
+                    _ndiProbe = $"джерело «{source}»: кадр — {picture}; звук — {sound}";
+                });
+                break;
+            }
+            case "audio-probe":
+            {
+                // Службова: свіже захоплення (1,5 с) свого дерева процесів і дерева рушія WebView2 —
+                // у фоні; результат — у наступній відповіді audio-sessions.
+                var browser = AppState.Shared.Media.Embed?.BrowserProcessId ?? 0;
+                _probe = "іде…";
+                Task.Run(() =>
+                {
+                    var own = AppAudioCapture.Probe(Environment.ProcessId, 1500);
+                    var text = $"своє дерево: порцій {own.Packets}, відліків {own.Samples}, пік {own.Peak:0.000}";
+                    if (browser > 0)
+                    {
+                        var web = AppAudioCapture.Probe(browser, 1500);
+                        text += $"; дерево рушія WebView2 #{browser}: порцій {web.Packets}, відліків {web.Samples}, пік {web.Peak:0.000}";
+                    }
+                    _probe = text;
+                });
+                break;
+            }
             case "window-open":
                 if (!OpenWindowForCheck(text)) { Fail(connection, 400, Captions.T("нет такого окна")); return; }
                 break;
@@ -783,6 +819,49 @@ public sealed partial class RemoteControlServer
 
     /// Знімок вікна програми й кадру залу у файли — бачити те саме, що людина,
     /// коли зняти екран не дає система (віддалений вхід, ВМ).
+    /// Службова (перевірці звуку): хто зараз грає на пристрої виводу Windows — процес, стан,
+    /// пік; процес рушія вбудованого YouTube і що каже його програвач; що прийшло в «Відео по Wi-Fi».
+    static void AudioSessionsForCheck(JsonObject answer)
+    {
+        var list = new JsonArray();
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                using var devices = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+                using var device = devices.GetDefaultAudioEndpoint(NAudio.CoreAudioApi.DataFlow.Render, NAudio.CoreAudioApi.Role.Multimedia);
+                answer["device"] = device.FriendlyName;
+                var sessions = device.AudioSessionManager.Sessions;
+                for (var i = 0; i < sessions.Count; i++)
+                {
+                    var session = sessions[i];
+                    var pid = (int)session.GetProcessID;
+                    string name;
+                    try { using var process = System.Diagnostics.Process.GetProcessById(pid); name = process.ProcessName; } catch { name = "?"; }
+                    list.Add(new JsonObject
+                    {
+                        ["pid"] = pid, ["name"] = name, ["state"] = session.State.ToString(),
+                        ["peak"] = Math.Round(session.AudioMeterInformation.MasterPeakValue, 4),
+                        ["volume"] = Math.Round(session.SimpleAudioVolume.Volume, 3), ["muted"] = session.SimpleAudioVolume.Mute,
+                    });
+                }
+            }
+            catch (Exception error) { answer["error"] = error.Message; }
+        }
+        answer["sessions"] = list;
+        answer["self"] = Environment.ProcessId;
+        if (AppState.Shared.Media.Embed is { } embed)
+            answer["embed"] = new JsonObject { ["browserPid"] = embed.BrowserProcessId, ["muted"] = embed.PlayerMuted, ["volume"] = embed.PlayerVolume };
+        answer["wifiAudio"] = new JsonObject { ["samples"] = WebVideoOutput.Shared.AudioSamplesIn, ["peak"] = Math.Round(WebVideoOutput.Shared.AudioPeak, 4) };
+        if (_probe != null) answer["probe"] = _probe;
+        answer["ndi"] = new JsonObject
+        {
+            ["status"] = NdiOutput.Shared.Status, ["audio"] = NdiOutput.Shared.AudioState, ["library"] = NdiRuntime.LoadedFrom ?? "",
+            ["framesSent"] = NdiOutput.Shared.FramesSent, ["audioSent"] = NdiOutput.Shared.AudioSent, ["probe"] = _ndiProbe ?? "",
+        };
+    }
+    static volatile string? _probe, _ndiProbe;
+
     static void WindowSnapshot(AppState state, JsonObject answer)
     {
         var folder = Path.Combine(DataHome.Folder, "ScreenShots");
@@ -833,7 +912,9 @@ public sealed partial class RemoteControlServer
         catch (Exception error) { answer["кадрError"] = error.Message; }
     }
 
-    /// Відкрити вікно для знімка перевірки: settings[:N], web-editor, localize, numbering, close.
+    /// Відкрити вікно для знімка перевірки: settings[:N], web-editor, localize, numbering,
+    /// links (вікно «Додати посилання» плеєра), menu:Група (розділ меню: File, Actions, Settings,
+    /// Interface, Language, Help), close.
     static bool OpenWindowForCheck(string what)
     {
         var name = what.Split(':')[0];
@@ -842,6 +923,13 @@ public sealed partial class RemoteControlServer
             case "web-editor": WebSlideEditorWindow.Open(AppState.Shared); return true;
             case "localize": LocalizeWindow.Open(AppState.Shared); return true;
             case "numbering": NumberingEditorWindow.Open(AppState.Shared); return true;
+            case "links": MediaWorkspace.Shared.AddLinks(); return true;
+            case "mirror": MirrorWindow.Open(); return true;
+            case "help": HelpWindow.Open(what.Contains(':') ? what.Split(':')[1] : null); return true;
+            case "menu":
+                if (MainWindow.Shared is not { } main || !what.Contains(':') || !Enum.TryParse<MenuGroup>(what.Split(':')[1], true, out var group)) return false;
+                main.Menu.Open(group);
+                return true;
             case "settings":
             {
                 var window = new SettingsWindow();
@@ -852,7 +940,8 @@ public sealed partial class RemoteControlServer
             }
             case "close":
                 foreach (var window in (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Windows.ToList() ?? new())
-                    if (window != MainWindow.Shared && window is SettingsWindow or WebSlideEditorWindow or LocalizeWindow or NumberingEditorWindow) window.Close();
+                    if (window != MainWindow.Shared && window is SettingsWindow or WebSlideEditorWindow or LocalizeWindow or NumberingEditorWindow or MirrorWindow or HelpViewer) window.Close();
+                Prompt.Open?.Close();
                 return true;
             default:
                 return false;

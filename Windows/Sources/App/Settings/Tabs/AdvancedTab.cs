@@ -237,6 +237,9 @@ public sealed class AdvancedTab : IRowSource
 /// Питання з полем вводу (як NSAlert з accessoryView на Mac).
 public static class Prompt
 {
+    /// Останнє відкрите вікно запиту — закрити його службовою командою `window-open close`.
+    public static Window? Open { get; private set; }
+
     /// Кілька рядків (посилання — по одному в рядку): Enter переносить рядок, «Ок» — готово.
     public static void AskLines(string title, string message, Action<string> done)
     {
@@ -260,6 +263,8 @@ public static class Prompt
             Children = { new TextBlock { Text = title, FontWeight = FontWeight.Bold, FontSize = 13 }, Form.Note(message), box, buttons },
         };
         window.Opened += (_, _) => box.Focus();
+        Open = window;
+        window.Closed += (_, _) => { if (Open == window) Open = null; };
         var owner = (Window?)SettingsWindow.Shared ?? MainWindow.Shared;
         if (owner is { IsVisible: true }) window.ShowDialog(owner); else window.Show();
     }
@@ -281,6 +286,8 @@ public static class Prompt
             Margin = new Thickness(20), Spacing = 10,
             Children = { new TextBlock { Text = title, FontWeight = FontWeight.Bold, FontSize = 13 }, Form.Note(message), field, buttons },
         };
+        Open = window;
+        window.Closed += (_, _) => { if (Open == window) Open = null; };
         var owner = (Window?)SettingsWindow.Shared ?? MainWindow.Shared;
         if (owner is { IsVisible: true }) window.ShowDialog(owner); else window.Show();
     }

@@ -165,11 +165,52 @@ public sealed class HTTPStaticServer
             return;
         }
 
-        // «Відео по Wi-Fi» (живий потік HLS) — окрема частина, у Windows-версії її ще немає.
-        if (path == "/wifi" || path.StartsWith("/wifi/", StringComparison.Ordinal))
+        // «Відео по Wi-Fi»: живий потік HLS (H.264/AAC) з кадром залу. Власник: клієнт по
+        // Wi-Fi, повна смуга NDI не проходить, затримка в пару секунд припустима.
+        if (path is "/wifi" or "/wifi/" or "/wifi/index.html")
         {
-            await Respond(stream, 503, "Service Unavailable", "text/plain; charset=utf-8",
-                          Encoding.UTF8.GetBytes(OurWords.T("Видео по Wi-Fi выключено")), headOnly);
+            var hasHlsJs = HlsJsCandidates().Any(File.Exists);
+            await Respond(stream, 200, "OK", "text/html; charset=utf-8", Encoding.UTF8.GetBytes(WebVideoPage.Html(hasHlsJs)), headOnly);
+            return;
+        }
+        if (path == "/wifi/hls.min.js")
+        {
+            if (HlsJsCandidates().FirstOrDefault(File.Exists) is { } file && TryRead(file) is { } script)
+                await Respond(stream, 200, "OK", "application/javascript; charset=utf-8", script, headOnly);
+            else
+                await Respond(stream, 404, "Not Found", "text/plain; charset=utf-8",
+                              Encoding.UTF8.GetBytes(OurWords.T("hls.min.js не положен в папку программы")), headOnly);
+            return;
+        }
+        if (path.StartsWith("/wifi/", StringComparison.Ordinal))
+        {
+            var name = path["/wifi/".Length..];
+            if (HLSStreamRegistry.Provider is not { } provider)
+            {
+                await Respond(stream, 503, "Service Unavailable", "text/plain; charset=utf-8",
+                              Encoding.UTF8.GetBytes(OurWords.T("Видео по Wi-Fi выключено")), headOnly);
+                return;
+            }
+            if (name == "stream.m3u8")
+            {
+                if (provider.Playlist() is { } list)
+                    await Respond(stream, 200, "OK", "application/vnd.apple.mpegurl", Encoding.UTF8.GetBytes(list), headOnly);
+                else
+                    await Respond(stream, 503, "Service Unavailable", "text/plain; charset=utf-8",
+                                  Encoding.UTF8.GetBytes(OurWords.T("Поток ещё не завёлся")), headOnly);
+                return;
+            }
+            if (name == "init.mp4" && provider.InitSegment() is { } init)
+            {
+                await Respond(stream, 200, "OK", "video/mp4", init, headOnly);
+                return;
+            }
+            if ((name.EndsWith(".ts", StringComparison.Ordinal) || name.EndsWith(".m4s", StringComparison.Ordinal)) && provider.Segment(name) is { } piece)
+            {
+                await Respond(stream, 200, "OK", name.EndsWith(".ts", StringComparison.Ordinal) ? "video/mp2t" : "video/iso.segment", piece, headOnly);
+                return;
+            }
+            await Respond(stream, 404, "Not Found", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes("Нет такого куска потока"), headOnly);
             return;
         }
 
@@ -271,6 +312,14 @@ public sealed class HTTPStaticServer
         await stream.WriteAsync(Encoding.UTF8.GetBytes(head.ToString()));
         if (!headOnly) await stream.WriteAsync(body);
         await stream.FlushAsync();
+    }
+
+    /// Де шукати hls.min.js: додаткові теки сервера, потім тека програми (туди його кладе власник).
+    IEnumerable<string> HlsJsCandidates()
+    {
+        foreach (var root in _configuration.ExtraRoots) yield return Path.Combine(root, "hls.min.js");
+        var program = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+        yield return Path.Combine(program, "hls.min.js");
     }
 
     static byte[]? TryRead(string file)

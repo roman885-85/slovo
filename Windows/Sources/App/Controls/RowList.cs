@@ -164,10 +164,14 @@ public sealed class RowList : Grid
         ApplyHeights();
     }
 
+    /// Рядки з висотою за текстом, які треба переміряти (лише вони, а не весь список: на 3400
+    /// рядках повне переміряння коштувало 150 мс на Mac і 335 мс у Windows — замір «основа», 24.11).
+    readonly HashSet<int> _remeasure = new();
+
     public void ReloadRow(int index)
     {
         if (index < 0 || index >= _count) return;
-        if (_measured) { _measuredWidth = -1; _canvas.InvalidateMeasure(); }
+        if (_measured && !_tiles) { _remeasure.Add(index); _canvas.InvalidateMeasure(); }
         _canvas.InvalidateVisual();
     }
 
@@ -231,6 +235,17 @@ public sealed class RowList : Grid
             }
             _topsDirty = true;
         }
+        else if (_measured && _remeasure.Count > 0)
+        {
+            foreach (var i in _remeasure)
+            {
+                if (i < 0 || i >= rows || _source == null || i >= _source.RowCount) continue;
+                var row = _source.RowAt(i);
+                var height = Math.Max(1, new RowLayout(row, width, _style, !row.SingleLine).Height);
+                if (Math.Abs(height - _heights[i]) > 0.01) { _heights[i] = height; _topsDirty = true; }
+            }
+        }
+        _remeasure.Clear();
         if (_topsDirty)
         {
             if (_tops.Length != rows + 1) _tops = new double[rows + 1];

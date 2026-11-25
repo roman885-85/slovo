@@ -261,6 +261,66 @@ public sealed class SettingsStore
 
     public enum ModuleProblem { NotBibleQuote, MySword, UnknownFormat, AlreadyListed }
 
+    /// Лічильники пошуку сумісних текстів — (Label14) і (Label15) оригіналу; читаються з
+    /// головного потоку, поки обхід іде у фоні.
+    public sealed class TextScan
+    {
+        public volatile int Folders, Found;
+    }
+
+    /// (29) Пошук сумісних модулів на диску (scanForTexts Mac): теки з bibleqt.ini (усередину не
+    /// заходимо — там сотні html-файлів однієї книги), файли .vbm, .sqlite3 і лише *.bbl.mybible
+    /// (у MySword в одному розширенні лежать і переклади, і коментарі). Приховані — пропускаються.
+    public static List<ModuleRosterEntry> ScanForTexts(string root, TextScan progress, CancellationToken cancel)
+    {
+        var entries = new List<ModuleRosterEntry>();
+        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System, RecurseSubdirectories = false };
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0 && !cancel.IsCancellationRequested)
+        {
+            var folder = pending.Pop();
+            IEnumerable<string> children;
+            try { children = Directory.EnumerateFileSystemEntries(folder, "*", options).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList(); }
+            catch { continue; }
+            var subfolders = new List<string>();
+            foreach (var path in children)
+            {
+                if (Directory.Exists(path))
+                {
+                    progress.Folders++;
+                    if (File.Exists(Path.Combine(path, "bibleqt.ini")))
+                    {
+                        entries.Add(new ModuleRosterEntry(path, Path.GetFileName(path), true));
+                        progress.Found = entries.Count;
+                    }
+                    else subfolders.Add(path);
+                    continue;
+                }
+                var name = Path.GetFileName(path);
+                var ext = Path.GetExtension(name).TrimStart('.').ToLowerInvariant();
+                if (ext == "mybible" && !name.EndsWith(".bbl.mybible", StringComparison.OrdinalIgnoreCase)) continue;
+                if (ext is "vbm" or "sqlite3" or "mybible")
+                {
+                    entries.Add(new ModuleRosterEntry(path, name, true));
+                    progress.Found = entries.Count;
+                }
+            }
+            // Стек — тож щоб обхід ішов у тому ж порядку, що на Mac (зверху вниз), кладемо навпаки.
+            for (var i = subfolders.Count - 1; i >= 0; i--) pending.Push(subfolders[i]);
+        }
+        return entries;
+    }
+
+    /// TextMessages13: «Так» — замінити список, «Ні» — додати до наявного (applyFoundTexts Mac).
+    public void ApplyFoundTexts(IReadOnlyList<ModuleRosterEntry> found, bool replacing)
+    {
+        var entries = found.Select(e => new ModuleRosterEntry(RelativePath(e.Path), e.Name, true)).ToList();
+        if (replacing) { Settings.Modules = entries; return; }
+        foreach (var entry in entries)
+            if (!Settings.Modules.Any(m => m.Path == entry.Path)) Settings.Modules.Add(entry);
+    }
+
     public ModuleProblem? AddModule(string path)
     {
         if (Problem(path) is { } problem) return problem;

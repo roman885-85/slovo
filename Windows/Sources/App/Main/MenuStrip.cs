@@ -100,9 +100,33 @@ public sealed class MenuStrip : LayoutPanel
         menu.Open(button);
     }
 
+    /// Підпис сполучення в меню. Назви клавіш «Слова» (як у hotkeys.ini VisioBible: «Esc», «Ins»,
+    /// «Del», «PgUp», цифри) Avalonia не знає — без перекладу KeyGesture.Parse кидав виняток, і меню
+    /// «Дії» (пункт «Сховати слайд» — Esc) не відкривалося (знайшов замір верху вікна 24.11).
+    /// Незрозуміле сполучення — меню без підпису, а не виняток.
+    public static KeyGesture? Gesture(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var parts = text.Split('+', StringSplitOptions.TrimEntries);
+        // «Ctrl++» — плюс як клавіша: остання порожня частина.
+        if (text.EndsWith("++")) parts = parts[..^2].Append("+").ToArray();
+        var key = parts[^1] switch
+        {
+            "Esc" => "Escape", "Ins" => "Insert", "Del" => "Delete", "PgUp" => "PageUp", "PgDn" => "PageDown",
+            "BackSpace" or "Backspace" => "Back",
+            { Length: 1 } digit when char.IsDigit(digit[0]) => "D" + digit,
+            var other => other,
+        };
+        var gesture = string.Join("+", parts[..^1].Append(key));
+        try { return KeyGesture.Parse(gesture); }
+        catch (Exception) { return null; }
+    }
+
     public static ContextMenu Build(IReadOnlyList<MenuEntry> entries)
     {
-        var menu = new ContextMenu();
+        // Тема Fluent обмежує меню 456 точками — довгі пункти («Швидкий вибір книги/пісні введенням
+        // її назви…») обрізалися посеред слова. На Mac меню ширшає під найдовший пункт.
+        var menu = new ContextMenu { MaxWidth = 900 };
         var items = new List<Control>();
         foreach (var entry in entries)
         {
@@ -120,7 +144,7 @@ public sealed class MenuStrip : LayoutPanel
             var item = new MenuItem
             {
                 Header = entry.Title,
-                InputGesture = entry.Key != null ? KeyGesture.Parse(entry.Key) : null,
+                InputGesture = Gesture(entry.Key),
                 IsEnabled = entry.Run != null && !entry.IsHeader,
                 Icon = icon,
             };

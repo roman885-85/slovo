@@ -26,6 +26,7 @@ public static class Program
 
     /// Тихий запуск (--quiet-start) — перевірки поруч із людиною за комп'ютером.
     public static bool QuietStart { get; private set; }
+    public static string? LiveBenchReport { get; private set; }
 
     static string? Arg(string[] args, string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
 
@@ -53,6 +54,8 @@ public static class Program
         }
         // Тихий запуск: вікно не забирає клавіатуру, вікно залу не відкривається.
         QuietStart = Array.IndexOf(args, "--quiet-start") >= 0;
+        // Заміри в справжньому вікні (LiveBench): звіт у файл, потім програма закривається.
+        LiveBenchReport = Arg(args, "--live-bench");
 
         var core = Array.IndexOf(args, "--core-check");
         if (core >= 0)

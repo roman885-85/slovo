@@ -43,6 +43,56 @@ public sealed class WebPreviewHost : NativeControlHost
 
     public bool IsReady => _controller != null;
 
+    /// Посилання, які треба відкрити не тут, а у звичайному браузері (довідка: GitHub, eBible…) —
+    /// true: перехід скасовано, адресу віддано назовні. null — усе відкривається тут.
+    public Func<string, bool>? OpenOutside;
+
+    /// Ключі рушія — однакові для всіх видів (одне середовище на теку даних): звук без клацання
+    /// (у вікні залу клацати нікому) і малювання в схованому за краєм екрана вікні — інакше Edge
+    /// вважає його затуленим і перестає малювати, а знімки для панелі, NDI й Wi-Fi застигають.
+    const string BrowserArguments = "--autoplay-policy=no-user-gesture-required --disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows";
+
+    /// Чуже вікно, де зараз стоїть браузер (вікно залу), або нуль — удома.
+    IntPtr _guest;
+    public bool IsAway => _guest != IntPtr.Zero;
+    public string GuestSize => _controller is { } c && _guest != IntPtr.Zero ? $"{c.Bounds.Width}×{c.Bounds.Height}" : "";
+
+    /// Перенести браузер у чуже вікно (вікно залу) на весь його розмір: той самий контролер,
+    /// сторінка не перезавантажується, ролик грає далі (hostWeb на Mac ставить у зал сам вид).
+    public bool MoveTo(IntPtr parent, int width, int height)
+    {
+        if (_controller is not { } controller || parent == IntPtr.Zero || !OperatingSystem.IsWindows()) return false;
+        try
+        {
+            if (_guest != parent) { controller.ParentWindow = parent; _guest = parent; }
+            // Розмір — зі справжньої клієнтської частини вікна: щойно створене вікно Avalonia ще
+            // називає свій розмір за замовчанням (у Windows 11 так вийшло 800×600 у вікні 1786×1004).
+            if (GetClientRect(parent, out var client) && client.Right > client.Left && client.Bottom > client.Top)
+                (width, height) = (client.Right - client.Left, client.Bottom - client.Top);
+            controller.Bounds = new System.Drawing.Rectangle(0, 0, Math.Max(1, width), Math.Max(1, height));
+            controller.IsVisible = true;
+            return true;
+        }
+        catch (Exception error)
+        {
+            Journal.Say("WebView2: не перейшов у вікно залу — " + error.Message);
+            return false;
+        }
+    }
+
+    /// Повернути браузер у своє вікно.
+    public void ReturnHome()
+    {
+        if (_guest == IntPtr.Zero) return;
+        _guest = IntPtr.Zero;
+        if (_controller is not { } controller || _hwnd == IntPtr.Zero) return;
+        try { controller.ParentWindow = _hwnd; } catch { }
+        Resize();
+    }
+
+    /// Процес рушія WebView2 (браузерний) — перевірці звуку: чи він у дереві процесу «Слова».
+    public int BrowserProcessId { get { try { return _controller != null ? (int)_controller.CoreWebView2.BrowserProcessId : 0; } catch { return 0; } } }
+
     /// Чи є в цій системі рушій WebView2 (лише Windows).
     public static string? RuntimeVersion()
     {
@@ -106,10 +156,15 @@ public sealed class WebPreviewHost : NativeControlHost
             // Дані браузера — у локальній теці користувача: поруч із .exe писати не можна,
             // а теку даних «Слова» переносять між комп'ютерами.
             var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Slovo", "WebView2", "data");
-            var environment = await CoreWebView2Environment.CreateAsync(null, data);
+            // Одне середовище на теку даних: параметри мусять бути однакові в усіх видах програми.
+            // Звук без клацання — для вбудованого програвача YouTube (у вікні залу клацати нікому).
+            var environment = await CoreWebView2Environment.CreateAsync(null, data,
+                new CoreWebView2EnvironmentOptions(BrowserArguments));
             if (_closed) return;
             var controller = await environment.CreateCoreWebView2ControllerAsync(hwnd);
             if (_closed) { controller.Close(); return; }
+            // Звук сторінок (вбудований YouTube) грає процес рушія — захоплення звуку програми бере і його.
+            try { AppAudioCapture.WebViewProcessId = (int)controller.CoreWebView2.BrowserProcessId; } catch { }
             _controller = controller;
             controller.DefaultBackgroundColor = System.Drawing.Color.Black;
             var settings = controller.CoreWebView2.Settings;
@@ -119,6 +174,8 @@ public sealed class WebPreviewHost : NativeControlHost
             settings.IsZoomControlEnabled = false;
             settings.AreBrowserAcceleratorKeysEnabled = false;
             controller.CoreWebView2.NavigationCompleted += (_, _) => Loaded?.Invoke();
+            controller.CoreWebView2.NavigationStarting += (_, e) => { if (OpenOutside?.Invoke(e.Uri) == true) e.Cancel = true; };
+            controller.CoreWebView2.NewWindowRequested += (_, e) => { if (OpenOutside != null) { e.Handled = true; OpenOutside(e.Uri); } };
             controller.CoreWebView2.WebMessageReceived += (_, e) =>
             {
                 string? text = null;
@@ -155,6 +212,16 @@ public sealed class WebPreviewHost : NativeControlHost
         else _pending = url;
     }
 
+    /// Знімок того, що зараз у виді (JPEG) — кадр вбудованого програвача YouTube для
+    /// панелі, NDI й «Відео по Wi-Fi» (takeSnapshot на Mac). null — виду ще немає.
+    public async Task<byte[]?> Capture()
+    {
+        if (_controller is not { } controller) return null;
+        using var stream = new MemoryStream();
+        await controller.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Jpeg, stream);
+        return stream.ToArray();
+    }
+
     public void Run(string script)
     {
         if (_controller is not { } controller || script.Length == 0) return;
@@ -164,7 +231,7 @@ public sealed class WebPreviewHost : NativeControlHost
     /// Підігнати браузер під дочірнє вікно (Avalonia міняє його розмір сама).
     public void Resize()
     {
-        if (_controller is not { } controller || _hwnd == IntPtr.Zero || !OperatingSystem.IsWindows()) return;
+        if (_controller is not { } controller || _hwnd == IntPtr.Zero || !OperatingSystem.IsWindows() || _guest != IntPtr.Zero) return;
         if (!GetClientRect(_hwnd, out var rect)) return;
         controller.Bounds = new System.Drawing.Rectangle(0, 0, Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top));
     }

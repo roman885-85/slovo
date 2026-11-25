@@ -1,4 +1,4 @@
-# Знімок головного вікна тестового «Слова» у ВМ: вивести наперед і зняти його прямокутник
+﻿# Знімок головного вікна тестового «Слова» у ВМ: вивести наперед і зняти його прямокутник
 # (вікно консолі, через яку йдуть команди, інакше закриває програму). Ім'я файла — $name.
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @'
@@ -33,7 +33,8 @@ public static class W {
 '@
 [W]::SetProcessDPIAware() | Out-Null
 if (-not $title) { $title = 'Слово' }
-$p = Get-Process | Where-Object { $_.Path -like '*slovo-test-backing*' } | Select-Object -First 1
+if (-not $proc) { $proc = 'slovo-test-backing' }   # тека тестової копії (частина шляху до Slovo.exe)
+$p = Get-Process | Where-Object { $_.Path -like "*$proc*" } | Select-Object -First 1
 if (-not $p) { 'no process'; return }
 $h = [W]::Find([uint32]$p.Id, $title)
 if ($h -eq [IntPtr]::Zero) { "no window '$title'"; return }

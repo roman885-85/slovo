@@ -56,6 +56,80 @@ public sealed unsafe class NdiOutput
 
     public bool IsRunning => _sender != IntPtr.Zero;
 
+    // ── Звук (syncAudio / submitAudio Mac) ─────────────────────────────────
+    //  Звук програми (AppAudioCapture) іде в те саме джерело, що й картинка, — коли
+    //  трансляція йде, звук дозволено «Параметрами» (NdiSendAudio) і щось грає
+    //  (плеєр або фонограма; audioWanted на Mac). Порції відправляються одразу з
+    //  потоку захвату: NDI дозволяє слати звук і картинку з різних потоків.
+
+    int _frameGeneration;
+    AppAudioCapture? _audio;
+    bool _sendsAudio = true, _audioWanted;
+    readonly object _sendGate = new();
+    long _audioIn, _audioSent, _audioNoSender;
+    /// Для перевірок: звук іде й без того, щоб щось грало.
+    public static bool ForceAudio;
+    public string AudioState { get; private set; } = "";
+    public long AudioIn => Interlocked.Read(ref _audioIn);
+    public long AudioSent => Interlocked.Read(ref _audioSent);
+    public long AudioNoSender => Interlocked.Read(ref _audioNoSender);
+    public long AudioCaptured => _audio?.Delivered ?? 0;
+
+    void SetAudioState(string text)
+    {
+        if (AudioState == text) return;
+        AudioState = text;
+        StatusChanged?.Invoke();
+    }
+
+    public void SetAudioWanted(bool wanted)
+    {
+        if (_audioWanted == wanted) return;
+        _audioWanted = wanted;
+        SyncAudio();
+    }
+
+    void SyncAudio()
+    {
+        var wanted = IsRunning && _sendsAudio && (_audioWanted || ForceAudio);
+        if (wanted)
+        {
+            if (_audio != null) return;
+            var capture = new AppAudioCapture();
+            capture.OnState = text => Dispatcher.UIThread.Post(() => SetAudioState(text.StartsWith("звук: ") && text.Contains('(') ? text : T(text)));
+            capture.OnSamples = SubmitAudio;
+            _audio = capture;
+            SetAudioState(T("звук: запускается…"));
+            capture.Start();
+        }
+        else
+        {
+            _audio?.Stop();
+            _audio = null;
+            SetAudioState(!_sendsAudio ? T("звук: выключен настройкой") : "");
+        }
+    }
+
+    /// Порція звуку, площинна (канал за каналом). Будь-який потік.
+    public void SubmitAudio(float[] planar, int channels, int samples, int sampleRate)
+    {
+        Interlocked.Increment(ref _audioIn);
+        lock (_sendGate)
+        {
+            if (_sender == IntPtr.Zero) { Interlocked.Increment(ref _audioNoSender); return; }
+            fixed (float* data = planar)
+            {
+                var frame = new NdiRuntime.AudioFrame
+                {
+                    SampleRate = sampleRate, Channels = channels, Samples = samples, Timecode = NdiRuntime.TimecodeSynthesize,
+                    Data = (IntPtr)data, ChannelStride = samples * sizeof(float),
+                };
+                NdiRuntime.SendAudio(_sender, &frame);
+            }
+        }
+        Interlocked.Increment(ref _audioSent);
+    }
+
     /// Застосувати «Параметри → Медіа → NDI»: увімкнути, вимкнути, змінити кадр.
     public void Apply(ProgramOptions options)
     {
@@ -80,12 +154,14 @@ public sealed unsafe class NdiOutput
             _fps = Math.Clamp(fps, 1, 60);
             _transparent = options.NdiTransparentBackground;
             _sendVideo = options.NdiSendVideo;
+            _sendsAudio = options.NdiSendAudio ?? true;
             if (changed) { _previous?.Dispose(); _previous = null; }
             _wifiHeight = options.NdiWiFiHeight is 540 or 360 or 270 ? options.NdiWiFiHeight.Value : 360;
             _wifiFps = Math.Clamp(options.NdiWiFiFrameRate ?? 15, 1, 30);
         }
         _wifiWanted = (options.NdiWiFiEnabled ?? false) || ForceWiFi;
         if (!IsRunning) Start();
+        SyncAudio();
         ContentChanged();
     }
 
@@ -95,6 +171,10 @@ public sealed unsafe class NdiOutput
         _hooked = true;
         var state = AppState.Shared;
         state.MediaScreenChanged += () => _videoOnScreen = state.Media.IsVideoOnScreen;
+        // Звук потрібен, поки щось грає — плеєр або фонограма (audioWanted Mac).
+        void Playing() => Dispatcher.UIThread.Post(() => SetAudioWanted(state.Media.IsPlaying || (state.Backing?.IsPlaying ?? false)));
+        state.Media.Changed += Playing;
+        if (state.Backing is { } backing) backing.Changed += Playing;
         state.LiveChanged += ContentChanged;
         Signals.Shared.Subscribe(Signals.Kind.Live, ContentChanged);
     }
@@ -129,17 +209,23 @@ public sealed unsafe class NdiOutput
 
     public void Stop()
     {
+        // Звук — першим: потік захвату шле в те саме джерело.
+        _audio?.Stop();
+        _audio = null;
         if (_pump is { } pump)
         {
             _stopping = true;
             pump.Join(2000);
             _pump = null;
         }
-        if (_sender != IntPtr.Zero)
+        lock (_sendGate)
         {
-            NdiRuntime.SendDestroy(_sender);
-            _sender = IntPtr.Zero;
-            Journal.Say($"NDI: джерело «{SourceName}» закрито");
+            if (_sender != IntPtr.Zero)
+            {
+                NdiRuntime.SendDestroy(_sender);
+                _sender = IntPtr.Zero;
+                Journal.Say($"NDI: джерело «{SourceName}» закрито");
+            }
         }
         lock (_gate)
         {
@@ -168,17 +254,23 @@ public sealed unsafe class NdiOutput
             if (!IsRunning || MainWindow.Shared?.Output is not { } driver) return;
             int width, height; bool transparent;
             lock (_gate) { width = _width; height = _height; transparent = _transparent; }
-            var image = driver.NdiFrame(width, height, transparent);
-            if (image == null) return;
-            lock (_gate)
+            var generation = ++_frameGeneration;
+            var fade = Math.Clamp(AppState.Shared.Style.TransitionDuration, 0, 2);
+            // Малюється у фоні (OutputDriver.RenderOutputFrame): головний потік не стоїть.
+            driver.RenderOutputFrame("ndi", generation, width, height, transparent, (image, done) =>
             {
-                _previous?.Dispose();
-                _previous = _current;
-                _current = image;
-                _fadeStartTicks = Environment.TickCount64;
-                // Плавна зміна, як у залі (на Mac — змішування кадрів SlideFrameRenderer+Blend).
-                _fadeSeconds = Math.Clamp(AppState.Shared.Style.TransitionDuration, 0, 2);
-            }
+                if (image == null) return;
+                if (done != _frameGeneration || !IsRunning) { image.Dispose(); return; }
+                lock (_gate)
+                {
+                    _previous?.Dispose();
+                    _previous = _current;
+                    _current = image;
+                    _fadeStartTicks = Environment.TickCount64;
+                    // Плавна зміна, як у залі (на Mac — змішування кадрів SlideFrameRenderer+Blend).
+                    _fadeSeconds = fade;
+                }
+            });
         }, DispatcherPriority.Background);
     }
 
@@ -323,6 +415,58 @@ public sealed unsafe class NdiOutput
     });
 
     // --- Перевірка: прийняти власне джерело на цьому ж комп'ютері --------------------
+
+    /// Знайти своє джерело й прийняти звук: скільки порцій і відліків дійшло, який рівень
+    /// (середньоквадратичний, дБ відносно повної шкали) — щоб відрізнити звук від тиші.
+    public static string ReceiveAudioCheck(string name, int seconds = 8)
+    {
+        if (!NdiRuntime.IsAvailable) return NdiRuntime.Problem ?? "NDI";
+        var find = new NdiRuntime.FindCreate { ShowLocalSources = true };
+        var finder = NdiRuntime.FindCreateFn(&find);
+        if (finder == IntPtr.Zero) return "find_create";
+        try
+        {
+            var until = DateTime.Now.AddSeconds(seconds);
+            NdiRuntime.Source? mine = null;
+            uint count = 0;
+            while (DateTime.Now < until && mine == null)
+            {
+                NdiRuntime.FindWait(finder, 1000);
+                var sources = NdiRuntime.FindSources(finder, &count);
+                for (var i = 0; i < count; i++)
+                    if ((System.Runtime.InteropServices.Marshal.PtrToStringUTF8(sources[i].Name) ?? "").EndsWith("(" + name + ")")) mine = sources[i];
+            }
+            if (mine is not { } source) return $"джерела «{name}» не знайдено (джерел у мережі: {count})";
+            var create = new NdiRuntime.RecvCreate { Source = source, ColorFormat = 0, Bandwidth = 100, AllowFields = false };
+            var receiver = NdiRuntime.RecvCreateFn(&create);
+            if (receiver == IntPtr.Zero) return "recv_create";
+            try
+            {
+                long frames = 0, samples = 0; double sum = 0; int rate = 0, channels = 0;
+                var deadline = DateTime.Now.AddSeconds(seconds);
+                while (DateTime.Now < deadline)
+                {
+                    NdiRuntime.VideoFrame video;
+                    NdiRuntime.AudioFrame audio;
+                    var kind = NdiRuntime.RecvCaptureAudio(receiver, &video, &audio, IntPtr.Zero, 500);
+                    if (kind == 1) { NdiRuntime.RecvFreeVideo(receiver, &video); continue; }
+                    if (kind != 2) continue;
+                    frames++; rate = audio.SampleRate; channels = audio.Channels;
+                    var data = (float*)audio.Data;
+                    for (var i = 0; i < audio.Samples; i++) { var v = data[i]; sum += v * v; }
+                    samples += audio.Samples;
+                    NdiRuntime.RecvFreeAudio(receiver, &audio);
+                    if (frames >= 150) break;
+                }
+                if (frames == 0) return "звуку не дочекалися";
+                var rms = Math.Sqrt(sum / Math.Max(1, samples));
+                var db = rms > 0 ? 20 * Math.Log10(rms) : double.NegativeInfinity;
+                return $"порцій {frames}, відліків {samples} ({rate} Гц, каналів {channels}), рівень {(double.IsInfinity(db) ? "тиша" : db.ToString("0.0") + " дБFS")}";
+            }
+            finally { NdiRuntime.RecvDestroy(receiver); }
+        }
+        finally { NdiRuntime.FindDestroy(finder); }
+    }
 
     /// Знайти своє джерело й прийняти кадр (як самоперевірка Mac). Опис того, що дійшло.
     public static string ReceiveCheck(string name, int seconds = 8, string? savePath = null)

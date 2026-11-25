@@ -45,6 +45,8 @@ public class QuickField : LayoutPanel
             TextWrapping = TextWrapping.NoWrap,
             FontFamily = UiFont.Family,
         };
+        // Рамку малює _frame; тло й обідок теми — прозорі в кожному стані (FieldLook).
+        Box.Classes.Add(FieldLook.Bare);
         Children.Add(_frame);
         Children.Add(Box);
         // TextChanging, а не TextChanged: TextChanged Avalonia шле через чергу, уже після

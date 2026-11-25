@@ -30,6 +30,9 @@ public sealed class SlideFrameView : Panel
 
     public bool IsLive { get => _live; set { if (_live == value) return; _live = value; _frame.InvalidateVisual(); } }
 
+    /// Кут рамки: у нижньому ряду — як у решти частин, в окремому вікні дзеркала — 0 (як на Mac).
+    public double Corner { get; init; } = BottomMetrics.Corner;
+
     /// Розмір кадру в пікселях для черги малювання.
     public (int Width, int Height) PixelSize()
     {
@@ -51,10 +54,10 @@ public sealed class SlideFrameView : Panel
             {
                 c.BeginFigure(b.TopLeft, true); c.LineTo(b.TopRight); c.LineTo(b.BottomRight); c.LineTo(b.BottomLeft); c.EndFigure(true);
             }
-            var hole = new RectangleGeometry(b, BottomMetrics.Corner, BottomMetrics.Corner);
+            var hole = new RectangleGeometry(b, _owner.Corner, _owner.Corner);
             g.DrawGeometry(Palette.Brush(Palette.WindowBackground), null, new CombinedGeometry(GeometryCombineMode.Exclude, outer, hole));
             g.DrawRectangle(null, new Pen(Palette.Brush(live ? Palette.SystemRed : Palette.Separator), live ? 2 : 1),
-                            new RoundedRect(b.Deflate(live ? 1 : 0.5), BottomMetrics.Corner));
+                            new RoundedRect(b.Deflate(live ? 1 : 0.5), _owner.Corner));
         }
     }
 }

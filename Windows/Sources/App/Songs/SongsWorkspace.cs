@@ -359,6 +359,23 @@ public sealed class SongsWorkspace
         ApplySongSelection(true);
     }
 
+    /// Для замірів (Bench, як typeSongQuery на Mac): набрати текст у полі швидкого вибору
+    /// пісні — тим самим шляхом, що й клавіатура.
+    public void TypeSongQuery(string text)
+    {
+        _songQuick.Field.Text = text;
+        Model.SongQuery = text;
+        ApplyFilter(true);
+        Sync();
+    }
+
+    /// Для замірів (measureFilterOnly на Mac): лише відбір назв, без списку й вікна.
+    public int FilterOnly(string text) => _index.Filter(text, null)?.Count ?? -1;
+
+    /// Указник назв збірника розібрано у фоні (songIndexIsReady на Mac).
+    public bool SongIndexIsReady => _index.IsReady;
+    public int HurriedFolds => _index.HurriedFolds;
+
     void ApplyFilter(bool reload)
     {
         var key = $"{_index.Key}#{(Model.GroupIndex?.ToString() ?? "-")}#{Model.SongQuery}#{Model.ShowsCatalogNumber}#{SongRows.TitleFormat.ShowsNumber}";

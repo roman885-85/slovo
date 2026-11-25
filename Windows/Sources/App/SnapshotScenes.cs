@@ -37,6 +37,9 @@ public static class SnapshotScenes
             return NumberingRuleSheet.Ask(new Window(), model, draft, () => { });
         }, new Size(520, 330)));
         Snapshot.Scenes.Add(("списки", ListsDemo, new Size(900, 420)));
+        // Поля введення всіх видів — із вставленим текстом; ключ --focus N ставить курсор у N-те
+        // (власник 24.11: «часть окон и меню в которых вставляется текст сливаются с фоном»).
+        Snapshot.Scenes.Add(("поля", FieldsDemo, new Size(640, 560)));
         // Як головне вікно Mac у знімку туру (1920×1074) — плюс рядок меню, що на Windows у вікні.
         Snapshot.Scenes.Add(("заставка", () => Splash.MakeForCheck("Открываю библиотеку переводов…"), new Size(460, 260)));
         Snapshot.Scenes.Add(("головне", () => new MainWindow(AppState.Shared), new Size(1920, 1074 + RootView.Metrics.MenuBar)));
@@ -100,5 +103,54 @@ public static class SnapshotScenes
         bookList.Margin = new Thickness(0, 0, 1, 0); chapterList.Margin = new Thickness(0, 0, 1, 0);
         grid.Children.Add(bookList); grid.Children.Add(chapterList); grid.Children.Add(versesList);
         return new Window { Content = grid, Title = "списки" };
+    }
+
+    /// Вітрина полів введення: швидке поле, поле «Параметрів», поле вікна посилань, редактор
+    /// слів пісні, поле розмітки веб-слайда, поле пошуку в Тексті. Курсор — у поле з номером
+    /// `--focus N` (з одиниці), щоб побачити, як тема малює поле у фокусі.
+    static Window FieldsDemo()
+    {
+        var links = "https://www.youtube.com/watch?v=M07ezmR1FII\nhttps://youtu.be/IjjWtx2At1U";
+        var quick = new QuickField(11) { Height = 22, Width = 300 };
+        quick.Text = "Ів 3:16";
+        var form = new FormField(13) { Height = 24, Width = 120 };
+        form.Text = "350";
+        var lines = new TextBox
+        {
+            AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, Height = 70, FontSize = 12, FontFamily = UiFont.Family, Text = links,
+            Background = Palette.Brush(Palette.TextBackground), Foreground = Palette.Brush(Palette.Label),
+            BorderBrush = Palette.Brush(Palette.Separator), BorderThickness = new Thickness(1), Padding = new Thickness(4),
+        };
+        var lyrics = new LyricsEditor("Куплет 1\nВеликий Бог, коли на світ дивлюся я", true, AppState.Shared.SongPalette) { Height = 70 };
+        var markup = new TextBox
+        {
+            AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 60, Text = "<div class=\"slide\">{{text}}</div>",
+            FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace"), FontSize = 12,
+            BorderThickness = new Thickness(0), Padding = new Thickness(4),
+        };
+        var plain = new TextBox { Text = "звичайне поле теми", Width = 300 };
+        var fields = new Control[] { quick, form, lines, lyrics.Box, markup, plain };
+        var panel = new StackPanel { Margin = new Thickness(16), Spacing = 10 };
+        panel.Children.Add(new TextBlock { Text = "1 · швидке поле (QuickField)", FontSize = 11 });
+        panel.Children.Add(quick);
+        panel.Children.Add(new TextBlock { Text = "2 · поле «Параметрів» (FormField)", FontSize = 11 });
+        panel.Children.Add(form);
+        panel.Children.Add(new TextBlock { Text = "3 · вікно «Додати посилання» (TextBox)", FontSize = 11 });
+        panel.Children.Add(lines);
+        panel.Children.Add(new TextBlock { Text = "4 · слова пісні (LyricsEditor)", FontSize = 11 });
+        panel.Children.Add(lyrics);
+        panel.Children.Add(new TextBlock { Text = "5 · розмітка веб-слайда (TextBox теми)", FontSize = 11 });
+        panel.Children.Add(markup);
+        panel.Children.Add(new TextBlock { Text = "6 · звичайне поле теми", FontSize = 11 });
+        panel.Children.Add(plain);
+        var window = new Window { Title = "Поля", Background = Palette.Brush(Palette.WindowBackground), Content = panel };
+        var args = Environment.GetCommandLineArgs();
+        var at = Array.IndexOf(args, "--focus");
+        if (at >= 0 && at + 1 < args.Length && int.TryParse(args[at + 1], out var n) && n >= 1 && n <= fields.Length)
+        {
+            var target = fields[n - 1] is QuickField q ? q.Box : fields[n - 1];
+            window.Opened += (_, _) => { window.Activate(); target.Focus(); };
+        }
+        return window;
     }
 }

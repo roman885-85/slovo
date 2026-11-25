@@ -43,7 +43,22 @@ public sealed class PointerDriver
         focus.CenterButton.Pressed = SlideFocus.Shared.Center;
         ShowFocus();
 
-        var mirror = bottom.Mirror;
+        AttachMouse(bottom.Mirror);
+        // Дзеркало окремим вікном («⤢») — та сама указка й те саме наближення мишею.
+        MirrorWindow.Changed += () =>
+        {
+            if (MirrorWindow.Shown is { } window && !_attached.Contains(window.View)) AttachMouse(window.View);
+            Apply();
+        };
+        Apply();
+    }
+
+    readonly HashSet<SlideFrameView> _attached = new();
+
+    /// Миша по дзеркалу: натиснув і веде — указка; коліщатко — наближення; середня кнопка — уся сторінка.
+    void AttachMouse(SlideFrameView mirror)
+    {
+        _attached.Add(mirror);
         mirror.Cursor = new Cursor(StandardCursorType.Cross);
         mirror.PointerPressed += (_, e) =>
         {
@@ -52,11 +67,11 @@ public sealed class PointerDriver
             if (!point.Properties.IsLeftButtonPressed) return;
             _holding = true;
             e.Pointer.Capture(mirror);
-            if (SlideFocus.Shared.IsOn && Fraction(point.Position) is { } spot) SlideFocus.Shared.MoveToShown(spot.X, spot.Y);
-            PointAt(point.Position);
+            if (SlideFocus.Shared.IsOn && Fraction(point.Position, mirror) is { } spot) SlideFocus.Shared.MoveToShown(spot.X, spot.Y);
+            PointAt(point.Position, mirror);
             e.Handled = true;
         };
-        mirror.PointerMoved += (_, e) => { if (_holding) PointAt(e.GetPosition(mirror)); };
+        mirror.PointerMoved += (_, e) => { if (_holding) PointAt(e.GetPosition(mirror), mirror); };
         mirror.PointerReleased += (_, e) =>
         {
             if (!_holding) return;
@@ -68,28 +83,27 @@ public sealed class PointerDriver
         {
             var steps = e.Delta.Y;
             if (Math.Abs(steps) < 0.0001) return;
-            Magnify(Math.Pow(1.18, steps), e.GetPosition(mirror));
+            Magnify(Math.Pow(1.18, steps), e.GetPosition(mirror), mirror);
             e.Handled = true;
         };
-        Apply();
     }
 
     /// Точка в частках кадру (кадр у виді може мати поля).
-    (double X, double Y)? Fraction(Point p)
+    static (double X, double Y)? Fraction(Point p, SlideFrameView view)
     {
-        var frame = _bottom.Mirror.Surface.FrameRect;
+        var frame = view.Surface.FrameRect;
         if (frame.Width <= 0 || frame.Height <= 0) return null;
         return (Math.Min(1, Math.Max(0, (p.X - frame.X) / frame.Width)), Math.Min(1, Math.Max(0, (p.Y - frame.Y) / frame.Height)));
     }
 
-    void PointAt(Point p)
+    static void PointAt(Point p, SlideFrameView view)
     {
-        if (Fraction(p) is { } spot) SlidePointer.Shared.Move(spot.X, spot.Y, SlidePointer.MouseSource);
+        if (Fraction(p, view) is { } spot) SlidePointer.Shared.Move(spot.X, spot.Y, SlidePointer.MouseSource);
     }
 
-    void Magnify(double factor, Point at)
+    static void Magnify(double factor, Point at, SlideFrameView view)
     {
-        if (Fraction(at) is not { } spot) return;
+        if (Fraction(at, view) is not { } spot) return;
         var focus = SlideFocus.Shared;
         var now = focus.IsOn ? focus.Current.Zoom : SlideFocus.MinZoom;
         var wanted = now * factor;
@@ -104,6 +118,7 @@ public sealed class PointerDriver
         var pointer = SlidePointer.Shared;
         var look = pointer.Current;
         _bottom.Mirror.Surface.ShowPointer(pointer.Point, look);
+        MirrorWindow.Shown?.View.Surface.ShowPointer(pointer.Point, look);
         ProjectionController.Shared.Surface?.ShowPointer(look.ToProjector ? pointer.Point : null, look);
         ShowBar(pointer.BaseLook);
     }

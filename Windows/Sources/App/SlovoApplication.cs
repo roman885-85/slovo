@@ -21,16 +21,12 @@ public sealed class SlovoApplication : Application
     {
         Name = "Слово";
         Styles.Add(new FluentTheme());
-        // Поля вводу: прозорі, без обідка й підкреслення в будь-якому стані.
-        foreach (var key in new[] { "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused",
-                                    "TextControlBackgroundDisabled", "TextControlBorderBrush", "TextControlBorderBrushPointerOver",
-                                    "TextControlBorderBrushFocused", "TextControlBorderBrushDisabled" })
-            Resources[key] = Brushes.Transparent;
-        Resources["TextControlBorderThemeThickness"] = new Thickness(0);
-        Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
-        Resources["TextControlThemeMinHeight"] = 0.0;
-        Resources["TextControlThemePadding"] = new Thickness(0);
-        Resources["TextControlSelectionHighlightColor"] = new SolidColorBrush(Color.FromRgb(0x39, 0x8E, 0xFF));
+        // Поля введення — як NSTextField на Mac: своє тло й тонкий обідок у КОЖНОМУ стані, у фокусі теж.
+        // Раніше тут усім полям програми ставилося прозоре тло без обідка (задумано для швидких полів,
+        // що малюють рамку самі), — і поле розмітки веб-слайда, а в фокусі й поле вікна «Додати
+        // посилання», зливалися з вікном (власник 24.11: «часть окон и меню в которых вставляется
+        // текст сливаются с фоном»). Тепер прозорі лише поля з класом «bare» — див. Slovo.App.FieldLook.
+        Slovo.App.FieldLook.Install(this);
         ActualThemeVariantChanged += (_, _) => Slovo.App.Palette.NotifyChanged();
         // Мова інтерфейсу — до того, як збудовано хоч одне вікно.
         Slovo.App.Languages.Load(Slovo.Core.DataHome.Folder);
@@ -58,6 +54,12 @@ public sealed class SlovoApplication : Application
             if (!Slovo.App.AppState.Shared.IsLoadingLibrary) Slovo.App.Splash.Hide();
             // Свій yt-dlp — свіжий: раз на добу, у фоні (вимикається в «Параметри → Медіа»).
             if (!Slovo.Program.QuietStart) Slovo.App.YouTubeToolUpdater.CheckInBackground();
+            // Сторож головного потоку (як на Mac): затримки від 1 с — у журнал.
+            Slovo.App.MainThreadWatchdog.Shared.Start();
+            // Захопленню звуку програми: чи грає щось у самому процесі (не рушій WebView2).
+            Slovo.App.AppAudioCapture.InProcessPlaying = () =>
+                (Slovo.App.AppState.Shared.Media.IsPlaying && !Slovo.App.AppState.Shared.Media.IsYouTubeEmbed) || Slovo.App.AppState.Shared.Backing.IsPlaying;
+            if (Slovo.Program.LiveBenchReport is { } report) Slovo.App.LiveBench.Start(report);
         }
         base.OnFrameworkInitializationCompleted();
     }
