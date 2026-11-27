@@ -1020,6 +1020,7 @@ extension Diagnostics {
             checks.append(Check(area: "Показ", name: "PDF відкривається і малюється",
                                 status: .skipped, detail: "не зібрався пробний PDF"))
         }
+        checks.append(pdfFillsFrame(in: folder))
 
         // Список плеера — на фильмах, а не на картинках: картинки в него
         // теперь не берутся вовсе, у них свой режим.
@@ -1120,6 +1121,75 @@ extension Diagnostics {
                       detail: "PageDown і PageUp: \(stepped.map(String.init).joined(separator: ", ")); "
                           + "у зал: \(live.allSatisfy { $0 } ? "так" : "ні"); "
                           + "кнопка затемнення спрацювала \(blackouts) рази з двох")]
+    }
+
+    /// Сторінка PDF — на весь кадр, а не посередині в білій рамці, і з поворотом сторінки.
+    /// 27.11 (1.4.4): експорт PowerPoint (960×540 пт) займав у залі половину кадру —
+    /// `getDrawingTransform` лише зменшує. Сторінка тут — ліва половина червона, права синя:
+    /// без повороту червоне ліворуч, з `/Rotate 90` (за годинниковою) — згори.
+    static func pdfFillsFrame(in folder: URL) -> Check {
+        /// Найменший PDF руками: одна сторінка, свій розмір і поворот.
+        func page(width: Int, height: Int, rotate: Int) -> Data {
+            let half = width / 2
+            let content = "1 0 0 rg 0 0 \(half) \(height) re f 0 0 1 rg \(half) 0 \(width - half) \(height) re f"
+            let objects = [
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 \(width) \(height)] /Rotate \(rotate) /Contents 4 0 R /Resources << >> >>",
+                "<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream",
+            ]
+            var out = "%PDF-1.4\n"
+            var offsets: [Int] = []
+            for (number, body) in objects.enumerated() {
+                offsets.append(out.utf8.count)
+                out += "\(number + 1) 0 obj\n\(body)\nendobj\n"
+            }
+            let xref = out.utf8.count
+            out += "xref\n0 \(objects.count + 1)\n0000000000 65535 f \n"
+            for offset in offsets { out += String(format: "%010d 00000 n \n", offset) }
+            out += "trailer\n<< /Size \(objects.count + 1) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n"
+            return Data(out.utf8)
+        }
+        /// Колір точки (x, y від верхнього лівого кута): «червоний», «синій», «білий» чи числа.
+        func colour(_ image: CGImage, _ x: Int, _ y: Int) -> String {
+            guard let dot = image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)),
+                  let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  let data = context.data else { return "—" }
+            context.draw(dot, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let p = data.bindMemory(to: UInt8.self, capacity: 4)
+            let (r, g, b) = (Int(p[0]), Int(p[1]), Int(p[2]))
+            if r > 200, g < 80, b < 80 { return "червоний" }
+            if b > 200, r < 80, g < 80 { return "синій" }
+            if r > 230, g > 230, b > 230 { return "білий" }
+            return "\(r),\(g),\(b)"
+        }
+        var lines: [String] = []
+        var faults: [String] = []
+        for (name, width, height, rotate) in [("рівна", 960, 540, 0), ("повернута", 400, 300, 90)] {
+            let url = folder.appendingPathComponent("сторінка-\(name).pdf")
+            try? page(width: width, height: height, rotate: rotate).write(to: url)
+            let deck = ShowModel(kind: .presentation)
+            deck.open([url])
+            deck.select(0)
+            guard let image = deck.currentImage else {
+                faults.append("\(name): не намалювалася")
+                continue
+            }
+            let (w, h) = (image.width, image.height)
+            let corner = colour(image, 2, 2)
+            let left = colour(image, 4, h / 2), right = colour(image, w - 5, h / 2)
+            let top = colour(image, w / 2, 4), bottom = colour(image, w / 2, h - 5)
+            lines.append("\(name) \(width)×\(height) пт → \(w)×\(h): кут \(corner), ліворуч \(left), праворуч \(right), згори \(top), знизу \(bottom)")
+            if h != 1080 { faults.append("\(name): висота \(h), чекали 1080") }
+            if corner == "білий" { faults.append("\(name): біла рамка") }
+            if rotate == 0, !(left == "червоний" && right == "синій") { faults.append("\(name): ліворуч/праворуч не ті") }
+            if rotate == 90, !(top == "червоний" && bottom == "синій" && w * 4 == h * 3) { faults.append("\(name): поворот не той") }
+        }
+        return Check(area: "Показ", name: "Сторінка PDF — на весь кадр і з поворотом",
+                     status: faults.isEmpty ? .ok : .failed,
+                     detail: lines.joined(separator: "; ") + (faults.isEmpty ? "" : " — НЕ ТАК: " + faults.joined(separator: "; ")))
     }
 
     /// Пробный PDF своими руками — чужих файлов в самопроверке быть не должно.

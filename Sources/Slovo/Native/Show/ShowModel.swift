@@ -462,13 +462,27 @@ final class ShowModel {
 
 private extension CGContext {
 
-    /// Вписать страницу PDF в кадр — с её собственным поворотом.
+    /// Вписать страницу PDF в кадр — с её собственным поворотом, и в бо́льший кадр теж.
+    ///
+    /// Раніше тут був `getDrawingTransform`, а він лише зменшує сторінку й ніколи не
+    /// збільшує: сторінка, нижча за кадр (1080), лягала посередині в натуральну величину, у
+    /// білій рамці. Експорт PowerPoint (960×540 пт) займав половину залу, 1280×720 — дві
+    /// третини. Тепер масштаб — у кадр в обидва боки, поворот сторінки (`/Rotate`, за
+    /// годинниковою стрілкою) — той самий, вміст за межами `cropBox` не малюється.
     func drawPDFPage(_ page: CGPDFPage, fitting size: CGSize) {
+        let box = page.getBoxRect(.cropBox)
+        guard box.width > 0, box.height > 0 else { return }
+        let angle = ((Int(page.rotationAngle) % 360) + 360) % 360
+        let turned = angle % 180 != 0
+        let shownWidth = turned ? box.height : box.width
+        let shownHeight = turned ? box.width : box.height
+        let scale = min(size.width / shownWidth, size.height / shownHeight)
         saveGState()
-        let transform = page.getDrawingTransform(.cropBox,
-                                                 rect: CGRect(origin: .zero, size: size),
-                                                 rotate: 0, preserveAspectRatio: true)
-        concatenate(transform)
+        translateBy(x: size.width / 2, y: size.height / 2)
+        scaleBy(x: scale, y: scale)
+        rotate(by: -CGFloat(angle) * .pi / 180)
+        translateBy(x: -box.midX, y: -box.midY)
+        clip(to: box)
         drawPDFPage(page)
         restoreGState()
     }
