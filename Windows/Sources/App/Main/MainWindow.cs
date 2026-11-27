@@ -129,13 +129,13 @@ public sealed class MainWindow : Window
         _planDriver = new PlanDriver(state, Bottom.Plan);
         // Пункт «Файл» плану: показ чи картинка — у свою вкладку; звук чи відео — у плеєр
         // і одразу грати (openPlanFile на Mac).
-        state.OpenPlanFile = path =>
+        state.OpenPlanFile = (path, live) =>
         {
-            if (ShowWorkspace.OpenFromPlan(path)) return true;
+            if (ShowWorkspace.OpenFromPlan(path, live)) return true;
             if (!state.Media.Filters.Accepts(path)) return false;
             state.Media.Open(path);
             if (state.Mode != WorkMode.Media) { state.Mode = WorkMode.Media; Signals.Shared.Send(Signals.Kind.Mode); }
-            state.Media.Play();
+            if (live) state.Media.Play();
             return true;
         };
         // Del і Backspace в «Історії» — лише коли клавіатура в ній (сторож клавіш нижнього ряду на Mac).

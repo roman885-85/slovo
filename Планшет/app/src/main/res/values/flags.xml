@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Планшет Слова»: спільний код пульта за цим прапорцем знає, що він у планшеті. -->
+<resources>
+    <bool name="tablet_app">true</bool>
+</resources>

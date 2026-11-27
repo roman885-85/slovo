@@ -1,7 +1,6 @@
 package ua.church.slovo.remote;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -29,6 +28,22 @@ final class Lang {
 
     /// Рядок, складений у коді: українською чи англійською.
     static String t(String uk, String en) { return english ? en : uk; }
+
+    /// Що відкрито в показі: «2 файли · 5 фото» / «2 files · 5 photos». Порожнє — не пишемо.
+    static String showSummary(int decks, int photos) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (decks > 0) parts.add(english ? decks + (decks == 1 ? " file" : " files") : decks + " " + files(decks));
+        if (photos > 0) parts.add(photos + (english ? (photos == 1 ? " photo" : " photos") : " фото"));
+        return android.text.TextUtils.join(" · ", parts);
+    }
+
+    /// 1 файл, 2 файли, 5 файлів, 11 файлів, 21 файл.
+    private static String files(int n) {
+        int last = n % 10, lastTwo = n % 100;
+        if (last == 1 && lastTwo != 11) return "файл";
+        if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return "файли";
+        return "файлів";
+    }
 
     static String choice(Context context) {
         return context.getSharedPreferences("slovo-remote", Context.MODE_PRIVATE).getString(KEY, AUTO);
@@ -60,23 +75,29 @@ final class Lang {
         return change;
     }
 
-    /// Вікно вибору мови. Назва пункту меню двомовна — її знайде і той, хто
-    /// не читає поточною мовою.
-    static void showChooser(Activity activity) {
+    /// Вікно вибору мови. Назва двомовна — її знайде і той, хто не читає
+    /// поточною мовою. `before` (може бути `null`) виконується перед тим, як
+    /// вікно перебудується: закрити сторінку налаштувань, що лежить поверх.
+    static void showChooser(Activity activity, Runnable before) {
         String[] titles = {"Авто / Auto", "Українська", "English"};
         String[] codes = {AUTO, UK, EN};
         String current = choice(activity);
         int checked = 0;
         for (int i = 0; i < codes.length; i++) if (codes[i].equals(current)) checked = i;
-        new AlertDialog.Builder(activity)
-            .setTitle("Мова / Language")
-            .setSingleChoiceItems(titles, checked, (dialog, which) -> {
-                dialog.dismiss();
-                if (codes[which].equals(current)) return;
-                activity.getSharedPreferences("slovo-remote", Context.MODE_PRIVATE)
-                    .edit().putString(KEY, codes[which]).apply();
-                activity.recreate();
-            })
-            .show();
+        Ui.pick(activity, "Мова / Language", titles, checked, which -> {
+            if (codes[which].equals(current)) return;
+            activity.getSharedPreferences("slovo-remote", Context.MODE_PRIVATE)
+                .edit().putString(KEY, codes[which]).apply();
+            if (before != null) before.run();
+            activity.recreate();
+        });
+    }
+
+    static void showChooser(Activity activity) { showChooser(activity, null); }
+
+    /// Назва вибраної мови — для рядка в налаштуваннях.
+    static String choiceName(Context context) {
+        String pick = choice(context);
+        return UK.equals(pick) ? "Українська" : EN.equals(pick) ? "English" : "Авто / Auto";
     }
 }

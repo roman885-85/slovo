@@ -128,9 +128,12 @@ Android і «Проповідник Слова» для Windows.
 
 ![Пульт у браузері телефону](Документація/знімки/remote.jpg)
 
-- **Пульт на телефоні** (Android 6 і новіші) — гортати, указка.
+- **Пульт на телефоні** (Android 6 і новіші) — слайди й фото з мініатюрами, Біблія,
+  пісні, План, указка й наближення; прибрати фото чи файл зі списку, очистити список;
+  у зал — лише кнопкою «Показати» (дотик вибирає); модулі й доповнення із загальної
+  бази просто з вибору перекладу чи пісенника.
 - **Планшет оператора** (Android 5 і новіші) — усі вкладки програми, зал,
-  План та Історія.
+  План та Історія; той самий інтерфейс, що й у пульта й «Слова для Android».
 - **Пульт у браузері** будь-якого пристрою — адреса `slovo.local`.
 - **План проповіді**: проповідник складає його на планшеті вдома, без
   зв'язку, а на служінні однією кнопкою робить головним планом «Слова».
@@ -336,7 +339,7 @@ Releases.
 
 ## Стан
 
-«Слово» для macOS і для Windows — версія 1.4.3. Що нового й
+«Слово» для macOS і для Windows — версія 1.4.4 (Пульт Слова 3.0, Планшет Слова 2.0). Що нового й
 що виправлено — у [CHANGELOG.md](CHANGELOG.md).
 
 ## Ліцензії
@@ -449,9 +452,11 @@ shown.
 - **Outputs** — a projector (a separate screen; a slide window on a single
   monitor), built-in **NDI** for streaming (OBS, vMix), web pages for OBS and
   lobby monitors, a pointer and zoom from the mouse, trackpad or remote.
-- **Remote, tablet and browser** — Slovo Remote on an Android 6+ phone, Slovo
-  Tablet on Android 5+ (all tabs, the hall, Plan and History), a remote in any
-  browser at `slovo.local`; a sermon plan built on the tablet at home, offline,
+- **Remote, tablet and browser** — Slovo Remote on an Android 6+ phone (slides and
+  photos with thumbnails, Bible, songs, plan, pointer and zoom; remove items or clear
+  the list; only the Show button puts things in the hall; modules and add-ons from the
+  common catalog), Slovo Tablet on Android 5+ (all tabs, the hall, Plan and History),
+  a remote in any browser at `slovo.local`; a sermon plan built on the tablet at home, offline,
   and made the main plan with one button during the service.
 - **Updates** — the program checks for new versions and installs them showing
   the progress; translations and data stay in place.

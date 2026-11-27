@@ -181,6 +181,8 @@ extension RemoteControlServer {
         let media = state.media
         func number(_ key: String) -> Double? { (body[key] as? NSNumber)?.doubleValue }
         func focus(_ mode: AppState.WorkMode) { if state.mode != mode { state.mode = mode } }
+        // `live: false` — лише вибрати (див. `handleCommand`): у зал — лише «Показати».
+        let live = (body["live"] as? NSNumber)?.boolValue ?? true
 
         switch command {
         case "songs-book":
@@ -197,7 +199,33 @@ extension RemoteControlServer {
             }
             focus(.pictures)
             pictures.selectPage(index)
-            pictures.showCurrentPage()
+            if live { pictures.showCurrentPage() }
+
+        // Список фото з пульта: прибрати одне чи всі. Вкладку програми не перемикаємо —
+        // людина лише прибирає список, а не показує.
+        case "picture-remove":
+            let pictures = NativeShowWorkspace.pictures
+            guard let index, pictures.model.pages.indices.contains(index) else {
+                return .failed(404, OurWords.t("нет такой страницы"))
+            }
+            pictures.removePage(at: index)
+            answer["count"] = pictures.model.count
+        case "pictures-clear":
+            NativeShowWorkspace.pictures.removeAll()
+            answer["count"] = 0
+
+        // Файли презентацій (PDF, PPTX, Keynote…) з пульта: прибрати один (номер у
+        // списку файлів, як у `decks`) чи всі. Так само без перемикання вкладки.
+        case "deck-remove":
+            let presentation = NativeShowWorkspace.presentation
+            guard let index, presentation.model.decks.indices.contains(index) else {
+                return .failed(404, OurWords.t("нет такого файла"))
+            }
+            presentation.removeDeck(at: index)
+            answer["count"] = presentation.model.decks.count
+        case "decks-clear":
+            NativeShowWorkspace.presentation.removeAll()
+            answer["count"] = 0
 
         case "media-open":
             guard let index, media.playlist.indices.contains(index) else {
@@ -244,14 +272,14 @@ extension RemoteControlServer {
         case "text-page":
             guard let index else { return .failed(400, "index") }
             focus(.text)
-            TextModuleModel.shared.selectPage(index, live: true)
+            TextModuleModel.shared.selectPage(index, live: live)
 
         case "history":
             let records = desk.history.records
             guard let index, records.indices.contains(index) else {
                 return .failed(404, OurWords.t("нет такого пункта"))
             }
-            desk.activate(records[index], state: state, show: true)
+            desk.activate(records[index], state: state, show: live)
         case "history-remove":
             let records = desk.history.records
             guard let index, records.indices.contains(index) else {

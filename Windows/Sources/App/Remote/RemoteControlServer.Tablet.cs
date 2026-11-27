@@ -161,9 +161,37 @@ public sealed partial class RemoteControlServer
                 if (index is not { } at || at < 0 || at >= pictures.Model.Count) return (false, 404, Captions.T("нет такой страницы"));
                 Focus(state, WorkMode.Pictures);
                 pictures.SelectPage(at);
-                pictures.ShowCurrentPage();
+                if (Flag(body["live"]) ?? true) pictures.ShowCurrentPage();
                 return (true, 0, null);
             }
+            // Список фото з пульта: прибрати одне чи всі. Вкладку програми не перемикаємо — людина лише
+            // прибирає список, а не показує. Як на Mac.
+            case "picture-remove":
+            {
+                var pictures = ShowWorkspace.Pictures;
+                if (index is not { } at || at < 0 || at >= pictures.Model.Count) return (false, 404, Captions.T("нет такой страницы"));
+                pictures.RemovePage(at);
+                answer["count"] = pictures.Model.Count;
+                return (true, 0, null);
+            }
+            case "pictures-clear":
+                ShowWorkspace.Pictures.RemoveAll();
+                answer["count"] = 0;
+                return (true, 0, null);
+            // Файли презентацій (PDF, PPTX…) з пульта: прибрати один (номер у списку файлів, як у
+            // `decks`) чи всі. Так само без перемикання вкладки. Як на Mac.
+            case "deck-remove":
+            {
+                var presentation = ShowWorkspace.Presentation;
+                if (index is not { } at || at < 0 || at >= presentation.Model.Decks.Count) return (false, 404, Captions.T("нет такого файла"));
+                presentation.RemoveDeck(at);
+                answer["count"] = presentation.Model.Decks.Count;
+                return (true, 0, null);
+            }
+            case "decks-clear":
+                ShowWorkspace.Presentation.RemoveAll();
+                answer["count"] = 0;
+                return (true, 0, null);
             case "media-open":
             {
                 var media = state.Media;
@@ -231,13 +259,13 @@ public sealed partial class RemoteControlServer
             case "text-page":
                 if (index is not { } page) return (false, 400, "index");
                 Focus(state, WorkMode.Text);
-                TextModuleModel.Shared.SelectPage(page, true);
+                TextModuleModel.Shared.SelectPage(page, Flag(body["live"]) ?? true);
                 return (true, 0, null);
             case "history":
             {
                 var records = state.History.Records;
                 if (index is not { } at || at < 0 || at >= records.Count) return (false, 404, Captions.T("нет такого пункта"));
-                state.ActivateHistory(records[at], true);
+                state.ActivateHistory(records[at], Flag(body["live"]) ?? true);
                 return (true, 0, null);
             }
             case "history-remove":

@@ -116,7 +116,7 @@
     <!-- Фото з галереї телефона. -->
     <string name="photo">Photos…</string>
     <string name="photo_sending">Sending photo %1$d of %2$d…</string>
-    <string name="photo_sent">Photos sent: %1$d — the first one is already on the wall</string>
+    <string name="photo_sent">Photos sent: %1$d — the first is chosen; “Show” puts it in the hall</string>
     <string name="photo_failed">Photos not sent: %1$s</string>
 
     <!-- Оновлення програми з релізів GitHub. -->
@@ -142,8 +142,8 @@
     <string name="song_pick_book">Choose a songbook</string>
     <string name="song_list_empty">The songbook is empty</string>
     <!-- Ресурси програми з телефона. -->
-    <string name="menu_resources">Translations and songbooks…</string>
-    <string name="resources_title">Resources for Slovo</string>
+    <string name="menu_resources">Modules and add-ons…</string>
+    <string name="resources_title">Modules and add-ons</string>
     <string name="resources_kind">What to download</string>
     <string name="resources_kind_bible">Translations</string>
     <string name="resources_kind_songbook">Songbooks</string>

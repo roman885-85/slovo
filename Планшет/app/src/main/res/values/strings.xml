@@ -38,7 +38,7 @@
     <string name="t_searching">Searching for “%1$s”…</string>
     <string name="t_search_none">Nothing found for “%1$s”</string>
     <string name="t_search_slow">The program is still searching for “%1$s” — try again in a minute</string>
-    <string name="t_search_found">“%1$s”: %2$d. Tap to preview, long tap for the hall</string>
+    <string name="t_search_found">“%1$s”: %2$d. Tap to preview; “Show” puts it in the hall</string>
 
     <string name="t_songbook">Songbook</string>
     <string name="t_song_filter">Number or title words</string>
@@ -153,15 +153,15 @@
     <string name="t_hints_off">Hints are hidden. Turn them on again with “Hints” at the top</string>
     <string name="t_sermon_open">📋 Build a sermon plan</string>
     <string name="t_zoom_back">↺ Reset view</string>
-    <string name="t_hint_bible">Tap a verse to preview it. A long tap sends it straight to the hall. Several taps select several verses.</string>
-    <string name="t_hint_songs">Choose a song, then tap a part — it goes straight to the hall.</string>
-    <string name="t_hint_presentation">Tap a slide to show it in the hall. “File from the tablet” opens a PDF or PowerPoint.</string>
+    <string name="t_hint_bible">Tap a verse to preview it; several taps select several verses, a long tap a range. “Show” puts it in the hall.</string>
+    <string name="t_hint_songs">Choose a song and tap a part to preview it. “Show” puts it in the hall.</string>
+    <string name="t_hint_presentation">Tap a slide to choose it; “Show” puts it in the hall. “File from the tablet” opens a PDF or PowerPoint.</string>
     <string name="t_hint_media">Player files are added on the computer. “To screen” shows the video in the hall.</string>
-    <string name="t_hint_pictures">Tap a picture to show it in the hall. “Photos from the tablet” adds new ones.</string>
+    <string name="t_hint_pictures">Tap a picture to choose it; “Show” puts it in the hall. “Photos from the tablet” adds new ones.</string>
     <string name="t_hint_screen">Choose a monitor or window — the hall shows it live.</string>
     <string name="t_hint_text">Type an announcement. “To preview” is for you only, “Show in hall” puts it on the wall.</string>
     <string name="t_hint_hall">Move a finger over the hall for a pointer. Two fingers zoom.</string>
-    <string name="t_hint_plan">Tap an item — it goes straight to the hall.</string>
+    <string name="t_hint_plan">Tap an item to preview it. “Show” puts it in the hall.</string>
     <string name="t_hint_bottom">“Back” / “Next” — neighbouring verse, part or slide · “Show” — preview to the hall · “Hide” — remove the slide</string>
     <string name="x_prev">Previous verse, part or slide</string>
     <string name="x_next">Next verse, part or slide</string>
@@ -173,7 +173,7 @@
     <string name="x_up">Move the selected item up</string>
     <string name="x_down">Move the selected item down</string>
     <string name="x_remove">Remove the selected item</string>
-    <string name="x_tab_plan">Service plan: tap an item to show it in the hall</string>
+    <string name="x_tab_plan">Service plan: a tap chooses an item, “Show” puts it in the hall</string>
     <string name="x_tab_history">History: everything already shown in the hall</string>
     <string name="x_menu">Connection, screen, zoom, sermon plan, my view, language</string>
     <string name="x_hints">Show or hide the hints on the screen</string>

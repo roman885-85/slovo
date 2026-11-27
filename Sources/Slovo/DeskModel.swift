@@ -566,7 +566,9 @@ final class DeskModel: ObservableObject {
     /// відкриває, подвійне і Enter — відкривають).
     private(set) var planActivationsForCheck = 0
 
-    func activate(_ item: PlanItem, state: AppState) {
+    /// `live: false` — пункт вибрано й у передпоказі, у зал не йде (пульт: «показ … исключительно
+    /// по кнопке показа»). На комп'ютері пункт плану, як і досі, одразу в залі.
+    func activate(_ item: PlanItem, state: AppState, live: Bool = true) {
         planActivationsForCheck += 1
         plan.select(id: item.id)
         switch item.content {
@@ -590,7 +592,7 @@ final class DeskModel: ObservableObject {
             let wanted = reference.verses
             state.openScripture(bookPosition: position, chapter: reference.chapter,
                                 pick: { available in wanted.isEmpty ? available : wanted.filter { available.contains($0) } },
-                                then: { state.showCurrent() })
+                                then: { if live { state.showCurrent() } })
 
         case .song(let reference):
             guard let library = state.songLibrary,
@@ -605,15 +607,15 @@ final class DeskModel: ObservableObject {
             state.songIndex = song.index
             state.songPartIndex = part.index
             state.showSongPart(song, part)
-            state.showCurrent()
+            if live { state.showCurrent() }
 
         case .text(let document):
             // Пункт «Текст» везёт содержимое с собой — искать нечего.
             // Показ отдаём модулю «Текст»: он же откроет свою вкладку.
-            TextModuleModel.shared.activate(document, state: state)
+            TextModuleModel.shared.activate(document, state: state, live: live)
 
         case .file(let reference):
-            openPlanFile(reference, state: state)
+            openPlanFile(reference, state: state, live: live)
         }
     }
 
@@ -623,7 +625,7 @@ final class DeskModel: ObservableObject {
     /// показуємо: проповідник для того й поставив його в план. Уже відкритий
     /// файл удруге не відкриваємо — інакше кожне натискання на пункт
     /// дописувало б у список показу ще одну копію.
-    private func openPlanFile(_ reference: PlanItem.FileReference, state: AppState) {
+    private func openPlanFile(_ reference: PlanItem.FileReference, state: AppState, live: Bool = true) {
         let url = reference.url
         guard FileManager.default.fileExists(atPath: url.path) else {
             NativeTrace.say("план: немає файла «\(reference.name)»")
@@ -643,11 +645,11 @@ final class DeskModel: ObservableObject {
             }
             workspace.selectDeck(deck)
             workspace.selectPage(workspace.model.decks[deck].range.lowerBound)
-            workspace.showCurrentPage()
+            if live { workspace.showCurrentPage() }
         case .media(let media):
             state.media.open(media)
             state.mode = .media
-            state.media.play()
+            if live { state.media.play() }
         case .nothing:
             NativeTrace.say("план: «\(reference.name)» не показ і не плеєр")
         }

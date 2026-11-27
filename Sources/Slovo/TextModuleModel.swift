@@ -289,7 +289,8 @@ final class TextModuleModel: ObservableObject {
 
     /// Пункт плана «Текст» подан на экран — щелчок по нему делает то же, что
     /// двойной щелчок по стиху.
-    func activate(_ text: PlainTextDocument, state: AppState) {
+    /// `live: false` — лише передпоказ (пункт плану, вибраний з пульта; у зал — «Показати»).
+    func activate(_ text: PlainTextDocument, state: AppState, live: Bool = true) {
         // Режим переключаем до показа: строку «Истории» (11) собирают по
         // режиму окна, и в чужом режиме объявление записалось бы как место
         // Писания.
@@ -297,7 +298,7 @@ final class TextModuleModel: ObservableObject {
         state.mode = .text
         document = text
         pageIndex = 0
-        show()
+        if live { show() } else { selectPage(0, live: false) }
     }
 
     // MARK: - Фокус

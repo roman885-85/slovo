@@ -111,7 +111,7 @@
     <!-- Фото з галереї телефона. -->
     <string name="photo">Фото…</string>
     <string name="photo_sending">Надсилаю фото %1$d з %2$d…</string>
-    <string name="photo_sent">Надіслано фото: %1$d — перше вже на стіні</string>
+    <string name="photo_sent">Надіслано фото: %1$d — перше вибране; у зал — «Показати»</string>
     <string name="photo_failed">Фото не надіслано: %1$s</string>
 
     <!-- Оновлення програми з релізів GitHub. -->
@@ -136,8 +136,8 @@
     <string name="song_pick_book">Виберіть пісенник</string>
     <string name="song_list_empty">У пісеннику порожньо</string>
     <!-- Ресурси програми з телефона. -->
-    <string name="menu_resources">Переклади й пісенники…</string>
-    <string name="resources_title">Ресурси для «Слова»</string>
+    <string name="menu_resources">Модулі й доповнення…</string>
+    <string name="resources_title">Модулі й доповнення</string>
     <string name="resources_kind">Що завантажити</string>
     <string name="resources_kind_bible">Переклади</string>
     <string name="resources_kind_songbook">Пісенники</string>

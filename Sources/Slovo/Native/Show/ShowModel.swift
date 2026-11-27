@@ -219,7 +219,13 @@ final class ShowModel {
     /// зсувається, коли файл прибирають, і той самий номер дістається зовсім
     /// іншій сторінці.
     var currentPageMark: String? {
-        guard let index, pages.indices.contains(index) else { return nil }
+        guard let index else { return nil }
+        return pageMark(at: index)
+    }
+
+    /// Те саме для будь-якої сторінки списку — щоб знати, чи стоїть у залі саме вона.
+    func pageMark(at index: Int) -> String? {
+        guard pages.indices.contains(index) else { return nil }
         switch pages[index].source {
         case .picture(let url):
             return "зображення|" + url.path

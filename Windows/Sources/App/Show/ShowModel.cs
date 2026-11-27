@@ -140,16 +140,16 @@ public sealed class ShowModel
     public string CurrentTitle => Index is { } index && index < Pages.Count ? Pages[index].Title : "";
 
     /// Знак поточної сторінки, сталий, доки відкрито той самий файл (номер у списку зсувається).
-    public string? CurrentPageMark
+    public string? CurrentPageMark => Index is { } index ? PageMark(index) : null;
+
+    /// Те саме для будь-якої сторінки списку — щоб знати, чи стоїть у залі саме вона.
+    public string? PageMark(int index)
     {
-        get
-        {
-            if (Index is not { } index || index >= Pages.Count) return null;
-            var source = Pages[index].Source;
-            if (source.Picture is { } path) return "зображення|" + path;
-            var file = Decks.FirstOrDefault(d => d.Contains(index))?.Path ?? "";
-            return $"сторінка|{file}|{source.Page}";
-        }
+        if (index < 0 || index >= Pages.Count) return null;
+        var source = Pages[index].Source;
+        if (source.Picture is { } path) return "зображення|" + path;
+        var file = Decks.FirstOrDefault(d => d.Contains(index))?.Path ?? "";
+        return $"сторінка|{file}|{source.Page}";
     }
 
     // --- Відкриття -------------------------------------------------------------------------

@@ -673,6 +673,11 @@ final class RemoteControlServer {
         let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
         let index = (body["index"] as? NSNumber)?.intValue ?? Int((body["index"] as? String) ?? "")
         let text = (body["text"] as? String) ?? ""
+        // `live: false` — лише вибрати, у зал не виводити. Власник 27.11: «показ слайдов и
+        // текстов происходить должен исключительно по кнопке показа»: дотик у списку пульта
+        // чи планшета вибирає, у зал — лише «Показати». Старий пульт `live` не шле — тоді
+        // показ одразу, як і досі.
+        let live = (body["live"] as? NSNumber)?.boolValue ?? true
 
         NativeTrace.say("пульт: команда \(command)\(index.map { " \($0)" } ?? "")\(text.isEmpty ? "" : " «\(text)»")")
         var answer: [String: Any] = ["ok": true]
@@ -762,12 +767,12 @@ final class RemoteControlServer {
         case "plan":
             let items = DeskModel.shared.plan.items
             guard let index, items.indices.contains(index) else { respond(connection, 404, ["error": OurWords.t("нет такого пункта")]); return }
-            DeskModel.shared.activate(items[index], state: state)
+            DeskModel.shared.activate(items[index], state: state, live: live)
         case "part":
             let songs = NativeSongsWorkspace.shared
             guard let index, let song = songs.model.songIndex else { respond(connection, 404, ["error": OurWords.t("песня не выбрана")]); return }
             if state.mode != .songs { state.mode = .songs }
-            songs.reveal(song: song, part: index, live: true)
+            songs.reveal(song: song, part: index, live: live)
         case "song":
             guard let index else { respond(connection, 400, ["error": "нужен index"]); return }
             if state.mode != .songs { state.mode = .songs }
@@ -780,7 +785,7 @@ final class RemoteControlServer {
             if state.mode != .pictures && state.mode != .presentation { state.mode = .presentation }
             let workspace = state.mode == .pictures ? NativeShowWorkspace.pictures : NativeShowWorkspace.presentation
             workspace.selectPage(index)
-            workspace.showCurrentPage()
+            if live { workspace.showCurrentPage() }
         case "deck":
             guard let index else { respond(connection, 400, ["error": "нужен index"]); return }
             if state.mode != .presentation { state.mode = .presentation }
@@ -847,7 +852,7 @@ final class RemoteControlServer {
             // Показ — коли глави справді прочитано. Раніше адреса з телефона
             // йшла в зал одразу, і в зал потрапляв вірш попередньої книги.
             guard DeskModel.shared.applyAddress(text, state: state, then: { [weak self] in
-                state.showCurrent()
+                if live { state.showCurrent() }
                 NativeBibleBridge.shared.sync()
                 self?.noteChange()
             }) else {
@@ -859,7 +864,7 @@ final class RemoteControlServer {
             let position = (body["book"] as? NSNumber)?.intValue ?? state.selectedBookIndex
             let chapter = (body["chapter"] as? NSNumber)?.intValue ?? state.selectedChapterNumber
             let verses = (body["verses"] as? [NSNumber])?.map(\.intValue) ?? []
-            let live = (body["live"] as? NSNumber)?.boolValue ?? false
+            let live = (body["live"] as? NSNumber)?.boolValue ?? false  // тут здавна — лише передпоказ
             guard state.books.indices.contains(position) else {
                 respond(connection, 404, ["error": OurWords.t("нет такой книги")]); return
             }
@@ -1095,6 +1100,16 @@ final class RemoteControlServer {
 
     // MARK: - Состояние для телефона
 
+    /// Відбиток списку фото (FNV-1a по назвах): однаковий на Mac і Windows, сталий між пусками.
+    static func picturesSign(_ titles: [String]) -> Int {
+        var hash: UInt32 = 2_166_136_261
+        for title in titles {
+            for byte in title.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+            hash = (hash ^ 1) &* 16_777_619
+        }
+        return Int(hash)
+    }
+
     func stateJSON(web: Bool = false) -> [String: Any] {
         guard let state else { return ["seq": seq] }
         var json: [String: Any] = [
@@ -1127,6 +1142,12 @@ final class RemoteControlServer {
             json["show"] = ["title": workspace.model.currentTitle, "index": workspace.model.index ?? -1,
                             "count": workspace.model.count]
         }
+        // Список фото — завжди, на якій би вкладці не стояла програма: прибрали фото з іншого
+        // пульта чи на комп'ютері, поки програма на презентації, — пульт має це помітити й
+        // перечитати свій список (27.11 він показував уже прибрані фото). `sign` — відбиток
+        // назв: помітна й заміна одного фото іншим при тому самому числі.
+        let pictures = NativeShowWorkspace.pictures.model
+        json["pictures"] = ["count": pictures.count, "sign": Self.picturesSign(pictures.pages.map(\.title))]
         // Презентация — всегда, на какой бы вкладке ни стояла программа:
         // главная работа пульта — листать её с телефона.
         let show = NativeShowWorkspace.presentation.model

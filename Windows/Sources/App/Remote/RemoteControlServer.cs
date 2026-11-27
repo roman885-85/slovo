@@ -429,6 +429,10 @@ public sealed partial class RemoteControlServer
         var body = command is "upload" or "module-import" ? new JsonObject() : Body(request);
         var index = Int(body["index"]);
         var text = Text(body["text"]) ?? "";
+        // `live: false` — лише вибрати, у зал не виводити. Власник 27.11: «показ слайдов и текстов
+        // происходить должен исключительно по кнопке показа». Старий пульт `live` не шле — показ
+        // одразу, як і досі. Як на Mac (`live` у `handleCommand`).
+        var showNow = Flag(body["live"]) ?? true;
         Journal.Say($"пульт: команда {command}{(index is { } i ? $" {i}" : "")}{(text.Length == 0 ? "" : $" «{text}»")}");
         var answer = new JsonObject { ["ok"] = true };
         switch (command)
@@ -518,14 +522,14 @@ public sealed partial class RemoteControlServer
             {
                 var items = state.Plan.Items;
                 if (index is not { } at || at < 0 || at >= items.Count) { Fail(connection, 404, Captions.T("нет такого пункта")); return; }
-                state.ActivatePlanItem(items[at]);
+                state.ActivatePlanItem(items[at], showNow);
                 break;
             }
             case "part":
             {
                 if (index is not { } part || Songs?.Model.SongIndex is not { } song) { Fail(connection, 404, Captions.T("песня не выбрана")); return; }
                 Focus(state, WorkMode.Songs);
-                Songs!.Reveal(song, part, true);
+                Songs!.Reveal(song, part, showNow);
                 break;
             }
             case "song":
@@ -540,7 +544,7 @@ public sealed partial class RemoteControlServer
                 if (state.Mode is not (WorkMode.Pictures or WorkMode.Presentation)) Focus(state, WorkMode.Presentation);
                 var workspace = state.Mode == WorkMode.Pictures ? ShowWorkspace.Pictures : ShowWorkspace.Presentation;
                 workspace.SelectPage(page);
-                workspace.ShowCurrentPage();
+                if (showNow) workspace.ShowCurrentPage();
                 break;
             }
             case "deck":
@@ -605,7 +609,7 @@ public sealed partial class RemoteControlServer
             {
                 Focus(state, WorkMode.Bible);
                 // Показ — коли глави справді прочитано, інакше в зал іде вірш попередньої книги.
-                if (!state.ApplyAddress(text, () => { state.ShowCurrentSlide(); NoteChange(); }))
+                if (!state.ApplyAddress(text, () => { if (showNow) state.ShowCurrentSlide(); NoteChange(); }))
                 {
                     Fail(connection, 404, Captions.T("адрес не найден"));
                     return;

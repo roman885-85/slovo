@@ -1,7 +1,7 @@
 package ua.church.slovo.remote;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -153,23 +153,23 @@ final class Updates {
     private static void propose(Activity activity, Found found) {
         if (activity.isFinishing()) return;
         String size = found.size > 0 ? " (" + Math.max(1, found.size / (1024 * 1024)) + " " + activity.getString(R.string.update_mb) + ")" : "";
-        new AlertDialog.Builder(activity)
-                .setTitle(activity.getString(R.string.update_title, found.version))
-                .setMessage(activity.getString(R.string.update_message, ours(activity), found.version) + size
-                        + "\n\n" + activity.getString(R.string.update_android_note))
-                .setPositiveButton(R.string.update_do, (dialog, which) -> download(activity, found))
-                .setNegativeButton(R.string.update_later, (dialog, which) ->
-                        activity.getSharedPreferences(STORE, Context.MODE_PRIVATE)
-                                .edit().putString(SKIPPED, found.version).apply())
-                .show();
+        Ui.init(activity);
+        Ui.menu(activity, activity.getString(R.string.update_title, found.version),
+            activity.getString(R.string.update_message, ours(activity), found.version) + size
+                + "\n\n" + activity.getString(R.string.update_android_note),
+            new String[] { activity.getString(R.string.update_do), activity.getString(R.string.update_later) },
+            which -> {
+                if (which == 0) download(activity, found);
+                else activity.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().putString(SKIPPED, found.version).apply();
+            });
     }
 
     private static void download(Activity activity, Found found) {
-        final AlertDialog waiting = new AlertDialog.Builder(activity)
-                .setTitle(R.string.update_downloading)
-                .setMessage(activity.getString(R.string.update_wait))
-                .setCancelable(false)
-                .show();
+        android.widget.TextView wait = Ui.label(activity, activity.getString(R.string.update_wait), 15, Ui.DIM);
+        wait.setPadding(Ui.dp(22), 0, Ui.dp(22), Ui.dp(14));
+        final Dialog waiting = Ui.sheet(activity, activity.getString(R.string.update_downloading), wait);
+        waiting.setCancelable(false);
+        waiting.setCanceledOnTouchOutside(false);
         new Thread(() -> {
             File file = null;
             String failure = null;
@@ -212,19 +212,18 @@ final class Updates {
     /// один раз і пояснюємо словами, а не залишаємо людину з мовчазним екраном.
     private static void install(Activity activity, File file) {
         if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
-            new AlertDialog.Builder(activity)
-                    .setTitle(R.string.update_permission_title)
-                    .setMessage(R.string.update_permission_text)
-                    .setPositiveButton(R.string.update_permission_go, (dialog, which) -> {
-                        try {
-                            activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                                              Uri.parse("package:" + activity.getPackageName())));
-                        } catch (Exception error) {
-                            say(activity, activity.getString(R.string.update_failed, String.valueOf(error.getMessage())));
-                        }
-                    })
-                    .setNegativeButton(R.string.update_later, null)
-                    .show();
+            Ui.menu(activity, activity.getString(R.string.update_permission_title),
+                activity.getString(R.string.update_permission_text),
+                new String[] { activity.getString(R.string.update_permission_go), activity.getString(R.string.update_later) },
+                which -> {
+                    if (which != 0) return;
+                    try {
+                        activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                                          Uri.parse("package:" + activity.getPackageName())));
+                    } catch (Exception error) {
+                        say(activity, activity.getString(R.string.update_failed, String.valueOf(error.getMessage())));
+                    }
+                });
             return;
         }
         try {

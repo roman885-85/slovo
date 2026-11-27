@@ -238,6 +238,49 @@ extension Diagnostics {
             try? FileManager.default.removeItem(at: RemoteControlServer.uploadsFolder.appendingPathComponent(name))
         }
 
+        // 5б. «⋮ → Прибрати зі списку» з пульта: картинка йде зі списку, зал, де стоїть інше,
+        // не чіпаємо; незнаний номер — відмова. Власник: «фото добавлены, а удалить из
+        // списка их нельзя». Очищення всього списку тут не перевіряємо — воно стерло б
+        // список людини в цьому запуску.
+        if let png = makePicture(width: 200, height: 120).flatMap({ image -> Data? in
+            NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        }) {
+            let pictures = NativeShowWorkspace.pictures.model
+            let before = pictures.count
+            let name = "slovo-прибрати.png"
+            let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+            var sent = 0
+            if let url = URL(string: base + "/api/upload?name=\(encoded)") {
+                var request = URLRequest(url: url, timeoutInterval: 20)
+                request.httpMethod = "POST"
+                request.httpBody = png
+                request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+                var finished = false
+                URLSession.shared.dataTask(with: request) { _, response, _ in
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    DispatchQueue.main.async { sent = code; finished = true }
+                }.resume()
+                wait(untilTrue: { finished }, seconds: 22)
+            }
+            let hallOf = { () -> String in
+                let hall = json("GET", "/api/state").json["hall"] as? [String: Any]
+                return "\(hall?["kind"] as? String ?? "")|\(hall?["title"] as? String ?? "")"
+            }
+            let added = pictures.count == before + 1
+            let hallBefore = hallOf()
+            let removed = json("POST", "/api/picture-remove", ["index": before])
+            let hallAfter = hallOf()
+            let missing = json("POST", "/api/picture-remove", ["index": 99_999])
+            let ok = sent == 200 && added && removed.code == 200 && pictures.count == before
+                && hallAfter == hallBefore && missing.code == 404
+            checks.append(Check(area: area, name: "Прибрати фото зі списку з пульта",
+                                status: ok ? .ok : .failed,
+                                detail: "фото \(sent), у списку \(before) → \(added ? before + 1 : pictures.count) → \(pictures.count); "
+                                    + "зал «\(hallBefore)» → «\(hallAfter)»; чужий номер → \(missing.code)"))
+            if pictures.count > before { NativeShowWorkspace.pictures.removePageForCheck(at: before) }
+            try? FileManager.default.removeItem(at: RemoteControlServer.uploadsFolder.appendingPathComponent(name))
+        }
+
         // 6. Гучність плеєра і незнана команда.
         do {
             let volume = json("POST", "/api/media-volume", ["x": 0.4])

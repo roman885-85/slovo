@@ -144,15 +144,15 @@ public sealed class TextModuleModel
         RefreshPreview();
     }
 
-    /// Пункт плану «текст»: на вкладку, і одразу в зал.
-    public void Activate(PlainTextDocument text, AppState state)
+    /// Пункт плану «текст»: на вкладку, і одразу в зал (`live: false` — лише передпоказ).
+    public void Activate(PlainTextDocument text, AppState state, bool live = true)
     {
         state.Mode = WorkMode.Text;
         Signals.Shared.Send(Signals.Kind.Mode);
         _document = text;
         PageIndex = 0;
         Changed?.Invoke();
-        Show();
+        if (live) Show(); else SelectPage(0, false);
     }
 
     void ScheduleSave()

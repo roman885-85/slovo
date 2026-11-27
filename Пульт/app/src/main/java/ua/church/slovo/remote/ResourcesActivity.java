@@ -1,9 +1,7 @@
 package ua.church.slovo.remote;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,16 +9,11 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.BaseAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
+import android.widget.ImageView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -47,7 +40,7 @@ public final class ResourcesActivity extends Activity {
     private Settings settings;
     private Api api;
 
-    private Button kindButton, sourceButton, installButton;
+    private TextView kindButton, sourceButton, installButton;
     private EditText search;
     private TextView status;
     private ListView list;
@@ -75,57 +68,89 @@ public final class ResourcesActivity extends Activity {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        applyOverrideConfiguration(Lang.override(base, null));
+        applyOverrideConfiguration(Lang.override(base, UiScale.override(base)));
+    }
+
+    /// Відкрити одразу на потрібному роді («bible», «songbook»…) — з вибору перекладу чи
+    /// пісенника. Власник 27.11: «пульт тоже должен иметь возможность загружать модули и
+    /// дополнения из общей базы» — каталог уже був, але лише в «Налаштуваннях»; тепер і
+    /// там, де людина вибирає переклад чи пісенник («усе має бути на виду»).
+    static void open(Context context, String kind) {
+        android.content.Intent intent = new android.content.Intent(context, ResourcesActivity.class);
+        if (kind != null) intent.putExtra("kind", kind);
+        context.startActivity(intent);
+    }
+
+    private static final String[] KINDS = { "bible", "songbook", "backgrounds", "templates", "fonts", "web" };
+
+    private String kindName(String id) {
+        switch (id) {
+            case "songbook": return getString(R.string.resources_kind_songbook);
+            case "backgrounds": return getString(R.string.resources_kind_backgrounds);
+            case "templates": return getString(R.string.resources_kind_templates);
+            case "fonts": return getString(R.string.resources_kind_fonts);
+            case "web": return getString(R.string.resources_kind_web);
+            default: return getString(R.string.resources_kind_bible);
+        }
     }
 
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        String wanted = getIntent() == null ? null : getIntent().getStringExtra("kind");
+        if (wanted != null && java.util.Arrays.asList(KINDS).contains(wanted)) kind = wanted;
         settings = new Settings(this);
         if (!settings.hasHost()) { finish(); return; }
         api = new Api(settings.host(), settings.port(), settings.pin());
-        setTitle(R.string.resources_title);
+        Ui.init(this);
+        UiScale.applyOrientation(this);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(8), dp(8), dp(8), dp(8));
+        LinearLayout root = Ui.col(this);
+        root.setBackgroundColor(Ui.BG);
+        root.setFitsSystemWindows(true);
 
-        LinearLayout head = new LinearLayout(this);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        kindButton = button(getString(R.string.resources_kind_bible), v -> chooseKind());
-        sourceButton = button(getString(R.string.resources_source), v -> chooseSource());
-        head.addView(kindButton, weight());
-        head.addView(sourceButton, weight());
-        root.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                                                         ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout bar = Ui.row(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(Ui.dp(6), Ui.dp(4), Ui.dp(12), Ui.dp(4));
+        bar.addView(Ui.iconButton(this, R.drawable.ic_back, 0x00000000, this::finish), Ui.lp(Ui.dp(48), Ui.dp(48), 0));
+        TextView title = Ui.label(this, getString(R.string.resources_title), 20, Ui.TEXT);
+        title.setTypeface(Ui.MEDIUM);
+        title.setMaxLines(1);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setPadding(Ui.dp(8), 0, 0, 0);
+        bar.addView(title, Ui.lp(0, Ui.WRAP, 1));
+        root.addView(bar);
 
-        search = new EditText(this);
-        search.setHint(R.string.resources_search);
-        search.setSingleLine(true);
+        LinearLayout head = Ui.row(this);
+        head.setPadding(Ui.dp(8), 0, Ui.dp(8), 0);
+        kindButton = Ui.button(this, R.drawable.ic_extension, kindName(kind), Ui.CARD2, this::chooseKind);
+        sourceButton = Ui.button(this, R.drawable.ic_download, getString(R.string.resources_source), Ui.CARD2, this::chooseSource);
+        kindButton.setMaxLines(1);
+        sourceButton.setMaxLines(1);
+        Ui.explain(kindButton, getString(R.string.resources_kind));
+        Ui.explain(sourceButton, getString(R.string.resources_source));
+        head.addView(kindButton, Ui.lp(0, Ui.dp(46), 1, 3));
+        head.addView(sourceButton, Ui.lp(0, Ui.dp(46), 1, 3));
+        root.addView(head);
+
+        search = Ui.search(this, getString(R.string.resources_search));
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) { loadLater(); }
         });
-        root.addView(search);
+        root.addView(search, Ui.lp(Ui.FILL, Ui.dp(46), 0, 11, 3, 11, 3));
 
-        status = new TextView(this);
-        status.setTextColor(Color.parseColor("#9AA4B2"));
-        status.setPadding(0, dp(4), 0, dp(4));
+        status = Ui.hint(this, "");
         root.addView(status);
 
-        list = new ListView(this);
-        list.setDivider(null);
-        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
-        root.addView(list, listParams);
-        list.setAdapter(adapter);
+        list = Ui.list(this, adapter);
+        root.addView(list, Ui.lp(Ui.FILL, 0, 1));
         list.setOnItemClickListener((parent, view, position, id) -> toggle(position));
 
-        installButton = button(getString(R.string.resources_install), v -> install());
-        installButton.setEnabled(false);
-        root.addView(installButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                                                                  ViewGroup.LayoutParams.WRAP_CONTENT));
+        installButton = Ui.primary(this, R.drawable.ic_download, getString(R.string.resources_install), this::install);
+        Ui.enable(installButton, false);
+        root.addView(installButton, Ui.lp(Ui.FILL, Ui.dp(54), 0, 11, 6, 11, 10));
         setContentView(root);
 
         loadSources();
@@ -137,22 +162,6 @@ public final class ResourcesActivity extends Activity {
         super.onDestroy();
         watching = false;
         work.shutdownNow();
-    }
-
-    private LinearLayout.LayoutParams weight() {
-        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-    }
-
-    private Button button(String text, View.OnClickListener click) {
-        Button button = new Button(this, null, 0, R.style.SmallButton);
-        button.setText(text);
-        button.setAllCaps(false);
-        button.setOnClickListener(click);
-        return button;
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     // MARK: Списки
@@ -190,7 +199,7 @@ public final class ResourcesActivity extends Activity {
 
     private void showSourceName() {
         int at = sourceIds.indexOf(source);
-        sourceButton.setText(at >= 0 ? sourceNames.get(at) : getString(R.string.resources_source));
+        Ui.setText(sourceButton, at >= 0 ? sourceNames.get(at) : getString(R.string.resources_source));
     }
 
     private Runnable pending;
@@ -227,8 +236,9 @@ public final class ResourcesActivity extends Activity {
                     items.clear();
                     items.addAll(fresh);
                     chosen.clear();
-                    installButton.setEnabled(false);
-                    adapter.notifyDataSetChanged();
+                    Ui.enable(installButton, false);
+                    Ui.setText(installButton, getString(R.string.resources_install));
+                    adapter.set(fresh);
                     status.setText(total > fresh.size()
                                    ? getString(R.string.resources_shown, fresh.size(), total)
                                    : getString(R.string.resources_count, fresh.size()));
@@ -241,26 +251,22 @@ public final class ResourcesActivity extends Activity {
     }
 
     private void chooseKind() {
-        final String[] ids = { "bible", "songbook", "backgrounds", "templates", "fonts", "web" };
-        final String[] names = {
-            getString(R.string.resources_kind_bible), getString(R.string.resources_kind_songbook),
-            getString(R.string.resources_kind_backgrounds), getString(R.string.resources_kind_templates),
-            getString(R.string.resources_kind_fonts), getString(R.string.resources_kind_web),
-        };
-        new AlertDialog.Builder(this)
-            .setTitle(R.string.resources_kind)
-            .setItems(names, (dialog, which) -> {
-                kind = ids[which];
-                kindButton.setText(names[which]);
-                // Джерело може не давати цього роду — тоді беремо своє.
-                int at = sourceIds.indexOf(source);
-                if (at < 0 || !sourceKinds.get(at).contains(kind)) {
-                    source = "slovo";
-                    showSourceName();
-                }
-                load();
-            })
-            .show();
+        final String[] ids = KINDS;
+        final String[] names = new String[ids.length];
+        for (int i = 0; i < ids.length; i++) names[i] = kindName(ids[i]);
+        int checked = 0;
+        for (int i = 0; i < ids.length; i++) if (ids[i].equals(kind)) checked = i;
+        Ui.pick(this, getString(R.string.resources_kind), names, checked, which -> {
+            kind = ids[which];
+            Ui.setText(kindButton, names[which]);
+            // Джерело може не давати цього роду — тоді беремо своє.
+            int at = sourceIds.indexOf(source);
+            if (at < 0 || !sourceKinds.get(at).contains(kind)) {
+                source = "slovo";
+                showSourceName();
+            }
+            load();
+        });
     }
 
     private void chooseSource() {
@@ -271,21 +277,19 @@ public final class ResourcesActivity extends Activity {
             names.add(sourceNames.get(i));
         }
         if (ids.isEmpty()) return;
-        new AlertDialog.Builder(this)
-            .setTitle(R.string.resources_source)
-            .setItems(names.toArray(new String[0]), (dialog, which) -> {
-                source = ids.get(which);
-                sourceButton.setText(names.get(which));
-                load();
-            })
-            .show();
+        Ui.pick(this, getString(R.string.resources_source), names.toArray(new String[0]), ids.indexOf(source), which -> {
+            source = ids.get(which);
+            Ui.setText(sourceButton, names.get(which));
+            load();
+        });
     }
 
     private void toggle(int position) {
         if (position < 0 || position >= items.size()) return;
         Item item = items.get(position);
         if (!chosen.remove(item.id)) chosen.add(item.id);
-        installButton.setEnabled(!chosen.isEmpty());
+        Ui.enable(installButton, !chosen.isEmpty());
+        Ui.setText(installButton, getString(R.string.resources_install) + (chosen.isEmpty() ? "" : " (" + chosen.size() + ")"));
         adapter.notifyDataSetChanged();
     }
 
@@ -300,7 +304,7 @@ public final class ResourcesActivity extends Activity {
             body.put("source", source);
             body.put("ids", ids);
         } catch (Exception ignored) { }
-        installButton.setEnabled(false);
+        Ui.enable(installButton, false);
         status.setText(R.string.resources_starting);
         work.execute(() -> {
             try {
@@ -310,7 +314,7 @@ public final class ResourcesActivity extends Activity {
                 final String why = Api.describe(error);
                 main.post(() -> {
                     status.setText(getString(R.string.resources_failed, why));
-                    installButton.setEnabled(true);
+                    Ui.enable(installButton, true);
                 });
             }
         });
@@ -339,12 +343,12 @@ public final class ResourcesActivity extends Activity {
                                 return;
                             }
                             watching = false;
-                            installButton.setEnabled(true);
+                            Ui.enable(installButton, true);
                             String note = failures != null && failures.length() > 0
                                 ? getString(R.string.resources_partly, failures.optString(0))
                                 : getString(R.string.resources_done, done);
                             status.setText(note);
-                            Toast.makeText(ResourcesActivity.this, note, Toast.LENGTH_LONG).show();
+                            Ui.toast(ResourcesActivity.this, note);
                             load();
                         });
                     } catch (Exception error) {
@@ -358,40 +362,20 @@ public final class ResourcesActivity extends Activity {
 
     // MARK: Рядки
 
-    private final BaseAdapter adapter = new BaseAdapter() {
-        @Override public int getCount() { return items.size(); }
-        @Override public Object getItem(int position) { return items.get(position); }
-        @Override public long getItemId(int position) { return position; }
+    private final Ui.Rows<Item> adapter = new Ui.Rows<Item>() {
+        @Override
+        String title(Item item) { return item.title; }
 
         @Override
-        public View getView(int position, View recycled, ViewGroup parent) {
-            LinearLayout row;
-            if (recycled instanceof LinearLayout) {
-                row = (LinearLayout) recycled;
-            } else {
-                row = new LinearLayout(ResourcesActivity.this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(4), dp(8), dp(4), dp(8));
-                CheckBox box = new CheckBox(ResourcesActivity.this);
-                box.setClickable(false);
-                box.setFocusable(false);
-                row.addView(box);
-                LinearLayout texts = new LinearLayout(ResourcesActivity.this);
-                texts.setOrientation(LinearLayout.VERTICAL);
-                TextView title = new TextView(ResourcesActivity.this);
-                title.setTextSize(16);
-                TextView note = new TextView(ResourcesActivity.this);
-                note.setTextSize(12);
-                note.setTextColor(Color.parseColor("#9AA4B2"));
-                texts.addView(title);
-                texts.addView(note);
-                row.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            }
-            Item item = items.get(position);
-            ((CheckBox) row.getChildAt(0)).setChecked(chosen.contains(item.id));
-            LinearLayout texts = (LinearLayout) row.getChildAt(1);
-            ((TextView) texts.getChildAt(0)).setText(item.title);
+        /// Вибране до завантаження — «●» (і рядок підсвічено), уже встановлене в «Слові» — «✓»,
+        /// решта — «+». Раніше встановлене теж стояло з «+», і не видно було, що воно вже є.
+        String badge(Item item) { return chosen.contains(item.id) ? "●" : item.installed ? "✓" : "+"; }
+
+        @Override
+        boolean chosen(int position) { return chosen.contains(items.get(position).id); }
+
+        @Override
+        String sub(Item item) {
             StringBuilder note = new StringBuilder();
             if (!item.subtitle.isEmpty()) note.append(item.subtitle);
             if (!item.language.isEmpty()) {
@@ -406,8 +390,7 @@ public final class ResourcesActivity extends Activity {
                 if (note.length() > 0) note.append(" · ");
                 note.append(getString(R.string.resources_present));
             }
-            ((TextView) texts.getChildAt(1)).setText(note.toString());
-            return row;
+            return note.toString();
         }
     };
 }

@@ -36,7 +36,7 @@
     <string name="t_searching">Шукаю «%1$s»…</string>
     <string name="t_search_none">За «%1$s» нічого не знайдено</string>
     <string name="t_search_slow">Програма ще шукає «%1$s» — спробуйте ще раз за хвилину</string>
-    <string name="t_search_found">«%1$s»: %2$d. Дотик — у передпоказ, довгий дотик — у зал</string>
+    <string name="t_search_found">«%1$s»: %2$d. Дотик — у передпоказ; у зал — «Показати»</string>
 
     <string name="t_songbook">Пісенник</string>
     <string name="t_song_filter">Номер або слова назви</string>
@@ -150,15 +150,15 @@
     <string name="t_hints_off">Підказки сховано. Ввімкнути знову — «Підказки» вгорі</string>
     <string name="t_sermon_open">📋 Скласти план проповіді</string>
     <string name="t_zoom_back">↺ Вихідний вигляд</string>
-    <string name="t_hint_bible">Дотик по вірші — він у передпоказі. Довгий дотик — одразу в зал. Кілька дотиків — кілька віршів.</string>
-    <string name="t_hint_songs">Виберіть пісню, потім торкніться частини — вона одразу в залі.</string>
-    <string name="t_hint_presentation">Торкніться слайда — він у залі. «Файл з планшета» відкриває PDF чи PowerPoint.</string>
+    <string name="t_hint_bible">Дотик по вірші — він у передпоказі; кілька дотиків — кілька віршів, довгий дотик — відрізок. У зал — кнопкою «Показати».</string>
+    <string name="t_hint_songs">Виберіть пісню й торкніться частини — вона в передпоказі. У зал — кнопкою «Показати».</string>
+    <string name="t_hint_presentation">Торкніться слайда — він вибраний; у зал — кнопкою «Показати». «Файл з планшета» відкриває PDF чи PowerPoint.</string>
     <string name="t_hint_media">Файли плеєра додають на комп\'ютері. «На екран» — показувати відео в залі.</string>
-    <string name="t_hint_pictures">Торкніться картинки — вона в залі. «Фото з планшета» додає нові.</string>
+    <string name="t_hint_pictures">Торкніться картинки — вона вибрана; у зал — кнопкою «Показати». «Фото з планшета» додає нові.</string>
     <string name="t_hint_screen">Виберіть монітор чи вікно — зал покаже його наживо.</string>
     <string name="t_hint_text">Наберіть оголошення. «У передпоказ» — лише для вас, «Показати в залі» — на стіну.</string>
     <string name="t_hint_hall">Ведіть пальцем по залу — указка. Двома пальцями — наближення.</string>
-    <string name="t_hint_plan">Торкніться пункту — він одразу в залі.</string>
+    <string name="t_hint_plan">Торкніться пункту — він у передпоказі. У зал — кнопкою «Показати».</string>
     <string name="t_hint_bottom">«Назад» / «Далі» — сусідній вірш, куплет чи слайд · «Показати» — передпоказ у зал · «Сховати» — прибрати слайд</string>
     <string name="x_prev">Попередній вірш, куплет чи слайд</string>
     <string name="x_next">Наступний вірш, куплет чи слайд</string>
@@ -170,7 +170,7 @@
     <string name="x_up">Посунути вибраний пункт вище</string>
     <string name="x_down">Посунути вибраний пункт нижче</string>
     <string name="x_remove">Прибрати вибраний пункт</string>
-    <string name="x_tab_plan">План служіння: торкніться пункту — він у залі</string>
+    <string name="x_tab_plan">План служіння: дотик вибирає пункт, у зал — «Показати»</string>
     <string name="x_tab_history">Історія: усе, що вже було в залі</string>
     <string name="x_menu">Підключення, екран, наближення, план проповіді, мій перегляд, мова</string>
     <string name="x_hints">Показати чи сховати підказки на екрані</string>

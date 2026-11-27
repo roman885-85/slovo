@@ -26,7 +26,7 @@ public sealed class ShowWorkspace : LayoutPanel, IRowSource
 
     /// Пункт «Файл» із плану проповіді: презентація чи картинка — відкрити (уже відкритий
     /// не вдруге) і одразу показати сторінку файла. Звук і відео — не сюди (плеєр, MainWindow).
-    public static bool OpenFromPlan(string path)
+    public static bool OpenFromPlan(string path, bool live = true)
     {
         var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
         var isPresentation = ShowModel.Extensions(ShowModel.Kind.Presentation).Contains(ext);
@@ -42,7 +42,7 @@ public sealed class ShowWorkspace : LayoutPanel, IRowSource
         if (deck < 0) return true;
         workspace.SelectDeck(deck);
         workspace.SelectPage(workspace.Model.Decks[deck].Start);
-        workspace.ShowCurrentPage();
+        if (live) workspace.ShowCurrentPage();
         return true;
     }
 
@@ -301,6 +301,57 @@ public sealed class ShowWorkspace : LayoutPanel, IRowSource
         Refresh();
         // Поки сторінка була в залі, її зняття міняє й зал.
         if (_state.StillShown && Model.CurrentImage != null) Show();
+    }
+
+    /// Пульт: прибрати сторінку за наскрізним номером — у картинок картинку, у презентацій файл
+    /// цілком (як «−»). Власник: «фото добавлены, а удалить из списка их нельзя». Стояла саме вона в
+    /// залі — зал бере наступну, як після «−», а список спорожнів — гасне; не стояла — зал не чіпаємо
+    /// (зал один на два списки). Як на Mac (`NativeShowWorkspace.removePage`).
+    public void RemovePage(int position)
+    {
+        if (position < 0 || position >= Model.Count) return;
+        var wasInHall = IsStillInHall(Model.PageMark(position));
+        Model.Remove(position);
+        if (Model.IsEmpty) StopSlideshow();
+        ReloadLists();
+        Refresh();
+        if (wasInHall)
+        {
+            if (Model.CurrentImage != null) Show(); else Hide();
+        }
+    }
+
+    /// Пульт: прибрати файл презентації (PDF, PPTX…) за номером у списку файлів. Власник: «документ
+    /// pdf pptx и другие тоже должны иметь опции для удаления из списка». Стояла в залі сторінка
+    /// саме цього файлу — зал бере сторінку, на якій тепер стоїть список, а список спорожнів —
+    /// гасне; не стояла — зал не чіпаємо. Як на Mac (`NativeShowWorkspace.removeDeck`).
+    public void RemoveDeck(int deck)
+    {
+        if (deck < 0 || deck >= Model.Decks.Count) return;
+        var range = Model.Decks[deck];
+        var wasInHall = false;
+        for (var i = range.Start; i < range.End && !wasInHall; i++) wasInHall = IsStillInHall(Model.PageMark(i));
+        Model.RemoveDeck(deck);
+        if (Model.IsEmpty) StopSlideshow();
+        ReloadLists();
+        Refresh();
+        if (wasInHall)
+        {
+            if (Model.CurrentImage != null) Show(); else Hide();
+        }
+    }
+
+    /// Пульт: очистити весь список — як «✕». Зал гасне, лише якщо в ньому стояла сторінка саме з
+    /// цього списку. Як на Mac (`NativeShowWorkspace.removeAll`).
+    public void RemoveAll()
+    {
+        var wasInHall = false;
+        for (var i = 0; i < Model.Count && !wasInHall; i++) wasInHall = IsStillInHall(Model.PageMark(i));
+        StopSlideshow();
+        Model.Close();
+        ReloadLists();
+        Refresh();
+        if (wasInHall) Hide();
     }
 
     void CloseShow()

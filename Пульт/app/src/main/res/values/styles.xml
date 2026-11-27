@@ -1,56 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Темна тема: пультом користуються в затемненому залі, і білий екран
-     сліпить оператора та людей поруч. -->
+<!-- Темна тема — та сама, що в «Слові» для Android: програмою користуються в
+     затемненому залі, і білий екран сліпить оператора та людей поруч.
+     Розкладка складається кодом (див. Ui.java), тут лише вікна. -->
 <resources>
-    <!-- Без панели заголовка окна: на Android 15+ содержимое окна лежит под
-         строкой состояния и под этой панелью (edge-to-edge), и верхние
-         надписи пульта уходили под них. Шапка теперь своя, внутри разметки,
-         а отступы под системные полосы даёт fitsSystemWindows. -->
     <style name="Theme.Slovo" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:colorPrimary">#1E2A3A</item>
-        <item name="android:colorPrimaryDark">#121B26</item>
-        <item name="android:colorAccent">#4C8DFF</item>
-        <item name="android:windowBackground">#101418</item>
-        <!-- Android 15 при targetSdk 35+ насильно растягивает содержимое под
-             строку состояния и панель заголовка (edge-to-edge): верхние
-             надписи пульта уходили под них и были не видны. Отказываемся —
-             у пульта своя простая раскладка сверху вниз. -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:textColorPrimary">#F2F4F7</item>
-        <item name="android:textColorSecondary">#9AA4B2</item>
+        <item name="android:colorPrimary">#141922</item>
+        <item name="android:colorPrimaryDark">#0B0E13</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:textColorPrimary">#F3F5F8</item>
+        <item name="android:textColorSecondary">#93A0B4</item>
+        <item name="android:statusBarColor">#0B0E13</item>
+        <item name="android:navigationBarColor">#10141B</item>
+        <item name="android:colorControlHighlight">#33FFFFFF</item>
     </style>
 
-    <style name="BigButton" parent="@android:style/Widget.Material.Button">
-        <item name="android:textSize">20sp</item>
-        <item name="android:textAllCaps">false</item>
-        <item name="android:minHeight">64dp</item>
-        <item name="android:layout_margin">4dp</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:ellipsize">end</item>
+    <!-- Вікно, що виїжджає знизу: вибір зі списку, запитання, поле вводу. -->
+    <style name="Theme.Slovo.Sheet" parent="@android:style/Theme.Material.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimAmount">0.62</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:windowAnimationStyle">@style/SheetMotion</item>
     </style>
-
-    <style name="SmallButton" parent="@android:style/Widget.Material.Button">
-        <item name="android:textSize">15sp</item>
-        <item name="android:textAllCaps">false</item>
-        <item name="android:minHeight">48dp</item>
-        <!-- Ті самі 4dp, що й у великих кнопок: інакше ряди стоять із
-             різними полями і виглядають кривими (власник: «кнопки в пульте
-             выглядят криво, и не симметрично»). -->
-        <item name="android:layout_margin">4dp</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:ellipsize">end</item>
+    <style name="SheetMotion">
+        <item name="android:windowEnterAnimation">@anim/sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/sheet_out</item>
     </style>
-
-    <style name="TabButton" parent="@android:style/Widget.Material.Button.Borderless">
-        <item name="android:textSize">14sp</item>
-        <item name="android:textAllCaps">false</item>
-        <item name="android:minHeight">44dp</item>
-        <!-- В один рядок: «Презентація» переносилася на двоє і збивала
-             весь ряд вкладок. Поля вузькі — на телефоні п'ять вкладок. -->
-        <item name="android:maxLines">1</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:paddingLeft">2dp</item>
-        <item name="android:paddingRight">2dp</item>
-        <item name="android:layout_margin">0dp</item>
+    <!-- Сторінка на весь екран зі стрілкою «назад»: налаштування, ресурси. -->
+    <style name="Theme.Slovo.Page" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:statusBarColor">#0B0E13</item>
+        <item name="android:navigationBarColor">#0B0E13</item>
+        <item name="android:windowAnimationStyle">@style/PageMotion</item>
+        <item name="android:colorControlHighlight">#33FFFFFF</item>
+    </style>
+    <style name="PageMotion">
+        <item name="android:windowEnterAnimation">@anim/page_in</item>
+        <item name="android:windowExitAnimation">@anim/page_out</item>
     </style>
 </resources>

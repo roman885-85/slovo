@@ -1,15 +1,14 @@
 package ua.church.slovo.remote;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.content.SharedPreferences;
-import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.database.Cursor;
-import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,26 +17,20 @@ import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
-import android.util.TypedValue;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.graphics.drawable.GradientDrawable;
-import android.widget.PopupWindow;
 import android.widget.GridView;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -78,10 +71,12 @@ import java.util.concurrent.Executors;
 /// пам'яті планшета. Зв'язок потрібен лише двічі: взяти модулі зі «Слова» і
 /// на служінні відправити план. Тоді ж планшет довозить програмі переклади й
 /// пісенники, яких у неї немає, — вона ставить їх собі сама.
+///
+/// Вигляд — картки, кнопки й вікна знизу «Слова» для Android (див. `Ui`).
+/// Розкладка складається кодом і наново після повороту: усе, що показано,
+/// живе в полях класу, а не у видах.
 public final class SermonActivity extends Activity {
 
-    private static final int ACCENT = 0xFF4C8DFF;
-    private static final int CURRENT_ROW = 0xFF24344A;
     private static final int PICK_FILE = 1;
     private static final int PICK_MODULE = 2;
     private static final String GITHUB = "https://raw.githubusercontent.com/BibleQuote/BibleQuote-Modules/master/";
@@ -98,30 +93,57 @@ public final class SermonActivity extends Activity {
     private Library library;
     private Settings settings;
     private SermonPlan plan;
-    private boolean phone;
     private boolean busy;
+
+    /// Широка розкладка (планшет лежачи): добір ліворуч, план праворуч;
+    /// вузька — те саме стовпчиком.
+    private boolean wide;
+    /// Чи вміщається підказка під віршами в один ряд із кнопками.
+    private boolean roomy;
+    /// Те, з чого екран малюється наново після повороту: вкладка, рядок
+    /// стану, зв'язок і набране в полях вводу.
+    private int tab;
+    private String statusText = "";
+    private String linkText = "";
+    private int linkColour = Ui.DIM;
+    private String keptFilter = "", keptHeading = "", keptBody = "";
 
     private EditText titleField;
     private TextView status;
-    private final List<Button> tabButtons = new ArrayList<>();
+    private final List<TextView> tabChips = new ArrayList<>();
     private final List<View> panels = new ArrayList<>();
-    private final Lines planLines = new Lines(false);
     /// Кроки, лічильник і зв'язок — щоб було видно, що робити далі.
     private final List<TextView> steps = new ArrayList<>();
-    private Button plansButton;
+    private TextView plansButton;
     private TextView planCount, orderHint, linkState;
-    private TextView planEmpty;
+    private ListView planList;
+    private View planEmpty;
     private int selected = -1;
 
+    /// Рядки плану: номер, назва й дрібніше — вид пункту словами та початок тексту.
+    private final Ui.Rows<SermonPlan.Item> planRows = new Ui.Rows<SermonPlan.Item>() {
+        @Override
+        String title(SermonPlan.Item item) { return item.title; }
+
+        @Override
+        String sub(SermonPlan.Item item) {
+            String kind = kindName(item.type);
+            String rest = item.subtitle();
+            // У файла підпис — те саме ім'я, що й назва: двічі його не пишемо.
+            return rest.isEmpty() || rest.equals(item.title) ? kind : kind + " · " + rest;
+        }
+
+        @Override
+        String badge(SermonPlan.Item item) { return String.valueOf(items.indexOf(item) + 1); }
+    };
+
     // Біблія.
-    private Spinner bibleSpinner;
-    private TextView bibleEmpty;
+    private TextView bibleButton, bibleHint;
+    private View bibleEmpty;
     private View bibleBody;
+    private ListView verseList;
     private final List<Library.Module> bibles = new ArrayList<>();
     private Library.Module bible;
-    private final Lines bookLines = new Lines(false);
-    private final Lines chapterCells = new Lines(true);
-    private final Lines verseLines = new Lines(false);
     private final List<Library.Book> books = new ArrayList<>();
     private Library.Book book;
     private final List<Integer> chapters = new ArrayList<>();
@@ -129,17 +151,73 @@ public final class SermonActivity extends Activity {
     private final List<Library.Verse> verses = new ArrayList<>();
     private final Set<Integer> picked = new TreeSet<>();
 
+    private final Ui.Rows<Library.Book> bookRows = new Ui.Rows<Library.Book>() {
+        @Override
+        String title(Library.Book item) { return item.name; }
+
+        @Override
+        boolean chosen(int position) { return items.get(position) == book; }
+    };
+
+    /// Розділи — сіткою комірок із номерами; вибраний — кольором акценту.
+    private final BaseAdapter chapterCells = new BaseAdapter() {
+        @Override
+        public int getCount() { return chapters.size(); }
+
+        @Override
+        public Object getItem(int position) { return chapters.get(position); }
+
+        @Override
+        public long getItemId(int position) { return position; }
+
+        @Override
+        public View getView(int position, View recycled, ViewGroup parent) {
+            TextView cell = recycled instanceof TextView ? (TextView) recycled : Ui.label(SermonActivity.this, "", 16, Ui.TEXT);
+            int number = chapters.get(position);
+            cell.setText(String.valueOf(number));
+            cell.setGravity(Gravity.CENTER);
+            cell.setMinHeight(Ui.dp(44));
+            cell.setTypeface(Typeface.DEFAULT_BOLD);
+            cell.setBackground(Ui.round(number == chapter ? Ui.ACCENT : Ui.CARD2, 10));
+            return cell;
+        }
+    };
+
+    private final Ui.Rows<Library.Verse> verseRows = new Ui.Rows<Library.Verse>() {
+        @Override
+        String title(Library.Verse item) { return item.text; }
+
+        @Override
+        String badge(Library.Verse item) { return String.valueOf(item.number); }
+
+        @Override
+        boolean chosen(int position) { return picked.contains(items.get(position).number); }
+    };
+
     // Пісні.
-    private Spinner songbookSpinner;
-    private TextView songsEmpty;
+    private TextView songbookButton, songsHint;
+    private View songsTop;
+    private View songsEmpty;
     private View songsBody;
     private EditText songFilter;
     private final List<Library.Module> songbooks = new ArrayList<>();
     private Library.Module songbook;
-    private final Lines songLines = new Lines(false);
     private final List<Library.Song> songs = new ArrayList<>();
     private Library.Song song;
     private TextView songText;
+    /// Текст вибраної пісні — щоб повернути його після повороту.
+    private String songShown = "";
+
+    private final Ui.Rows<Library.Song> songRows = new Ui.Rows<Library.Song>() {
+        @Override
+        String title(Library.Song item) { return item.title; }
+
+        @Override
+        String badge(Library.Song item) { return String.valueOf(item.index + 1); }
+
+        @Override
+        boolean chosen(int position) { return items.get(position) == song; }
+    };
 
     // Текст.
     private EditText textHeading;
@@ -156,20 +234,35 @@ public final class SermonActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        Ui.init(this);
+        // Положення екрана — за `UiScale`: типово на телефоні лише вертикально
+        // (лежачи список книг стискався до нуля) і без перевертання —
+        // «железно зафиксирована в ориентации».
+        UiScale.applyOrientation(this);
         library = new Library(this);
         settings = new Settings(this);
-        phone = getResources().getConfiguration().smallestScreenWidthDp < 600;
-        // На телефоні лише вертикально (лежачи список книг стискався до нуля)
-        // і без перевертання — «железно зафиксирована в ориентации».
-        if (phone) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         plan = SermonPlan.load(this, prefs().getString("current", ""));
         if (plan == null) plan = new SermonPlan();
+        linkText = getString(R.string.s_checking);
         setContentView(build());
-        titleField.setText(plan.title);
-        showTab(0);
         reloadBibles();
         reloadSongbooks();
-        refreshPlan();
+        render();
+    }
+
+    /// Поворот чи інший розмір вікна: розкладку складаємо наново під нову
+    /// ширину. Стан лежить у полях, тож усе вибране лишається на місці; набране
+    /// в полях вводу забираємо зі старих видів і повертаємо в нові.
+    @Override
+    public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        if (titleField == null) return;
+        keptFilter = songFilter.getText().toString();
+        keptHeading = textHeading.getText().toString();
+        keptBody = textBody.getText().toString();
+        Ui.init(this);
+        setContentView(build());
+        render();
     }
 
     @Override
@@ -185,14 +278,77 @@ public final class SermonActivity extends Activity {
     // MARK: Вигляд
 
     private View build() {
-        LinearLayout root = vertical();
-        int pad = dp(8);
-        root.setPadding(pad, pad, pad, pad);
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        wide = Shell.wide(this);
+        roomy = wide && metrics.widthPixels / metrics.density >= 1000;
+        tabChips.clear();
+        panels.clear();
+        steps.clear();
 
-        Button back = small("←", v -> finish());
-        titleField = new EditText(this);
-        titleField.setHint(R.string.s_plan_name_hint);
-        titleField.setSingleLine(true);
+        LinearLayout root = Ui.col(this);
+        root.setBackgroundColor(Ui.BG);
+        root.setFitsSystemWindows(true);
+        root.addView(header());
+
+        // Три кроки: поточний — яскравий, решта — сірі (див. `refreshPlan`).
+        LinearLayout stepRow = Ui.row(this);
+        stepRow.setPadding(Ui.dp(6), Ui.dp(2), Ui.dp(6), 0);
+        for (int text : new int[] {R.string.s_step_1, R.string.s_step_2, R.string.s_step_3}) {
+            TextView step = Ui.label(this, getString(text), wide ? 13.5f : 12, Ui.DIM);
+            step.setTypeface(Ui.MEDIUM);
+            step.setGravity(Gravity.CENTER);
+            step.setMaxLines(2);
+            step.setPadding(Ui.dp(6), Ui.dp(7), Ui.dp(6), Ui.dp(7));
+            steps.add(step);
+            stepRow.addView(step, Ui.lp(0, Ui.FILL, 1, 2));
+        }
+        root.addView(stepRow);
+
+        status = Ui.hint(this, "");
+        root.addView(status);
+
+        LinearLayout body = wide ? Ui.row(this) : Ui.col(this);
+        body.setPadding(Ui.dp(5), Ui.dp(2), Ui.dp(5), Ui.dp(8));
+        root.addView(body, Ui.lp(Ui.FILL, 0, 1));
+
+        LinearLayout left = Ui.col(this);
+        LinearLayout tabs = Ui.row(this);
+        addTab(tabs, R.drawable.ic_bible, getString(R.string.t_tab_bible));
+        addTab(tabs, R.drawable.ic_song, getString(R.string.t_tab_songs));
+        addTab(tabs, R.drawable.ic_folder, getString(R.string.s_tab_file));
+        addTab(tabs, R.drawable.ic_text, getString(R.string.t_tab_text));
+        if (wide) {
+            left.addView(tabs);
+        } else {
+            // На вузькому екрані чотири вкладки можуть не вміститися в ряд — тоді ряд гортається.
+            HorizontalScrollView scroller = new HorizontalScrollView(this);
+            scroller.setHorizontalScrollBarEnabled(false);
+            scroller.addView(tabs);
+            left.addView(scroller);
+        }
+        FrameLayout area = new FrameLayout(this);
+        left.addView(area, Ui.lp(Ui.FILL, 0, 1));
+        addPanel(area, biblePanel());
+        addPanel(area, songsPanel());
+        addPanel(area, filePanel());
+        addPanel(area, textPanel());
+        body.addView(left, wide ? Ui.lp(0, Ui.FILL, 3) : Ui.lp(Ui.FILL, 0, 3));
+        body.addView(planColumn(), wide ? Ui.lp(0, Ui.FILL, 2, 5, 3, 3, 0) : Ui.lp(Ui.FILL, 0, 2, 3, 6, 3, 0));
+        return root;
+    }
+
+    /// Шапка: «назад», назва плану й куди піти — до своїх планів і до бібліотеки.
+    private View header() {
+        LinearLayout box = Ui.col(this);
+        LinearLayout bar = Ui.row(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(Ui.dp(6), Ui.dp(4), Ui.dp(5), Ui.dp(2));
+        ImageView back = Ui.iconButton(this, R.drawable.ic_back, 0, this::finish);
+        back.setContentDescription(getString(R.string.x_back));
+        titleField = Ui.field(this, getString(R.string.s_plan_name_hint), false);
+        // Назву пишуть звичайними словами: з великої літери й із підказками клавіатури.
+        titleField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        titleField.setText(plan.title);
         titleField.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
@@ -205,206 +361,202 @@ public final class SermonActivity extends Activity {
         // Власник: «в планшете не понятно как добавить план в программу».
         // Вгорі — лише назва й куди піти; головна дія, «Завантажити в
         // «Слово»», стоїть окремо великою кнопкою під планом.
-        plansButton = small(getString(R.string.s_plans_count, SermonPlan.all(this).size()), v -> choosePlan());
-        Button shelf = small(getString(R.string.s_library), v -> openLibrary());
-        explain(back, R.string.x_back);
-        explain(plansButton, R.string.x_plans);
-        explain(shelf, R.string.x_library);
+        plansButton = Ui.button(this, R.drawable.ic_folder, getString(R.string.s_plans_count, 0), Ui.CARD2, this::choosePlan);
+        TextView shelf = Ui.button(this, R.drawable.ic_extension, getString(R.string.s_library), Ui.CARD2, this::openLibrary);
+        // Довгий дотик на кнопці — що вона робить.
+        Ui.explain(back, getString(R.string.x_back));
+        Ui.explain(plansButton, getString(R.string.x_plans));
+        Ui.explain(shelf, getString(R.string.x_library));
 
-        if (phone) {
-            LinearLayout top = row();
-            top.addView(back);
-            top.addView(titleField, weight(1));
-            root.addView(top);
-            HorizontalScrollView scroller = new HorizontalScrollView(this);
-            LinearLayout buttons = row();
-            buttons.addView(plansButton);
-            buttons.addView(shelf);
-            scroller.addView(buttons);
-            root.addView(scroller);
+        bar.addView(back, Ui.lp(Ui.dp(48), Ui.dp(48), 0));
+        bar.addView(titleField, Ui.lp(0, Ui.dp(48), 1, 2, 0, 3, 0));
+        box.addView(bar);
+        if (wide) {
+            plansButton.setMaxLines(1);
+            shelf.setMaxLines(1);
+            bar.addView(plansButton, Ui.lp(Ui.WRAP, Ui.dp(48), 0, 3, 0, 3, 0));
+            bar.addView(shelf, Ui.lp(Ui.WRAP, Ui.dp(48), 0, 3, 0, 3, 0));
         } else {
-            LinearLayout top = row();
-            top.addView(back);
-            top.addView(titleField, weight(1));
-            top.addView(plansButton);
-            top.addView(shelf);
-            root.addView(top);
+            // Вузький екран: дві кнопки — другим рядом, на всю ширину порівну.
+            LinearLayout second = Ui.row(this);
+            second.setPadding(Ui.dp(5), Ui.dp(2), Ui.dp(5), 0);
+            second.addView(plansButton, Ui.lp(0, Ui.FILL, 1, 3));
+            second.addView(shelf, Ui.lp(0, Ui.FILL, 1, 3));
+            box.addView(second);
         }
-        LinearLayout stepRow = row();
-        for (int text : new int[] {R.string.s_step_1, R.string.s_step_2, R.string.s_step_3}) {
-            TextView step = new TextView(this);
-            step.setText(text);
-            step.setTextSize(TypedValue.COMPLEX_UNIT_SP, phone ? 12 : 14);
-            step.setGravity(Gravity.CENTER);
-            step.setPadding(dp(6), dp(6), dp(6), dp(6));
-            steps.add(step);
-            LinearLayout.LayoutParams gap = weight(1);
-            gap.setMargins(dp(2), dp(4), dp(2), dp(4));
-            stepRow.addView(step, gap);
-        }
-        root.addView(stepRow);
-        status = new TextView(this);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        status.setTextColor(0xFF9AA4B2);
-        status.setPadding(dp(4), 0, dp(4), dp(4));
-        root.addView(status);
-
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(phone ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        root.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-
-        LinearLayout left = vertical();
-        LinearLayout tabs = row();
-        addTab(tabs, getString(R.string.t_tab_bible));
-        addTab(tabs, getString(R.string.t_tab_songs));
-        addTab(tabs, getString(R.string.s_tab_file));
-        addTab(tabs, getString(R.string.t_tab_text));
-        if (phone) {
-            HorizontalScrollView scroller = new HorizontalScrollView(this);
-            scroller.addView(tabs);
-            left.addView(scroller);
-        } else {
-            left.addView(tabs);
-        }
-        FrameLayout area = new FrameLayout(this);
-        left.addView(area, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        addPanel(area, biblePanel());
-        addPanel(area, songsPanel());
-        addPanel(area, filePanel());
-        addPanel(area, textPanel());
-        body.addView(left, phone
-            ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 3)
-            : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 3));
-
-        LinearLayout right = vertical();
-        right.setPadding(phone ? 0 : dp(10), phone ? dp(6) : 0, 0, 0);
-        planCount = new TextView(this);
-        planCount.setText(getString(R.string.s_plan_count, 0));
-        planCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        planCount.setTypeface(Typeface.DEFAULT_BOLD);
-        LinearLayout tools = row();
-        tools.addView(planCount, weight(1));
-        tools.addView(small(getString(R.string.t_up), v -> move(-1)));
-        tools.addView(small(getString(R.string.t_down), v -> move(1)));
-        tools.addView(small(getString(R.string.t_remove), v -> removeSelected()));
-        right.addView(tools);
-        planEmpty = hint(getString(R.string.s_plan_empty));
-        right.addView(planEmpty);
-        ListView planList = new ListView(this);
-        planList.setAdapter(planLines);
-        planList.setOnItemClickListener((parent, view, position, id) -> {
-            selected = position;
-            planLines.mark(position);
-        });
-        right.addView(planList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        orderHint = hint(getString(R.string.s_hint_order));
-        right.addView(orderHint);
-        Button upload = small(getString(R.string.s_upload), v -> upload());
-        upload.setTextColor(0xFFFFFFFF);
-        upload.setTypeface(Typeface.DEFAULT_BOLD);
-        upload.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        upload.setBackground(rounded(ACCENT));
-        explain(upload, R.string.x_upload);
-        right.addView(upload, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
-        linkState = hint(getString(R.string.s_checking));
-        linkState.setGravity(Gravity.CENTER);
-        right.addView(linkState);
-        body.addView(right, phone
-            ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2)
-            : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2));
-        return root;
+        return box;
     }
 
-    private void addTab(LinearLayout tabs, String title) {
-        int index = tabButtons.size();
-        Button button = new Button(this, null, 0, R.style.TabButton);
-        button.setText(title);
-        button.setOnClickListener(v -> showTab(index));
-        tabButtons.add(button);
-        tabs.addView(button);
+    private void addTab(LinearLayout tabs, int icon, String title) {
+        int index = tabChips.size();
+        TextView chip = Ui.chip(this, icon, title, () -> showTab(index));
+        tabChips.add(chip);
+        tabs.addView(chip, Ui.lp(Ui.WRAP, Ui.dp(40), 0, 3));
     }
 
     private void addPanel(FrameLayout area, View panel) {
         panels.add(panel);
-        area.addView(panel, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        area.addView(panel, Ui.fill());
     }
 
     private void showTab(int index) {
+        tab = index;
         for (int i = 0; i < panels.size(); i++) {
             panels.get(i).setVisibility(i == index ? View.VISIBLE : View.GONE);
-            tabButtons.get(i).setTextColor(i == index ? ACCENT : Color.WHITE);
+            TextView chip = tabChips.get(i);
+            // Назва вкладки лежить в описі кнопки — `chipState` кладе її туди сам.
+            Ui.chipState(chip, String.valueOf(chip.getContentDescription()), i == index, Ui.ACCENT);
         }
+    }
+
+    /// Перемалювати все зі стану — після `build()`: і вперше, і після повороту.
+    private void render() {
+        showTab(tab);
+        showBibles();
+        showSongbooks();
+        songText.setText(songShown);
+        refreshPlan();
+        setStatus(statusText);
+        showLink();
+    }
+
+    /// Картка-колонка зі списком усередині. Заокруглені кути обрізають і
+    /// підсвічення рядка під пальцем — воно не вилазить за картку.
+    private LinearLayout pane(View inner) {
+        LinearLayout card = Ui.card(this);
+        card.setClipToOutline(true);
+        card.addView(inner, Ui.lp(Ui.FILL, 0, 1));
+        return card;
+    }
+
+    /// Порожній стан по центру, у прокрутці: на низькому екрані (телефон,
+    /// відкрита клавіатура) значок із поясненням не обрізає, а гортає.
+    private View centred(LinearLayout box) {
+        if (!wide) box.setPadding(Ui.dp(16), Ui.dp(10), Ui.dp(16), Ui.dp(10));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(box, new FrameLayout.LayoutParams(Ui.FILL, Ui.WRAP));
+        return scroll;
+    }
+
+    /// Підказки в ресурсах називають кнопки ще зі старими значками-символами
+    /// («＋ Додати вірші в план»). Значки тепер справжні, тож символ із назви
+    /// прибираємо — у лапках має стояти те саме, що написано на кнопці.
+    private static String tidy(String text) {
+        return text.replace("＋ ", "").replace("⬆ ", "");
     }
 
     // MARK: Біблія
 
     private View biblePanel() {
-        LinearLayout panel = vertical();
-        panel.addView(hint(getString(R.string.s_hint_bible)));
-        bibleSpinner = new Spinner(this);
-        bibleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                chooseBible(position);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) { }
-        });
-        panel.addView(bibleSpinner);
-        bibleEmpty = hint(getString(R.string.s_no_bibles));
-        panel.addView(bibleEmpty);
+        LinearLayout panel = Ui.col(this);
+        bibleHint = Ui.hint(this, tidy(getString(R.string.s_hint_bible)));
+        panel.addView(bibleHint);
+        // Переклад — кнопкою з його назвою; вибір відкривається вікном знизу.
+        bibleButton = Ui.button(this, R.drawable.ic_bible, "", Ui.CARD2, this::pickBible);
+        bibleButton.setMaxLines(1);
+        bibleButton.setPadding(Ui.dp(16), 0, Ui.dp(16), 0);
+        if (wide) bibleButton.setMinWidth(Ui.dp(240));
+        Ui.explain(bibleButton, getString(R.string.x_translation));
+        panel.addView(bibleButton, Ui.lp(wide ? Ui.WRAP : Ui.FILL, Ui.dp(46), 0, 3));
+        bibleEmpty = centred(Ui.empty(this, R.drawable.ic_bible, Lang.t("Перекладів ще немає", "No translations yet"),
+            getString(R.string.s_no_bibles), getString(R.string.s_library), this::openLibrary));
+        panel.addView(bibleEmpty, Ui.lp(Ui.FILL, 0, 1));
 
-        LinearLayout columns = new LinearLayout(this);
-        columns.setOrientation(LinearLayout.HORIZONTAL);
-        ListView bookList = new ListView(this);
-        bookList.setAdapter(bookLines);
+        LinearLayout columns = Ui.row(this);
+        ListView bookList = Ui.list(this, bookRows);
         bookList.setOnItemClickListener((parent, view, position, id) -> chooseBook(position));
         GridView chapterGrid = new GridView(this);
         chapterGrid.setNumColumns(GridView.AUTO_FIT);
-        chapterGrid.setColumnWidth(dp(phone ? 44 : 52));
+        chapterGrid.setColumnWidth(Ui.dp(wide ? 52 : 44));
         chapterGrid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
+        chapterGrid.setHorizontalSpacing(Ui.dp(4));
+        chapterGrid.setVerticalSpacing(Ui.dp(4));
+        chapterGrid.setPadding(Ui.dp(6), Ui.dp(8), Ui.dp(6), Ui.dp(8));
+        chapterGrid.setClipToPadding(false);
+        chapterGrid.setSelector(new ColorDrawable(0x22FFFFFF));
         chapterGrid.setAdapter(chapterCells);
         chapterGrid.setOnItemClickListener((parent, view, position, id) -> chooseChapter(position));
-        ListView verseList = new ListView(this);
-        verseList.setAdapter(verseLines);
+        verseList = Ui.list(this, verseRows);
         verseList.setOnItemClickListener((parent, view, position, id) -> toggleVerse(position));
-        columns.addView(bookList, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 3));
-        columns.addView(chapterGrid, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2));
-        columns.addView(verseList, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 5));
+        columns.addView(pane(bookList), Ui.lp(0, Ui.FILL, 3, 3));
+        columns.addView(pane(chapterGrid), Ui.lp(0, Ui.FILL, 2, 3));
+        columns.addView(pane(verseList), Ui.lp(0, Ui.FILL, 5, 3));
 
-        LinearLayout bottom = row();
-        bottom.addView(hint(getString(R.string.s_pick_verses)), weight(1));
-        bottom.addView(small(getString(R.string.s_add_chapter), v -> addScripture(true)));
-        Button add = small(getString(R.string.s_add_verses), v -> addScripture(false));
-        add.setTextColor(ACCENT);
-        bottom.addView(add);
+        TextView pickHint = Ui.hint(this, getString(R.string.s_pick_verses));
+        TextView whole = Ui.button(this, R.drawable.ic_add, Ui.plain(getString(R.string.s_add_chapter)), Ui.CARD2, () -> addScripture(true));
+        TextView add = Ui.primary(this, R.drawable.ic_plan_add, Ui.plain(getString(R.string.s_add_verses)), () -> addScripture(false));
+        LinearLayout bottom = Ui.row(this);
+        bottom.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout content = vertical();
-        content.addView(columns, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        LinearLayout content = Ui.col(this);
+        content.addView(columns, Ui.lp(Ui.FILL, 0, 1));
+        if (wide) {
+            whole.setMaxLines(1);
+            add.setMaxLines(1);
+            whole.setPadding(Ui.dp(16), 0, Ui.dp(16), 0);
+            add.setPadding(Ui.dp(18), 0, Ui.dp(18), 0);
+            // Підказка — в одному ряду з кнопками, лише коли їй там вистачає місця.
+            if (roomy) bottom.addView(pickHint, Ui.lp(0, Ui.WRAP, 1));
+            else {
+                content.addView(pickHint);
+                bottom.addView(Ui.gap(this));
+            }
+            bottom.addView(whole, Ui.lp(Ui.WRAP, Ui.dp(48), 0, 3));
+            bottom.addView(add, Ui.lp(Ui.WRAP, Ui.dp(48), 0, 3));
+        } else {
+            // Вузький екран: кнопки ділять ряд, тож поля в них менші, а підпис головної — дрібніший.
+            content.addView(pickHint);
+            whole.setPadding(Ui.dp(8), Ui.dp(6), Ui.dp(8), Ui.dp(6));
+            add.setPadding(Ui.dp(8), Ui.dp(6), Ui.dp(8), Ui.dp(6));
+            add.setTextSize(14.5f);
+            bottom.addView(whole, Ui.lp(0, Ui.FILL, 1, 3));
+            bottom.addView(add, Ui.lp(0, Ui.FILL, 1.6f, 3));
+        }
         content.addView(bottom);
         bibleBody = content;
-        panel.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        panel.addView(content, Ui.lp(Ui.FILL, 0, 1));
         return panel;
     }
 
     private void reloadBibles() {
         bibles.clear();
         bibles.addAll(library.modules(Library.BIBLE));
-        List<String> names = new ArrayList<>();
-        for (Library.Module module : bibles) names.add(module.name);
-        bibleSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, names));
-        boolean empty = bibles.isEmpty();
-        bibleEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
-        bibleSpinner.setVisibility(empty ? View.GONE : View.VISIBLE);
-        bibleBody.setVisibility(empty ? View.GONE : View.VISIBLE);
-        if (empty) {
+        if (bibles.isEmpty()) {
             bible = null;
+            showBibles();
             return;
         }
         String last = prefs().getString("bible", "");
         int position = 0;
         for (int i = 0; i < bibles.size(); i++) if (bibles.get(i).id.equals(last)) position = i;
-        bibleSpinner.setSelection(position);
         chooseBible(position);
+        showBibles();
+    }
+
+    /// Кнопка перекладу з його назвою; без перекладів — порожній стан із
+    /// кнопкою «Переклади й пісенники» замість трьох колонок.
+    private void showBibles() {
+        boolean empty = bibles.isEmpty();
+        bibleEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+        bibleHint.setVisibility(empty ? View.GONE : View.VISIBLE);
+        bibleButton.setVisibility(empty ? View.GONE : View.VISIBLE);
+        bibleBody.setVisibility(empty ? View.GONE : View.VISIBLE);
+        Ui.setText(bibleButton, bible == null ? getString(R.string.bible_translation) : bible.name);
+    }
+
+    private void pickBible() {
+        String[] names = new String[bibles.size()];
+        int checked = -1;
+        for (int i = 0; i < bibles.size(); i++) {
+            names[i] = bibles.get(i).name;
+            if (bible != null && bibles.get(i).id.equals(bible.id)) checked = i;
+        }
+        Ui.pick(this, getString(R.string.bible_translation), names, checked, which -> {
+            chooseBible(which);
+            showBibles();
+        });
     }
 
     private void chooseBible(int position) {
@@ -415,60 +567,54 @@ public final class SermonActivity extends Activity {
         prefs().edit().putString("bible", chosen.id).apply();
         books.clear();
         books.addAll(library.books(chosen.id));
-        List<String> names = new ArrayList<>();
-        for (Library.Book item : books) names.add(item.name);
-        bookLines.set(names, null);
         book = null;
+        bookRows.set(books);
         chapters.clear();
-        chapterCells.set(new ArrayList<>(), null);
         chapter = -1;
+        chapterCells.notifyDataSetChanged();
         verses.clear();
-        verseLines.set(new ArrayList<>(), null);
+        verseRows.set(verses);
     }
 
     private void chooseBook(int position) {
         if (bible == null || position < 0 || position >= books.size()) return;
         book = books.get(position);
-        bookLines.mark(position);
+        bookRows.notifyDataSetChanged();
         chapters.clear();
         chapters.addAll(library.chapters(bible.id, book.index));
-        List<String> numbers = new ArrayList<>();
-        for (Integer number : chapters) numbers.add(String.valueOf(number));
-        chapterCells.set(numbers, null);
         chapter = -1;
+        chapterCells.notifyDataSetChanged();
         verses.clear();
-        verseLines.set(new ArrayList<>(), null);
+        verseRows.set(verses);
         if (chapters.size() == 1) chooseChapter(0);
     }
 
     private void chooseChapter(int position) {
         if (bible == null || book == null || position < 0 || position >= chapters.size()) return;
         chapter = chapters.get(position);
-        chapterCells.mark(position);
+        chapterCells.notifyDataSetChanged();
         verses.clear();
         verses.addAll(library.verses(bible.id, book.index, chapter));
         picked.clear();
-        List<String> lines = new ArrayList<>();
-        for (Library.Verse verse : verses) lines.add(verse.number + "  " + verse.text);
-        verseLines.set(lines, null);
+        verseRows.set(verses);
+        // Новий розділ читають з початку, а не з місця, де стояв попередній.
+        verseList.setSelection(0);
     }
 
     private void toggleVerse(int position) {
         if (position < 0 || position >= verses.size()) return;
         int number = verses.get(position).number;
         if (!picked.remove(number)) picked.add(number);
-        Set<Integer> marked = new HashSet<>();
-        for (int i = 0; i < verses.size(); i++) if (picked.contains(verses.get(i).number)) marked.add(i);
-        verseLines.markAll(marked);
+        verseRows.notifyDataSetChanged();
     }
 
     private void addScripture(boolean whole) {
         if (bible == null || book == null || chapter < 0) {
-            toast(getString(R.string.bible_pick_chapter));
+            Ui.toast(this, getString(R.string.bible_pick_chapter));
             return;
         }
         if (!whole && picked.isEmpty()) {
-            toast(getString(R.string.s_pick_verses));
+            Ui.toast(this, getString(R.string.s_pick_verses));
             return;
         }
         SermonPlan.Item item = new SermonPlan.Item();
@@ -491,7 +637,7 @@ public final class SermonActivity extends Activity {
         item.title = name + " " + chapter + (whole ? "" : ":" + span(item.verses));
         addItem(item);
         picked.clear();
-        verseLines.markAll(new HashSet<>());
+        verseRows.notifyDataSetChanged();
     }
 
     /// Вірші, що йдуть підряд, згортаються в діапазон: 1,2,3,7 → «1-3,7».
@@ -515,77 +661,103 @@ public final class SermonActivity extends Activity {
     // MARK: Пісні
 
     private View songsPanel() {
-        LinearLayout panel = vertical();
-        panel.addView(hint(getString(R.string.s_hint_songs)));
-        songbookSpinner = new Spinner(this);
-        songbookSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                chooseSongbook(position);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) { }
-        });
-        songFilter = new EditText(this);
-        songFilter.setHint(R.string.t_song_filter);
-        songFilter.setSingleLine(true);
+        LinearLayout panel = Ui.col(this);
+        songsHint = Ui.hint(this, tidy(getString(R.string.s_hint_songs)));
+        panel.addView(songsHint);
+        // Пісенник — кнопкою з його назвою, як і переклад; поруч — пошук пісні.
+        songbookButton = Ui.button(this, R.drawable.ic_song, "", Ui.CARD2, this::pickSongbook);
+        songbookButton.setMaxLines(1);
+        Ui.explain(songbookButton, getString(R.string.x_songbook));
+        songFilter = Ui.search(this, getString(R.string.t_song_filter));
+        // Набране до повороту повертаємо ще до того, як поле почне слухати зміни:
+        // інакше список перечитався б і вибрана пісня злетіла б.
+        songFilter.setText(keptFilter);
         songFilter.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
             @Override public void afterTextChanged(Editable s) { reloadSongs(); }
         });
-        LinearLayout top = row();
-        top.addView(songbookSpinner, weight(1));
-        top.addView(songFilter, weight(1));
+        LinearLayout top = Ui.row(this);
+        top.addView(songbookButton, Ui.lp(0, Ui.dp(46), 1, 3));
+        top.addView(songFilter, Ui.lp(0, Ui.dp(46), 1, 3));
+        songsTop = top;
         panel.addView(top);
-        songsEmpty = hint(getString(R.string.s_no_songbooks));
-        panel.addView(songsEmpty);
+        songsEmpty = centred(Ui.empty(this, R.drawable.ic_song, Lang.t("Пісенників ще немає", "No songbooks yet"),
+            getString(R.string.s_no_songbooks), getString(R.string.s_library), this::openLibrary));
+        panel.addView(songsEmpty, Ui.lp(Ui.FILL, 0, 1));
 
-        LinearLayout columns = new LinearLayout(this);
-        columns.setOrientation(LinearLayout.HORIZONTAL);
-        ListView songList = new ListView(this);
-        songList.setAdapter(songLines);
+        LinearLayout columns = Ui.row(this);
+        ListView songList = Ui.list(this, songRows);
         songList.setOnItemClickListener((parent, view, position, id) -> chooseSong(position));
         ScrollView scroller = new ScrollView(this);
-        songText = new TextView(this);
-        songText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        songText.setPadding(dp(10), dp(6), dp(6), dp(6));
+        songText = Ui.label(this, "", 16, Ui.TEXT);
+        songText.setHint(Lang.t("Виберіть пісню — тут буде її текст", "Pick a song — its words will show here"));
+        songText.setHintTextColor(Ui.FAINT);
+        songText.setLineSpacing(Ui.dp(2), 1f);
+        songText.setPadding(Ui.dp(14), Ui.dp(12), Ui.dp(14), Ui.dp(14));
         scroller.addView(songText);
-        columns.addView(songList, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        columns.addView(scroller, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        columns.addView(pane(songList), Ui.lp(0, Ui.FILL, 1, 3));
+        columns.addView(pane(scroller), Ui.lp(0, Ui.FILL, 1, 3));
 
-        LinearLayout bottom = row();
-        bottom.addView(spacer());
-        Button add = small(getString(R.string.s_add_song), v -> addSong());
-        add.setTextColor(ACCENT);
-        bottom.addView(add);
-
-        LinearLayout content = vertical();
-        content.addView(columns, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        content.addView(bottom);
+        LinearLayout content = Ui.col(this);
+        content.addView(columns, Ui.lp(Ui.FILL, 0, 1));
+        content.addView(addRow(Ui.plain(getString(R.string.s_add_song)), this::addSong));
         songsBody = content;
-        panel.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        panel.addView(content, Ui.lp(Ui.FILL, 0, 1));
         return panel;
+    }
+
+    /// Ряд із головною кнопкою «Додати … в план»: на широкому екрані вона
+    /// стоїть праворуч, на вузькому — на всю ширину.
+    private LinearLayout addRow(String title, Runnable action) {
+        LinearLayout bottom = Ui.row(this);
+        TextView add = Ui.primary(this, R.drawable.ic_plan_add, title, action);
+        if (wide) {
+            add.setMaxLines(1);
+            add.setPadding(Ui.dp(18), 0, Ui.dp(18), 0);
+            bottom.addView(Ui.gap(this));
+            bottom.addView(add, Ui.lp(Ui.WRAP, Ui.dp(48), 0, 3));
+        } else {
+            bottom.addView(add, Ui.lp(0, Ui.dp(48), 1, 3));
+        }
+        return bottom;
     }
 
     private void reloadSongbooks() {
         songbooks.clear();
         songbooks.addAll(library.modules(Library.SONGS));
-        List<String> names = new ArrayList<>();
-        for (Library.Module module : songbooks) names.add(module.name);
-        songbookSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, names));
-        boolean empty = songbooks.isEmpty();
-        songsEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
-        songsBody.setVisibility(empty ? View.GONE : View.VISIBLE);
-        songbookSpinner.setVisibility(empty ? View.GONE : View.VISIBLE);
-        songFilter.setVisibility(empty ? View.GONE : View.VISIBLE);
-        if (empty) {
+        if (songbooks.isEmpty()) {
             songbook = null;
+            showSongbooks();
             return;
         }
         String last = prefs().getString("songbook", "");
         int position = 0;
         for (int i = 0; i < songbooks.size(); i++) if (songbooks.get(i).id.equals(last)) position = i;
-        songbookSpinner.setSelection(position);
         chooseSongbook(position);
+        showSongbooks();
+    }
+
+    private void showSongbooks() {
+        boolean empty = songbooks.isEmpty();
+        songsEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+        songsHint.setVisibility(empty ? View.GONE : View.VISIBLE);
+        songsTop.setVisibility(empty ? View.GONE : View.VISIBLE);
+        songsBody.setVisibility(empty ? View.GONE : View.VISIBLE);
+        Ui.setText(songbookButton, songbook == null ? getString(R.string.t_songbook) : songbook.name);
+    }
+
+    private void pickSongbook() {
+        String[] names = new String[songbooks.size()];
+        int checked = -1;
+        for (int i = 0; i < songbooks.size(); i++) {
+            names[i] = songbooks.get(i).name;
+            if (songbook != null && songbooks.get(i).id.equals(songbook.id)) checked = i;
+        }
+        Ui.pick(this, getString(R.string.t_songbook), names, checked, which -> {
+            chooseSongbook(which);
+            showSongbooks();
+        });
     }
 
     private void chooseSongbook(int position) {
@@ -600,33 +772,33 @@ public final class SermonActivity extends Activity {
     private void reloadSongs() {
         songs.clear();
         song = null;
+        songShown = "";
         songText.setText("");
         if (songbook == null) {
-            songLines.set(new ArrayList<>(), null);
+            songRows.set(songs);
             return;
         }
         songs.addAll(library.songs(songbook.id, songFilter.getText().toString(), 400));
-        List<String> titles = new ArrayList<>();
-        for (Library.Song item : songs) titles.add((item.index + 1) + ". " + item.title);
-        songLines.set(titles, null);
+        songRows.set(songs);
     }
 
     private void chooseSong(int position) {
         if (songbook == null || position < 0 || position >= songs.size()) return;
         song = songs.get(position);
-        songLines.mark(position);
+        songRows.notifyDataSetChanged();
         StringBuilder text = new StringBuilder();
         for (Library.Part part : library.parts(songbook.id, song.index)) {
             if (text.length() > 0) text.append("\n\n");
             if (!part.kind.isEmpty()) text.append(part.kind).append('\n');
             text.append(part.text);
         }
-        songText.setText(text);
+        songShown = text.toString();
+        songText.setText(songShown);
     }
 
     private void addSong() {
         if (songbook == null || song == null) {
-            toast(getString(R.string.s_add_song));
+            Ui.toast(this, Lang.t("Спершу виберіть пісню", "Pick a song first"));
             return;
         }
         SermonPlan.Item item = new SermonPlan.Item();
@@ -644,36 +816,21 @@ public final class SermonActivity extends Activity {
     // MARK: Файл і текст
 
     private View filePanel() {
-        LinearLayout panel = vertical();
-        panel.setPadding(dp(6), dp(12), dp(6), dp(6));
-        TextView note = hint(getString(R.string.s_file_hint));
-        panel.addView(note);
-        Button pick = small(getString(R.string.s_pick_file), v -> pick(PICK_FILE, PLAN_TYPES));
-        pick.setTextColor(ACCENT);
-        panel.addView(pick, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        return panel;
+        return centred(Ui.empty(this, R.drawable.ic_folder, Lang.t("Файл у план", "A file for the plan"),
+            getString(R.string.s_file_hint), Ui.plain(getString(R.string.s_pick_file)), () -> pick(PICK_FILE, PLAN_TYPES)));
     }
 
     private View textPanel() {
-        LinearLayout panel = vertical();
-        panel.addView(hint(getString(R.string.s_hint_text)));
-        textHeading = new EditText(this);
-        textHeading.setHint(R.string.t_text_title_hint);
-        textHeading.setSingleLine(true);
-        textBody = new EditText(this);
-        textBody.setHint(R.string.t_text_body_hint);
-        textBody.setGravity(Gravity.TOP | Gravity.START);
-        textBody.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        panel.addView(textHeading);
-        panel.addView(textBody, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        LinearLayout bottom = row();
-        bottom.addView(spacer());
-        Button add = small(getString(R.string.s_text_add), v -> addText());
-        add.setTextColor(ACCENT);
-        bottom.addView(add);
-        panel.addView(bottom);
+        LinearLayout panel = Ui.col(this);
+        panel.addView(Ui.hint(this, tidy(getString(R.string.s_hint_text))));
+        textHeading = Ui.field(this, getString(R.string.t_text_title_hint), false);
+        textHeading.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        textHeading.setText(keptHeading);
+        textBody = Ui.field(this, getString(R.string.t_text_body_hint), true);
+        textBody.setText(keptBody);
+        panel.addView(textHeading, Ui.lp(Ui.FILL, Ui.dp(48), 0, 3));
+        panel.addView(textBody, Ui.lp(Ui.FILL, 0, 1, 3));
+        panel.addView(addRow(Ui.plain(getString(R.string.s_text_add)), this::addText));
         return panel;
     }
 
@@ -700,7 +857,7 @@ public final class SermonActivity extends Activity {
         try {
             startActivityForResult(intent, request);
         } catch (RuntimeException error) {
-            toast(getString(R.string.s_failed, error.getMessage()));
+            Ui.toast(this, getString(R.string.s_failed, error.getMessage()));
         }
     }
 
@@ -736,35 +893,88 @@ public final class SermonActivity extends Activity {
 
     // MARK: План
 
+    /// Права колонка: картка з лічильником, кнопками порядку й списком
+    /// пунктів, під нею — головна дія екрана і стан зв'язку.
+    private View planColumn() {
+        LinearLayout right = Ui.col(this);
+        LinearLayout card = Ui.card(this);
+        card.setClipToOutline(true);
+
+        LinearLayout tools = Ui.row(this);
+        tools.setGravity(Gravity.CENTER_VERTICAL);
+        tools.setPadding(Ui.dp(16), Ui.dp(7), Ui.dp(7), Ui.dp(3));
+        planCount = Ui.label(this, getString(R.string.s_plan_count, 0), 18, Ui.TEXT);
+        planCount.setTypeface(Ui.MEDIUM);
+        planCount.setMaxLines(1);
+        tools.addView(planCount, Ui.lp(0, Ui.WRAP, 1));
+        ImageView up = Ui.iconButton(this, R.drawable.ic_up, Ui.CARD2, () -> move(-1));
+        ImageView down = Ui.iconButton(this, R.drawable.ic_down, Ui.CARD2, () -> move(1));
+        ImageView remove = Ui.iconButton(this, R.drawable.ic_delete, Ui.CARD2, this::removeSelected);
+        up.setContentDescription(Ui.plain(getString(R.string.t_up)));
+        down.setContentDescription(Ui.plain(getString(R.string.t_down)));
+        remove.setContentDescription(Ui.plain(getString(R.string.t_remove)));
+        Ui.explain(up, getString(R.string.x_up));
+        Ui.explain(down, getString(R.string.x_down));
+        Ui.explain(remove, getString(R.string.x_remove));
+        for (ImageView button : new ImageView[] {up, down, remove}) tools.addView(button, Ui.lp(Ui.dp(44), Ui.dp(44), 0, 3));
+        card.addView(tools);
+
+        FrameLayout holder = new FrameLayout(this);
+        planList = Ui.list(this, planRows);
+        planList.setOnItemClickListener((parent, view, position, id) -> {
+            selected = position;
+            planRows.select(position);
+        });
+        holder.addView(planList, Ui.fill());
+        planEmpty = centred(Ui.empty(this, R.drawable.ic_plan, Lang.t("Пунктів ще немає", "No items yet"),
+            getString(R.string.s_plan_empty), null, null));
+        holder.addView(planEmpty, Ui.fill());
+        card.addView(holder, Ui.lp(Ui.FILL, 0, 1));
+        orderHint = Ui.hint(this, getString(R.string.s_hint_order));
+        card.addView(orderHint);
+        right.addView(card, Ui.lp(Ui.FILL, 0, 1));
+
+        TextView upload = Ui.primary(this, R.drawable.ic_upload, Ui.plain(getString(R.string.s_upload)), this::upload);
+        upload.setTextSize(17);
+        upload.setMaxLines(1);
+        Ui.explain(upload, getString(R.string.x_upload));
+        right.addView(upload, Ui.lp(Ui.FILL, Ui.dp(56), 0, 0, 8, 0, 0));
+        linkState = Ui.label(this, "", 12.5f, Ui.DIM);
+        linkState.setGravity(Gravity.CENTER);
+        linkState.setPadding(Ui.dp(8), Ui.dp(5), Ui.dp(8), 0);
+        right.addView(linkState);
+        return right;
+    }
+
     private void addItem(SermonPlan.Item item) {
         plan.items.add(item);
         selected = plan.items.size() - 1;
         refreshPlan();
         savePlan();
-        toast(getString(R.string.s_loaded, item.title));
+        Ui.toast(this, getString(R.string.s_loaded, item.title));
     }
 
     private void refreshPlan() {
-        List<String> titles = new ArrayList<>();
-        List<String> subtitles = new ArrayList<>();
-        for (int i = 0; i < plan.items.size(); i++) {
-            SermonPlan.Item item = plan.items.get(i);
-            titles.add((i + 1) + ".  " + kindIcon(item.type) + "  " + item.title);
-            subtitles.add(item.subtitle());
-        }
-        planLines.set(titles, subtitles);
         if (selected >= plan.items.size()) selected = plan.items.size() - 1;
-        planLines.mark(selected);
-        planEmpty.setVisibility(plan.items.isEmpty() ? View.VISIBLE : View.GONE);
+        planRows.set(plan.items);
+        planRows.select(selected);
         boolean empty = plan.items.isEmpty();
-        if (planCount != null) planCount.setText(getString(R.string.s_plan_count, plan.items.size()));
-        if (orderHint != null) orderHint.setVisibility(plan.items.size() > 1 ? View.VISIBLE : View.GONE);
+        planEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+        planList.setVisibility(empty ? View.GONE : View.VISIBLE);
+        planCount.setText(getString(R.string.s_plan_count, plan.items.size()));
+        orderHint.setVisibility(plan.items.size() > 1 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < steps.size(); i++) {
             boolean current = empty ? i == 0 : i == 2;
-            steps.get(i).setTextColor(current ? 0xFFFFFFFF : 0xFF9AA4B2);
-            steps.get(i).setBackground(current ? rounded(ACCENT) : rounded(0xFF1E2A3A));
+            steps.get(i).setTextColor(current ? 0xFFFFFFFF : Ui.DIM);
+            steps.get(i).setBackground(current ? Ui.gradient(Ui.ACCENT, Ui.ACCENT2, 12) : Ui.round(Ui.CARD2, 12));
         }
-        if (plansButton != null) plansButton.setText(getString(R.string.s_plans_count, SermonPlan.all(this).size()));
+        Ui.setText(plansButton, getString(R.string.s_plans_count, SermonPlan.all(this).size()));
+        // Вибраний пункт — на видноті: щойно доданий чи посунутий не ховається за краєм списку.
+        if (selected >= 0) {
+            ListView list = planList;
+            int at = selected;
+            list.post(() -> list.smoothScrollToPosition(at));
+        }
     }
 
     private void move(int delta) {
@@ -797,27 +1007,26 @@ public final class SermonActivity extends Activity {
         }
     }
 
+    /// «Мої плани»: новий план, збережені й останнім рядком — видалити відкритий.
     private void choosePlan() {
         List<SermonPlan> saved = SermonPlan.all(this);
-        String[] labels = new String[saved.size() + 1];
-        labels[0] = getString(R.string.s_new_plan);
+        String[] labels = new String[saved.size() + 2];
+        labels[0] = Ui.plain(getString(R.string.s_new_plan));
         for (int i = 0; i < saved.size(); i++) {
             SermonPlan item = saved.get(i);
             String title = item.title.trim().isEmpty() ? getString(R.string.s_untitled) : item.title.trim();
             labels[i + 1] = getString(R.string.s_plan_items, title, item.items.size());
         }
-        new AlertDialog.Builder(this)
-            .setTitle(R.string.s_plans)
-            .setItems(labels, (dialog, which) -> {
-                if (which == 0) {
-                    openPlan(new SermonPlan());
-                } else {
-                    openPlan(saved.get(which - 1));
-                }
-            })
-            .setNeutralButton(R.string.s_delete_plan, (dialog, which) -> confirmDeletePlan())
-            .setNegativeButton(R.string.cancel, null)
-            .show();
+        labels[labels.length - 1] = getString(R.string.s_delete_plan);
+        Ui.menu(this, getString(R.string.s_plans), labels, which -> {
+            if (which == 0) {
+                openPlan(new SermonPlan());
+            } else if (which <= saved.size()) {
+                openPlan(saved.get(which - 1));
+            } else {
+                confirmDeletePlan();
+            }
+        });
     }
 
     private void openPlan(SermonPlan chosen) {
@@ -830,56 +1039,86 @@ public final class SermonActivity extends Activity {
 
     private void confirmDeletePlan() {
         String title = plan.title.trim().isEmpty() ? getString(R.string.s_untitled) : plan.title.trim();
-        new AlertDialog.Builder(this)
-            .setMessage(getString(R.string.s_delete_plan_confirm, title))
-            .setPositiveButton(R.string.s_delete, (dialog, which) -> {
+        Ui.confirm(this, getString(R.string.s_delete_plan), getString(R.string.s_delete_plan_confirm, title),
+            getString(R.string.s_delete), () -> {
                 plan.delete(this);
                 List<SermonPlan> left = SermonPlan.all(this);
                 openPlan(left.isEmpty() ? new SermonPlan() : left.get(0));
-            })
-            .setNegativeButton(R.string.cancel, null)
-            .show();
+            });
     }
 
     // MARK: Бібліотека
 
+    /// Бібліотека планшета вікном знизу: що вже є (дотик — прибрати) і звідки взяти ще.
     private void openLibrary() {
         List<Library.Module> all = new ArrayList<>(library.modules(Library.BIBLE));
         all.addAll(library.modules(Library.SONGS));
-        AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle(R.string.s_library_title);
+        Dialog[] sheet = new Dialog[1];
+        LinearLayout box = Ui.col(this);
         if (all.isEmpty()) {
-            builder.setMessage(R.string.s_library_empty);
+            TextView note = Ui.label(this, getString(R.string.s_library_empty), 15, Ui.DIM);
+            note.setLineSpacing(Ui.dp(3), 1f);
+            note.setPadding(Ui.dp(22), 0, Ui.dp(22), Ui.dp(4));
+            box.addView(note);
         } else {
-            String[] labels = new String[all.size()];
-            for (int i = 0; i < all.size(); i++) {
-                Library.Module module = all.get(i);
-                String kind = getString(Library.BIBLE.equals(module.kind) ? R.string.s_kind_bible : R.string.s_kind_songs);
-                String source;
-                switch (module.source) {
-                    case "slovo": source = getString(R.string.s_source_slovo); break;
-                    case "github": source = getString(R.string.s_source_github); break;
-                    default: source = getString(R.string.s_source_file); break;
+            Ui.Rows<Library.Module> rows = new Ui.Rows<Library.Module>() {
+                @Override
+                String title(Library.Module module) { return module.name; }
+
+                @Override
+                String sub(Library.Module module) {
+                    String kind = getString(Library.BIBLE.equals(module.kind) ? R.string.s_kind_bible : R.string.s_kind_songs);
+                    String source;
+                    switch (module.source) {
+                        case "slovo": source = getString(R.string.s_source_slovo); break;
+                        case "github": source = getString(R.string.s_source_github); break;
+                        default: source = getString(R.string.s_source_file); break;
+                    }
+                    return kind + " · " + source;
                 }
-                labels[i] = kind + " · " + module.name + " — " + source;
-            }
-            builder.setItems(labels, (dialog, which) -> confirmDeleteModule(all.get(which)));
+            };
+            rows.set(all);
+            ListView list = Ui.list(this, rows);
+            list.setOnItemClickListener((parent, view, position, id) -> {
+                sheet[0].dismiss();
+                confirmDeleteModule(all.get(position));
+            });
+            // Список бере стільки, скільки треба, а довгий гортається: кнопки під ним завжди видно.
+            box.addView(list, Ui.lp(Ui.FILL, 0, 1));
+            box.addView(Ui.hint(this, Lang.t("Дотик по рядку — прибрати його з планшета. Нижче — звідки взяти ще.",
+                                             "Tap a row to remove it from the tablet. Below — where to get more.")),
+                Ui.lp(Ui.FILL, Ui.WRAP, 0, 8, 0, 8, 0));
         }
-        builder.setPositiveButton(R.string.s_from_slovo, (dialog, which) -> fromSlovo())
-            .setNegativeButton(R.string.s_from_github, (dialog, which) -> fromGithub())
-            .setNeutralButton(R.string.s_from_file, (dialog, which) -> pick(PICK_MODULE, null))
-            .show();
+        // У вузькому вікні (телефон) три кнопки зі значками в ряд не вміщаються — там лише підписи.
+        boolean icons = Math.min(getResources().getDisplayMetrics().widthPixels, Ui.dp(600)) >= Ui.dp(520);
+        LinearLayout buttons = Ui.row(this);
+        buttons.setPadding(Ui.dp(16), Ui.dp(10), Ui.dp(16), Ui.dp(2));
+        TextView slovo = Ui.button(this, icons ? R.drawable.ic_wifi : 0, getString(R.string.s_from_slovo), Ui.CARD2, () -> {
+            sheet[0].dismiss();
+            fromSlovo();
+        });
+        TextView github = Ui.button(this, icons ? R.drawable.ic_download : 0, getString(R.string.s_from_github), Ui.CARD2, () -> {
+            sheet[0].dismiss();
+            fromGithub();
+        });
+        TextView file = Ui.button(this, icons ? R.drawable.ic_folder : 0, getString(R.string.s_from_file), Ui.CARD2, () -> {
+            sheet[0].dismiss();
+            pick(PICK_MODULE, null);
+        });
+        for (TextView button : new TextView[] {slovo, github, file}) {
+            if (!icons) button.setPadding(Ui.dp(6), Ui.dp(8), Ui.dp(6), Ui.dp(8));
+            buttons.addView(button, Ui.lp(0, Ui.FILL, 1, 4));
+        }
+        box.addView(buttons);
+        sheet[0] = Ui.sheet(this, getString(R.string.s_library_title), box);
     }
 
     private void confirmDeleteModule(Library.Module module) {
-        new AlertDialog.Builder(this)
-            .setMessage(getString(R.string.s_delete_module, module.name))
-            .setPositiveButton(R.string.s_delete, (dialog, which) -> {
-                library.delete(module.id);
-                reloadBibles();
-                reloadSongbooks();
-            })
-            .setNegativeButton(R.string.cancel, null)
-            .show();
+        Ui.confirm(this, getString(R.string.s_delete_module, module.name), null, getString(R.string.s_delete), () -> {
+            library.delete(module.id);
+            reloadBibles();
+            reloadSongbooks();
+        });
     }
 
     private File modulesFolder() {
@@ -892,7 +1131,7 @@ public final class SermonActivity extends Activity {
     /// Зі «Слова» по Wi-Fi: переклади рядками, пісенники файлами `.vbm`.
     private void fromSlovo() {
         if (!settings.hasHost()) {
-            toast(getString(R.string.s_need_connection));
+            Ui.toast(this, getString(R.string.s_need_connection));
             return;
         }
         if (busy) return;
@@ -1012,7 +1251,7 @@ public final class SermonActivity extends Activity {
     private void importModuleFile(Uri uri, String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".zip") && !lower.endsWith(".sqlite3") && !lower.endsWith(".vbm")) {
-            toast(getString(R.string.s_unsupported_file));
+            Ui.toast(this, getString(R.string.s_unsupported_file));
             return;
         }
         busy = true;
@@ -1043,25 +1282,19 @@ public final class SermonActivity extends Activity {
 
     private void chooseAndTake(List<String[]> offer, Take take) {
         if (offer.isEmpty()) {
-            toast(getString(R.string.s_nothing_new));
+            Ui.toast(this, getString(R.string.s_nothing_new));
             return;
         }
         String[] labels = new String[offer.size()];
-        boolean[] checked = new boolean[offer.size()];
         for (int i = 0; i < offer.size(); i++) {
             String kind = getString(Library.BIBLE.equals(offer.get(i)[0]) ? R.string.s_kind_bible : R.string.s_kind_songs);
             labels[i] = kind + " · " + offer.get(i)[2];
         }
-        new AlertDialog.Builder(this)
-            .setTitle(R.string.s_choose)
-            .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> checked[which] = isChecked)
-            .setPositiveButton(R.string.s_take, (dialog, which) -> {
-                List<String[]> chosen = new ArrayList<>();
-                for (int i = 0; i < offer.size(); i++) if (checked[i]) chosen.add(offer.get(i));
-                if (!chosen.isEmpty()) take.chosen(chosen);
-            })
-            .setNegativeButton(R.string.cancel, null)
-            .show();
+        Ui.multi(this, getString(R.string.s_choose), labels, getString(R.string.s_take), checked -> {
+            List<String[]> chosen = new ArrayList<>();
+            for (int i = 0; i < offer.size(); i++) if (checked[i]) chosen.add(offer.get(i));
+            if (!chosen.isEmpty()) take.chosen(chosen);
+        });
     }
 
     private void finishTaking(List<String> done) {
@@ -1075,11 +1308,11 @@ public final class SermonActivity extends Activity {
 
     private void upload() {
         if (plan.items.isEmpty()) {
-            toast(getString(R.string.s_upload_empty));
+            Ui.toast(this, getString(R.string.s_upload_empty));
             return;
         }
         if (!settings.hasHost()) {
-            toast(getString(R.string.s_need_connection));
+            Ui.toast(this, getString(R.string.s_need_connection));
             return;
         }
         if (busy) return;
@@ -1221,12 +1454,11 @@ public final class SermonActivity extends Activity {
         };
         // Після завантаження — що далі: власник не мав звідки дізнатися.
         String help = getString(R.string.s_uploaded_help);
-        new AlertDialog.Builder(this)
-            .setTitle(getString(R.string.s_uploaded, added))
-            .setMessage(notes.isEmpty() ? help : help + "\n\n" + join(notes).replace(", ", "\n"))
-            .setPositiveButton(R.string.done, (dialog, which) -> open.run())
-            .setCancelable(false)
-            .show();
+        Dialog dialog = Ui.info(this, getString(R.string.s_uploaded, added),
+            notes.isEmpty() ? help : help + "\n\n" + join(notes).replace(", ", "\n"), getString(R.string.done), open);
+        // Закрити можна лише кнопкою: вона й веде до пульта, де планом керують.
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
     }
 
     // MARK: Мережа й файли
@@ -1285,12 +1517,12 @@ public final class SermonActivity extends Activity {
         main.post(() -> setStatus(text));
     }
 
+    /// Рядок стану під кроками; порожній — ховається, щоб не тримати місце.
     private void setStatus(String text) {
-        status.setText(text);
-    }
-
-    private void toast(String text) {
-        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+        statusText = text == null ? "" : text;
+        if (status == null) return;
+        status.setText(statusText);
+        status.setVisibility(statusText.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private static String join(List<String> parts) {
@@ -1300,10 +1532,6 @@ public final class SermonActivity extends Activity {
             out.append(part);
         }
         return out.toString();
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     @Override
@@ -1316,176 +1544,36 @@ public final class SermonActivity extends Activity {
     private void checkLink() {
         if (linkState == null) return;
         if (!settings.hasHost()) {
-            linkState.setText(R.string.s_need_connection);
-            linkState.setTextColor(0xFFFF6B6B);
+            link(getString(R.string.s_need_connection), Ui.LIVE);
             return;
         }
-        linkState.setText(R.string.s_checking);
-        linkState.setTextColor(0xFF9AA4B2);
+        link(getString(R.string.s_checking), Ui.DIM);
         Api probe = api();
         new Thread(() -> {
             boolean reached;
             try { probe.state(0); reached = true; } catch (Exception error) { reached = false; }
             boolean online = reached;
-            main.post(() -> {
-                linkState.setText(online ? R.string.s_online : R.string.s_offline);
-                linkState.setTextColor(online ? 0xFF3FB950 : 0xFFFF6B6B);
-            });
+            main.post(() -> link(getString(online ? R.string.s_online : R.string.s_offline), online ? Ui.GREEN : Ui.LIVE));
         }).start();
     }
 
-    private static String kindIcon(String type) {
-        if (SermonPlan.SCRIPTURE.equals(type)) return "📖";
-        if (SermonPlan.SONG.equals(type)) return "🎵";
-        if (SermonPlan.FILE.equals(type)) return "📄";
-        return "✎";
+    private void link(String text, int colour) {
+        linkText = text;
+        linkColour = colour;
+        showLink();
     }
 
-    /// Довгий дотик на кнопці — що вона робить.
-    private void explain(View view, int text) {
-        view.setOnLongClickListener(v -> {
-            showTip(v, text);
-            return true;
-        });
+    private void showLink() {
+        if (linkState == null) return;
+        linkState.setText(linkText);
+        linkState.setTextColor(linkColour);
     }
 
-    /// Пояснення над кнопкою — своєю плашкою, а не `Toast`: той малює
-    /// системний інтерфейс, унизу й дрібно, і на частині пристроїв його не
-    /// видно зовсім. Сама зникає за три з половиною секунди.
-    private PopupWindow tip;
-
-    private void showTip(View anchor, int text) {
-        if (tip != null) tip.dismiss();
-        TextView label = new TextView(this);
-        label.setText(text);
-        label.setTextColor(0xFFFFFFFF);
-        label.setTextSize(15);
-        label.setMaxWidth(dp(420));
-        label.setPadding(dp(12), dp(8), dp(12), dp(8));
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(0xF01E2A3A);
-        shape.setStroke(dp(1), 0xFF4C8DFF);
-        shape.setCornerRadius(dp(8));
-        label.setBackground(shape);
-        label.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int[] at = new int[2];
-        anchor.getLocationOnScreen(at);
-        int width = getResources().getDisplayMetrics().widthPixels;
-        int x = at[0] + anchor.getWidth() / 2 - label.getMeasuredWidth() / 2;
-        x = Math.max(dp(4), Math.min(x, width - label.getMeasuredWidth() - dp(4)));
-        int y = at[1] - label.getMeasuredHeight() - dp(6);
-        if (y < dp(24)) y = at[1] + anchor.getHeight() + dp(6);
-        PopupWindow shown = new PopupWindow(label, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, false);
-        shown.setOutsideTouchable(true);
-        shown.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
-        tip = shown;
-        main.postDelayed(() -> { if (shown.isShowing()) shown.dismiss(); }, 3500);
-    }
-
-    private GradientDrawable rounded(int colour) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(colour);
-        shape.setCornerRadius(dp(8));
-        return shape;
-    }
-
-    private Button small(String title, View.OnClickListener action) {
-        Button button = new Button(this, null, 0, R.style.SmallButton);
-        button.setText(title);
-        button.setOnClickListener(action);
-        return button;
-    }
-
-    private LinearLayout row() {
-        LinearLayout line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        line.setGravity(Gravity.CENTER_VERTICAL);
-        return line;
-    }
-
-    private LinearLayout vertical() {
-        LinearLayout column = new LinearLayout(this);
-        column.setOrientation(LinearLayout.VERTICAL);
-        return column;
-    }
-
-    private TextView hint(String text) {
-        TextView view = new TextView(this);
-        view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        view.setTextColor(0xFF9AA4B2);
-        view.setPadding(dp(6), dp(6), dp(6), dp(6));
-        return view;
-    }
-
-    /// Розпірка в ряду кнопок. Висота нульова: порожній `View` з висотою «за
-    /// вмістом» бере всю доступну висоту, і ряд забирав місце в поля тексту
-    /// оголошення та в списку пісень.
-    private View spacer() {
-        View space = new View(this);
-        space.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1));
-        return space;
-    }
-
-    private static LinearLayout.LayoutParams weight(float weight) {
-        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight);
-    }
-
-    /// Рядки списку: заголовок і друга, дрібніша, або комірка сітки розділів.
-    private final class Lines extends BaseAdapter {
-        private final boolean cells;
-        private final List<String> titles = new ArrayList<>();
-        private final List<String> subtitles = new ArrayList<>();
-        private final Set<Integer> marked = new HashSet<>();
-
-        Lines(boolean cells) { this.cells = cells; }
-
-        void set(List<String> newTitles, List<String> newSubtitles) {
-            titles.clear();
-            titles.addAll(newTitles);
-            subtitles.clear();
-            if (newSubtitles != null) subtitles.addAll(newSubtitles);
-            marked.clear();
-            notifyDataSetChanged();
-        }
-
-        void mark(int position) {
-            marked.clear();
-            if (position >= 0) marked.add(position);
-            notifyDataSetChanged();
-        }
-
-        void markAll(Set<Integer> positions) {
-            marked.clear();
-            marked.addAll(positions);
-            notifyDataSetChanged();
-        }
-
-        @Override public int getCount() { return titles.size(); }
-        @Override public Object getItem(int position) { return titles.get(position); }
-        @Override public long getItemId(int position) { return position; }
-
-        @Override
-        public View getView(int position, View recycled, ViewGroup parent) {
-            if (cells) {
-                TextView cell = recycled instanceof TextView ? (TextView) recycled : new TextView(SermonActivity.this);
-                cell.setGravity(Gravity.CENTER);
-                cell.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-                cell.setPadding(0, dp(10), 0, dp(10));
-                cell.setText(titles.get(position));
-                cell.setBackgroundColor(marked.contains(position) ? CURRENT_ROW : Color.TRANSPARENT);
-                return cell;
-            }
-            View view = recycled != null && !(recycled instanceof TextView) ? recycled
-                : getLayoutInflater().inflate(R.layout.row_item, parent, false);
-            ((TextView) view.findViewById(R.id.title)).setText(titles.get(position));
-            TextView subtitle = view.findViewById(R.id.subtitle);
-            String second = position < subtitles.size() ? subtitles.get(position) : "";
-            subtitle.setText(second);
-            subtitle.setVisibility(second.isEmpty() ? View.GONE : View.VISIBLE);
-            view.setBackgroundColor(marked.contains(position) ? CURRENT_ROW : Color.TRANSPARENT);
-            return view;
-        }
+    /// Вид пункту словами — замість значків-емодзі перед назвою.
+    private static String kindName(String type) {
+        if (SermonPlan.SCRIPTURE.equals(type)) return Lang.t("Вірші", "Verses");
+        if (SermonPlan.SONG.equals(type)) return Lang.t("Пісня", "Song");
+        if (SermonPlan.FILE.equals(type)) return Lang.t("Файл", "File");
+        return Lang.t("Текст", "Text");
     }
 }

@@ -89,6 +89,13 @@ javac --release 17 -nowarn -encoding UTF-8 \
   @"$WORK/build/sources.txt" 2>&1 | grep -v '^Note:' || true
 [ -f "$WORK/build/classes/ua/church/slovo/remote/TabletActivity.class" ] || die "Компіляція не пройшла"
 
+# Справжній мережевий код (Api.java) — справжніми запитами до несправжнього «Слова»:
+# збірка 27.11 11:10 пройшла б компіляцію, а жодна команда не доходила до програми.
+say "Перевіряю зв'язок: команди, указка, наближення, стан"
+if [ "${SKIP_API_CHECK:-}" != 1 ]; then
+  ../Пульт/tools/api-check.sh || die "Перевірка зв'язку не пройшла — APK не збираю (пропустити: SKIP_API_CHECK=1)"
+fi
+
 say "Перекладаю в dex"
 "$BT/d8" --release --min-api 21 --lib "$JAR" \
   --output "$WORK/build/dex" \

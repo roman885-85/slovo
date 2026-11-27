@@ -11,6 +11,18 @@ public sealed partial class RemoteControlServer
 {
     static string ModeRaw(WorkMode mode) => mode.ToString().ToLowerInvariant();
 
+    /// Відбиток списку фото (FNV-1a по назвах): однаковий на Mac і Windows, сталий між пусками.
+    static long PicturesSign(IEnumerable<string> titles)
+    {
+        uint hash = 2166136261;
+        foreach (var title in titles)
+        {
+            foreach (var b in System.Text.Encoding.UTF8.GetBytes(title)) hash = unchecked((hash ^ b) * 16777619);
+            hash = unchecked((hash ^ 1) * 16777619);
+        }
+        return hash;
+    }
+
     public JsonObject StateJson(bool web = false)
     {
         if (_state is not { } state) return new JsonObject { ["seq"] = Seq };
@@ -40,6 +52,11 @@ public sealed partial class RemoteControlServer
             };
         if (ShowWorkspace.For(state.Mode) is { } own)
             json["show"] = new JsonObject { ["title"] = own.Model.CurrentTitle, ["index"] = own.Model.Index ?? -1, ["count"] = own.Model.Count };
+        // Список фото — завжди, на якій би вкладці не стояла програма: прибрали фото з іншого пульта
+        // чи на комп'ютері, поки програма на презентації, — пульт має перечитати свій список. `sign` —
+        // відбиток назв. Як на Mac (`picturesSign`).
+        var pictures = ShowWorkspace.Pictures.Model;
+        json["pictures"] = new JsonObject { ["count"] = pictures.Count, ["sign"] = PicturesSign(pictures.Pages.Select(p => p.Title)) };
         // Презентація — завжди, хоч на якій вкладці програма: головна робота пульта — гортати її.
         var show = ShowWorkspace.Presentation.Model;
         var (start, count) = show.CurrentRange;

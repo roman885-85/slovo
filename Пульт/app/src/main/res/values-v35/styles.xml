@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 15+ розтягує вміст під системні смуги (edge-to-edge) — верхній
+     ряд ішов під годинник. Відмовляємося: розкладка в нас проста, згори вниз. -->
+<resources>
+    <style name="Theme.Slovo" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#141922</item>
+        <item name="android:colorPrimaryDark">#0B0E13</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:textColorPrimary">#F3F5F8</item>
+        <item name="android:textColorSecondary">#93A0B4</item>
+        <item name="android:statusBarColor">#0B0E13</item>
+        <item name="android:navigationBarColor">#10141B</item>
+        <item name="android:colorControlHighlight">#33FFFFFF</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+    <style name="Theme.Slovo.Page" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">#6C8CFF</item>
+        <item name="android:statusBarColor">#0B0E13</item>
+        <item name="android:navigationBarColor">#0B0E13</item>
+        <item name="android:windowAnimationStyle">@style/PageMotion</item>
+        <item name="android:colorControlHighlight">#33FFFFFF</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

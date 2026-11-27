@@ -43,6 +43,13 @@ final class Api {
     /// часто с сильной задержкой».
     private volatile Network network;
 
+    /// Коли востаннє прийшла відповідь — будь-яка: стан, команда, указка, картинка.
+    /// Власник: «постоянные обрывы связи при использовании указки и зума». Опит
+    /// стану інколи не встигав, хоча указка в ту ж секунду доходила десятками —
+    /// і пульт кричав «Немає зв'язку». Тепер обрив — лише коли НІЧОГО не
+    /// відповідало кілька секунд (див. `silentFor`).
+    private volatile long lastOk = System.currentTimeMillis();
+
     Api(String host, int port, String pin) {
         this.base = "http://" + host.trim() + ":" + port;
         this.pin = pin == null ? "" : pin;
@@ -52,6 +59,53 @@ final class Api {
 
     /// Чи прив'язані запити до мережі Wi-Fi.
     boolean isBound() { return network != null; }
+
+    /// Скільки мілісекунд програма вже нічого не відповідала.
+    long silentFor() { return System.currentTimeMillis() - lastOk; }
+
+    // MARK: Лічильники (стенд)
+
+    static final String TAG = "SlovoNet";
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> meter =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void count(String key, long amount) {
+        java.util.concurrent.atomic.AtomicLong value = meter.get(key);
+        if (value == null) {
+            meter.putIfAbsent(key, new java.util.concurrent.atomic.AtomicLong());
+            value = meter.get(key);
+        }
+        value.addAndGet(amount);
+    }
+
+    /// Рід запиту для лічильника.
+    private static String kind(String path) {
+        if (path.startsWith("/api/pointer")) return "pointer";
+        if (path.startsWith("/api/zoom")) return "zoom";
+        if (path.startsWith("/api/state")) return "state";
+        if (path.startsWith("/api/hall.jpg")) return "hall";
+        if (path.startsWith("/api/page")) return "page";
+        return "other";
+    }
+
+    /// Що набралося з минулого разу: «pointer 50 · state 6 · байт 51234 · збоїв 0» — і з нуля.
+    static String meterLine() {
+        StringBuilder out = new StringBuilder();
+        for (String key : new String[] {"pointer", "zoom", "state", "hall", "page", "other", "bytes", "fail"}) {
+            java.util.concurrent.atomic.AtomicLong value = meter.get(key);
+            long n = value == null ? 0 : value.getAndSet(0);
+            if (n == 0) continue;
+            if (out.length() > 0) out.append(" · ");
+            out.append(key).append(' ').append(n);
+        }
+        return out.toString();
+    }
+
+    /// Збій запиту — у журнал Android (видно в `adb logcat -s SlovoNet`).
+    private static void failed(String method, String path, long started, Exception error) {
+        count("fail", 1);
+        android.util.Log.w(TAG, method + " " + path + " — " + (System.currentTimeMillis() - started) + " мс: " + describe(error));
+    }
 
     /// Причина обриву — словами для рядка стану. Власник: «андроид программа
     /// постоянно теряет связь с программой»; «немає зв'язку» без причини не
@@ -71,7 +125,9 @@ final class Api {
     /// тримає відповідь, доки не з'явиться новий (довгий опит), тому тайм-аут
     /// читання довший, ніж час утримання на сервері.
     State state(long since) throws IOException {
-        JSONObject json = request("GET", "/api/state?since=" + since, null, 40_000);
+        // Строк з'єднання для опиту — 5 с, а не 2,5: на зайнятому Wi-Fi перший пакет
+        // з'єднання губиться, і повтор системи приходить лише за секунду-три.
+        JSONObject json = request("GET", "/api/state?since=" + since, null, 40_000, 5_000, false);
         return State.from(json);
     }
 
@@ -85,6 +141,34 @@ final class Api {
         JSONObject body = new JSONObject();
         try { body.put("index", index); } catch (JSONException ignored) { }
         request("POST", "/api/" + name, body, 8_000);
+    }
+
+    /// Сторінка презентації — у зал. Команда `page` у «Слові» бере сторінку з того
+    /// списку, що відкритий у програмі: після фото там «Зображення», і `page 3` показувала
+    /// фото № 3 замість сторінки PDF (власник: «после начала показа фото невозможно
+    /// отобразить документ, вместо него показывается фото»). Тому спершу — вкладка
+    /// «Презентація» — завжди, а не «якщо програма не на ній»: пульт дізнається про вкладку
+    /// програми із запізненням, і дотик одразу після фото інакше міг піти у фото. Зайвий
+    /// короткий запит дешевший за таку гонку. Працює й зі старим «Словом».
+    void presentationPage(int index) throws IOException { presentationPage(index, true); }
+
+    /// `live: false` — лише вибрати сторінку (у зал — кнопкою «Показати»).
+    void presentationPage(int index, boolean live) throws IOException {
+        command("mode", "presentation");
+        if (live) command("page", index); else choose("page", index);
+    }
+
+    /// Вибрати без показу: сторінку, фото, частину пісні, пункт плану чи «Історії».
+    /// Власник 27.11: «показ слайдов и текстов происходить должен исключительно по кнопке
+    /// показа» — дотик у списку лише вибирає (у програмі — передпоказ), у зал — «Показати».
+    /// «Слово» до 1.4.4 `live` не знає й показує одразу, як раніше.
+    void choose(String name, int index) throws IOException {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("index", index);
+            body.put("live", false);
+        } catch (JSONException ignored) { }
+        command(name, body);
     }
 
     /// Команда з рядком: місце Писання.
@@ -116,7 +200,8 @@ final class Api {
             body.put("size", size);
             body.put("opacity", opacity);
         } catch (JSONException ignored) { }
-        request("POST", "/api/pointer", body, 5_000);
+        // Без повтору: наступна точка вже в дорозі, стара нікому не потрібна.
+        request("POST", "/api/pointer", body, 5_000, 2_500, false);
     }
 
     /// Наближення: у скільки разів і навколо якої точки показаного кадру.
@@ -128,7 +213,7 @@ final class Api {
             body.put("x", x);
             body.put("y", y);
         } catch (Exception ignored) { }
-        request("POST", "/api/zoom", body, 8_000);
+        request("POST", "/api/zoom", body, 8_000, 2_500, false);
     }
 
     /// Книги відкритого перекладу, список перекладів і де стоїть програма.
@@ -169,33 +254,32 @@ final class Api {
 
     /// Картинка за адресою сервера. `null` — картинки немає: у залі відео.
     byte[] image(String path) throws IOException {
+        long started = System.currentTimeMillis();
         HttpURLConnection connection = open("GET", path, 20_000);
         try {
             int code = connection.getResponseCode();
             if (code == 401 || code == 403) throw new PinRejected();
+            lastOk = System.currentTimeMillis();
             if (code == 404) return null;
             if (code >= 400) throw new IOException("HTTP " + code);
             try (InputStream stream = connection.getInputStream()) { return readBytes(stream); }
+        } catch (IOException error) {
+            if (!(error instanceof PinRejected)) failed("GET", path, started, error);
+            throw error;
         } finally {
             connection.disconnect();
         }
     }
 
     void pointerOff() throws IOException {
-        request("POST", "/api/pointer-off", new JSONObject(), 5_000);
+        request("POST", "/api/pointer-off", new JSONObject(), 5_000, 2_500, true);
     }
 
     /// Картинка сторінки показу — JPEG заданої ширини.
     byte[] pageImage(int index, int width) throws IOException {
-        HttpURLConnection connection = open("GET", "/api/page?index=" + index + "&w=" + width, 20_000);
-        try {
-            int code = connection.getResponseCode();
-            if (code == 401 || code == 403) throw new PinRejected();
-            if (code >= 400) throw new IOException("HTTP " + code);
-            try (InputStream stream = connection.getInputStream()) { return readBytes(stream); }
-        } finally {
-            connection.disconnect();
-        }
+        byte[] bytes = image("/api/page?index=" + index + "&w=" + width);
+        if (bytes == null) throw new IOException(Lang.t("немає такої сторінки", "no such page"));
+        return bytes;
     }
 
     /// Файл із телефона — програмі: та відкриє його в показі. Відповідь — ім'я,
@@ -293,22 +377,61 @@ final class Api {
     }
 
     private JSONObject request(String method, String path, JSONObject body, int readTimeout) throws IOException {
-        HttpURLConnection connection = open(method, path, readTimeout);
-        try {
-            if (body != null) {
-                byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
+        return request(method, path, body, readTimeout, 2_500, true);
+    }
+
+    /// Запит. `retry` — якщо не вдалося навіть з'єднатися (запит точно не дійшов
+    /// до програми), ще одна спроба за чверть секунди: на Wi-Fi перший пакет
+    /// з'єднання інколи губиться, і команда «Далі» пропадала зовсім. Повтор лише
+    /// тоді, коли з'єднання не відбулося, — двічі одна команда не спрацює.
+    private JSONObject request(String method, String path, JSONObject body, int readTimeout, int connectTimeout,
+                               boolean retry) throws IOException {
+        long started = System.currentTimeMillis();
+        for (int attempt = 0; ; attempt++) {
+            HttpURLConnection connection = open(method, path, readTimeout, connectTimeout);
+            // Тіло й заголовки — ДО з'єднання: після `connect()` HttpURLConnection
+            // їх не приймає («Already connected»). Збірка 27.11 11:10 ставила їх
+            // після — і жодна команда з тілом не йшла до програми (власник: «не одна
+            // команда не доходит до программы»).
+            byte[] bytes = body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8);
+            if (bytes != null) {
                 connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                 connection.setFixedLengthStreamingMode(bytes.length);
-                try (OutputStream out = connection.getOutputStream()) { out.write(bytes); }
             }
-            return finish(connection);
-        } finally {
-            connection.disconnect();
+            boolean connected = false;
+            try {
+                connection.connect();
+                connected = true;
+                if (bytes != null) {
+                    try (OutputStream out = connection.getOutputStream()) { out.write(bytes); }
+                }
+                return finish(connection);
+            } catch (RuntimeException broken) {
+                // Помилка в самому коді запиту — не мовчати: інакше команда губиться без сліду.
+                IOException error = new IOException(broken.toString(), broken);
+                failed(method, path, started, error);
+                throw error;
+            } catch (IOException error) {
+                if (!connected && retry && attempt == 0) {
+                    android.util.Log.i(TAG, method + " " + path + ": не з'єдналося (" + describe(error) + ") — ще раз");
+                    try { Thread.sleep(250); } catch (InterruptedException stop) { Thread.currentThread().interrupt(); throw error; }
+                    continue;
+                }
+                if (!(error instanceof PinRejected)) failed(method, path, started, error);
+                throw error;
+            } finally {
+                connection.disconnect();
+            }
         }
     }
 
     private HttpURLConnection open(String method, String path, int readTimeout) throws IOException {
+        return open(method, path, readTimeout, 2_500);
+    }
+
+    private HttpURLConnection open(String method, String path, int readTimeout, int connectTimeout) throws IOException {
+        count(kind(path), 1);
         URL url = new URL(base + path);
         Network bound = network;
         HttpURLConnection connection = (HttpURLConnection)
@@ -316,7 +439,7 @@ final class Api {
         connection.setRequestMethod(method);
         // Коротший строк з'єднання: якщо шлях усе-таки не той, помилка має
         // прийти швидко, а не тримати команду чотири секунди.
-        connection.setConnectTimeout(2_500);
+        connection.setConnectTimeout(connectTimeout);
         connection.setReadTimeout(readTimeout);
         connection.setRequestProperty("Connection", "close");
         connection.setRequestProperty("Accept", "application/json");
@@ -328,6 +451,7 @@ final class Api {
     private JSONObject finish(HttpURLConnection connection) throws IOException {
         int code = connection.getResponseCode();
         if (code == 401 || code == 403) throw new PinRejected();
+        lastOk = System.currentTimeMillis();
         InputStream stream = code < 400 ? connection.getInputStream() : connection.getErrorStream();
         String text = stream == null ? "" : read(stream);
         if (code >= 400) {
@@ -348,6 +472,7 @@ final class Api {
         byte[] chunk = new byte[16384];
         int count;
         while ((count = stream.read(chunk)) > 0) out.write(chunk, 0, count);
+        count("bytes", out.size());
         return out.toByteArray();
     }
 
@@ -356,6 +481,7 @@ final class Api {
         byte[] chunk = new byte[8192];
         int count;
         while ((count = stream.read(chunk)) > 0) out.write(chunk, 0, count);
+        count("bytes", out.size());
         return out.toString("UTF-8");
     }
 }

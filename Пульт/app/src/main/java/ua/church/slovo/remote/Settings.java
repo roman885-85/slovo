@@ -114,9 +114,15 @@ final class Settings {
     void setVolumeReversed(boolean on) { store.edit().putBoolean("volumeReversed", on).apply(); }
     void setKeepAwake(boolean on) { store.edit().putBoolean("keepAwake", on).apply(); }
     void setHints(boolean on) { store.edit().putBoolean("hints", on).apply(); }
-    /// Масштаб інтерфейсу планшета: 0 — «Авто» (див. `UiScale`).
+    /// Масштаб інтерфейсу: 0 — «Авто» (див. `UiScale`).
     float uiScale() { return store.getFloat("uiScale", 0f); }
     void setUiScale(float value) { store.edit().putFloat("uiScale", value).apply(); }
+    /// Положення екрана: 0 — типово, 1 — вертикально, 2 — горизонтально, 3 — за датчиком (див. `UiScale`).
+    int orientation() { return store.getInt("orientation", 0); }
+    void setOrientation(int value) { store.edit().putInt("orientation", value).apply(); }
+    /// Картки «Зал» і «Далі» розгорнуті (true) чи згорнуті в смужку — коли на малому екрані потрібне місце списку.
+    boolean monitors() { return store.getBoolean("monitors", true); }
+    void setMonitors(boolean on) { store.edit().putBoolean("monitors", on).apply(); }
     void setPointer(int colour, float size, float opacity) {
         store.edit()
             .putInt("pointerColour", colour | 0xFF000000)
@@ -135,6 +141,8 @@ final class Settings {
             .remove("keepAwake")
             .remove("hints")
             .remove("uiScale")
+            .remove("orientation")
+            .remove("monitors")
             .remove("pointerColour")
             .remove("pointerSize")
             .remove("pointerOpacity")

@@ -171,11 +171,12 @@ public sealed partial class AppState
 
     /// Скільки разів відкривали пункт Плану — перевіркам.
     public int PlanActivationsForCheck { get; private set; }
-    /// Пункт «файл» (презентація, картинка, відео) — віддає вкладка показу.
-    public Func<string, bool>? OpenPlanFile;
+    /// Пункт «файл» (презентація, картинка, відео) — віддає вкладка показу; друге — чи одразу в зал.
+    public Func<string, bool, bool>? OpenPlanFile;
 
     /// Подати пункт плану на екран: те саме, що подвійне клацання по вірші чи частині пісні.
-    public void ActivatePlanItem(PlanItem item)
+    /// `live: false` — лише вибрати й у передпоказ (пульт: «показ … исключительно по кнопке показа»).
+    public void ActivatePlanItem(PlanItem item, bool live = true)
     {
         PlanActivationsForCheck++;
         _plan.Select(item.Id);
@@ -197,7 +198,7 @@ public sealed partial class AppState
                 var wanted = reference.Verses.ToList();
                 OpenScripture(position, reference.Chapter,
                               available => wanted.Count == 0 ? available : wanted.Where(available.Contains).ToList(),
-                              ShowCurrentSlide);
+                              () => { if (live) ShowCurrentSlide(); });
                 break;
             }
             case PlanItemKind.Song when item.SongPart is { } reference:
@@ -217,16 +218,16 @@ public sealed partial class AppState
                 SongPartIndex = shown.Index;
                 Signals.Shared.Send(Signals.Kind.SongSelection);
                 ShowSongPart(song, shown);
-                ShowCurrentSlide();
+                if (live) ShowCurrentSlide();
                 break;
             }
             case PlanItemKind.Text when item.PlainText is { } document:
                 // Пункт «Текст» везе вміст із собою — показ віддаємо модулю «Текст».
-                TextModuleModel.Shared.Activate(document, this);
+                TextModuleModel.Shared.Activate(document, this, live);
                 break;
             case PlanItemKind.File when item.File is { } file:
                 if (!File.Exists(file.Path)) { Journal.Say($"план: немає файла «{file.Name}»"); return; }
-                if (OpenPlanFile?.Invoke(file.Path) != true) Journal.Say($"план: «{file.Name}» не показ і не плеєр");
+                if (OpenPlanFile?.Invoke(file.Path, live) != true) Journal.Say($"план: «{file.Name}» не показ і не плеєр");
                 break;
         }
     }

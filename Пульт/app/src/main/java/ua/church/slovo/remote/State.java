@@ -26,6 +26,12 @@ final class State {
     }
 
     long seq;
+    /// Номер картинки залу: росте, коли змінилося те, що видно в залі, але НЕ від
+    /// указки («Слово» з 11.09.2026). −1 — старе «Слово» без нього: тоді — `seq`.
+    long hallSeq = -1;
+    /// Список фото програми — число й відбиток назв («Слово» 1.4.4+, на будь-якій вкладці).
+    /// Порожній рядок — старе «Слово», яке цього не каже.
+    String pictures = "";
     String name = "";
     String mode = "";
     boolean live;
@@ -95,6 +101,9 @@ final class State {
         State state = new State();
         if (json == null) return state;
         state.seq = json.optLong("seq", 0);
+        state.hallSeq = json.optLong("hallSeq", -1);
+        JSONObject pictureList = json.optJSONObject("pictures");
+        if (pictureList != null) state.pictures = pictureList.optInt("count", 0) + ":" + pictureList.optLong("sign", 0);
         state.name = json.optString("name", "");
         state.mode = json.optString("mode", "");
         state.live = json.optBoolean("live", false);

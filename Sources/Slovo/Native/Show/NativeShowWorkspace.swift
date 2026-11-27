@@ -189,6 +189,51 @@ final class NativeShowWorkspace: NSView, NativeListSource {
         if state?.media.still != nil, model.currentImage != nil { show() }
     }
 
+    /// Пульт: прибрати сторінку за наскрізним номером — у картинок картинку, у
+    /// презентацій файл цілком (як «−»). Власник: «фото добавлены, а удалить из
+    /// списка их нельзя». Стояла саме вона в залі — зал бере наступну, як після
+    /// «−» на комп'ютері, а список спорожнів — гасне; не стояла — зал не чіпаємо
+    /// (зал один на два списки, і в ньому може бути зовсім інше).
+    func removePage(at position: Int) {
+        guard model.pages.indices.contains(position) else { return }
+        let wasInHall = isStillInHall(model.pageMark(at: position))
+        model.remove(at: position)
+        if model.isEmpty { stopSlideshow() }
+        reloadLists()
+        refresh()
+        if wasInHall {
+            if model.currentImage != nil { show() } else { hide() }
+        }
+    }
+
+    /// Пульт: прибрати файл презентації (PDF, PPTX, Keynote…) за його номером у
+    /// списку файлів. Власник: «документ pdf pptx и другие тоже должны иметь
+    /// опции для удаления из списка». Стояла в залі сторінка саме цього файлу —
+    /// зал бере сторінку, на якій тепер стоїть список, а список спорожнів —
+    /// гасне; не стояла — зал не чіпаємо.
+    func removeDeck(at deck: Int) {
+        guard model.decks.indices.contains(deck) else { return }
+        let wasInHall = model.decks[deck].range.contains { isStillInHall(model.pageMark(at: $0)) }
+        model.removeDeck(at: deck)
+        if model.isEmpty { stopSlideshow() }
+        reloadLists()
+        refresh()
+        if wasInHall {
+            if model.currentImage != nil { show() } else { hide() }
+        }
+    }
+
+    /// Пульт: очистити весь список — як «✕». Зал гасне, лише якщо в ньому стояла
+    /// сторінка саме з цього списку.
+    func removeAll() {
+        let wasInHall = model.pages.indices.contains { isStillInHall(model.pageMark(at: $0)) }
+        stopSlideshow()
+        model.close()
+        reloadLists()
+        refresh()
+        if wasInHall { hide() }
+    }
+
     /// Строки колонок — для самопроверки.
     var fileRows: Int { files.itemCount }
     var pageRows: Int { list.itemCount }
